@@ -4,6 +4,12 @@ import android.app.Application
 import android.graphics.drawable.ColorDrawable
 import android.content.Context
 import android.content.ContextWrapper
+import android.os.Looper
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelStore
+import dev.renkinProject.renkin.GlobalOptionsViewModel
+import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.data.GlobalApplyExistingKey
 import androidx.datastore.preferences.core.edit
 import androidx.room.Room
 import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
@@ -24,6 +30,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
@@ -39,6 +46,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -48,6 +56,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.Shadows.shadowOf
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
@@ -418,6 +427,80 @@ class ProfileSessionIntegrityTest {
 
         assertTrue(requireNotNull(repository.profile(profileId)).hasUnbuiltChanges)
     }
+
+    private val viewModelStores = mutableListOf<ViewModelStore>()
+
+    private fun globalOptionsViewModel(handle: SavedStateHandle = SavedStateHandle()) =
+        GlobalOptionsViewModel(RuntimeEnvironment.getApplication(), provider, handle).also { vm ->
+            viewModelStores += ViewModelStore().also { it.put("global", vm) }
+        }
+
+    private suspend fun awaitMain(condition: () -> Boolean) = withTimeout(10_000) {
+        while (!condition()) {
+            shadowOf(Looper.getMainLooper()).idle()
+            delay(10)
+        }
+    }
+
+    @After
+    fun clearViewModels() {
+        viewModelStores.forEach { it.clear() }
+        shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    @Test
+    fun globalSaveRunsInTheViewModelAndMovesTheBaseline() = runBlocking {
+        provider.ensureInitialized()
+        val vm = globalOptionsViewModel()
+        val events = mutableListOf<Int>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) { vm.toastEvents.collect { events += it } }
+        try {
+            awaitMain { vm.baseline != null }
+            vm.draft.applyExisting = !vm.draft.applyExisting
+            assertTrue(vm.isDirty)
+
+            assertNotNull(vm.saveGlobalStyle())
+            awaitMain { !vm.isDirty && vm.globalApplyProgress == null }
+
+            assertEquals(vm.draft.applyExisting, context.dataStore.data.first()[GlobalApplyExistingKey])
+            awaitMain { R.string.globalOptionsApplied in events }
+        } finally { collector.cancelAndJoin() }
+    }
+
+    @Test
+    fun globalDraftAndBaselineSurviveProcessRecreation() = runBlocking {
+        provider.ensureInitialized()
+        val handle = SavedStateHandle()
+        val vm = globalOptionsViewModel(handle)
+        awaitMain { vm.baseline != null }
+        val baseline = vm.baseline
+        vm.draft.applyExisting = !vm.draft.applyExisting
+        val staged = vm.draft.snapshot()
+
+        val restored = globalOptionsViewModel(SavedStateHandle.createHandle(handle.savedStateProvider().saveState(), null))
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals(staged, restored.draft.snapshot())
+        assertEquals(baseline, restored.baseline)
+        assertTrue(restored.isDirty)
+    }
+
+    @Test
+    fun globalSaveAfterTheProfileSessionChangedKeepsTheOldBaseline() = runBlocking {
+        provider.ensureInitialized()
+        val vm = globalOptionsViewModel()
+        awaitMain { vm.baseline != null }
+        val baseline = vm.baseline
+        vm.draft.applyExisting = !vm.draft.applyExisting
+        provider.clearIcons(provider.sessionToken)
+
+        vm.saveGlobalStyle()?.let { job -> awaitMain { !job.isActive } }
+
+        assertEquals(baseline, vm.baseline)
+        assertTrue(vm.isDirty)
+        assertFalse(context.dataStore.data.first()[GlobalApplyExistingKey] == vm.draft.applyExisting)
+    }
+
     private suspend fun pausedGlobalSave(
         started: CompletableDeferred<Unit>, release: CountDownLatch
     ) {
