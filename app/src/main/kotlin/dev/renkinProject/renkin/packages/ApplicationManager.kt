@@ -299,53 +299,6 @@ internal class ApplicationManager(
         return list
     }
 
-    fun checkAppFilter(xmlParser: XmlPullParser): Array<String> {
-        val badlyFormattedComponents = mutableListOf<String>()
-        var type = xmlParser.eventType
-
-        while (type != XmlPullParser.END_DOCUMENT) {
-            if (type == XmlPullParser.START_TAG) {
-                if (xmlParser.name == "item") {
-                    val iconName = xmlParser.getAttributeValue(null, "drawable")
-                    val componentInfo = xmlParser.getAttributeValue(null, "component")
-
-                    if (iconName == null || componentInfo == null || !componentIsValid(componentInfo)) {
-                        var item = ""
-                        for (i in 0 until  xmlParser.attributeCount) {
-                            item += "${xmlParser.getAttributeName(i)}=\"${xmlParser.getAttributeValue(i)}\" "
-                        }
-                        badlyFormattedComponents.add(item.trimEnd())
-                    }
-                }
-            }
-
-            type = xmlParser.next()
-        }
-
-        return badlyFormattedComponents.toTypedArray()
-    }
-
-    private fun componentIsValid(text: String): Boolean {
-        var newText = text
-
-        if (!text.startsWith("ComponentInfo", true))
-            return false
-
-        newText = newText.replace("(", "{")
-        newText = newText.replace(")", "}")
-
-        val firstSplit = newText.split("{")
-        if (firstSplit.count() != 2)
-            return false
-
-        val secondSplit = firstSplit[1].split("}")
-        if (secondSplit.count() != 2)
-            return false
-
-        val thirdSplit = secondSplit[0].split("/")
-        return thirdSplit.count() >= 2
-    }
-
     private fun getAppfilter(res: Resources, packageName: String): XmlPullParser? {
         val xmlParser = getResAppfilter(res, packageName)
 

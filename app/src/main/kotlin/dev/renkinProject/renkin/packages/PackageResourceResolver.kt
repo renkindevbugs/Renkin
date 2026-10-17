@@ -4,14 +4,12 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.Resources
-import android.content.res.XmlResourceParser
 import android.graphics.drawable.Drawable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.extension.getDrawableOrNull
 import dev.renkinProject.renkin.extension.getIdentifierByName
-import dev.renkinProject.renkin.extension.getXmlOrNull
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
@@ -58,15 +56,6 @@ internal class PackageResourceResolver(private val context: Context) {
         val resources = getResources(packageName) ?: return false
         return resources.getIdentifierByName(name, "drawable", packageName) > 0
     }
-
-    fun getResourceType(packageName: String, resourceId: Int): String? = try {
-        packageManager.getResourcesForApplication(packageName).getResourceTypeName(resourceId)
-    } catch (_: Resources.NotFoundException) {
-        null
-    }
-
-    fun getResourceXml(packageName: String, resourceId: Int): XmlResourceParser? =
-        getResources(packageName)?.getXmlOrNull(resourceId)
 
     fun getXml(resources: Resources, packageName: String, name: String): XmlPullParser? {
         val resourceId = resources.getIdentifierByName(name, "xml", packageName)

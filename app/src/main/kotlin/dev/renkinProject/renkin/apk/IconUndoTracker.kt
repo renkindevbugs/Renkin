@@ -11,8 +11,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 class IconUndoStep(
     val profileId: Long,
     val rows: List<PackageInfoStruct>,
-    /** Whether the change had reached the database, so undoing it has to be saved as well. */
-    val persisted: Boolean,
     val operationId: Long = 0L,
     val unsavedBefore: Set<String> = emptySet()
 )
@@ -34,11 +32,11 @@ class IconUndoTracker {
 
     /** Records rows about to be overwritten. An empty list withdraws the offer entirely. */
     fun capture(
-        rows: List<PackageInfoStruct>, profileId: Long, persisted: Boolean,
+        rows: List<PackageInfoStruct>, profileId: Long,
         unsavedBefore: Set<String> = emptySet()
     ) {
         mutableStep.value = if (rows.isEmpty()) null else IconUndoStep(
-            profileId, rows.toList(), persisted, ++nextOperationId,
+            profileId, rows.toList(), ++nextOperationId,
             rows.map { it.key }.toSet().intersect(unsavedBefore)
         )
     }
@@ -48,7 +46,7 @@ class IconUndoTracker {
         if (pending.rows.none { it.key == key }) return
         val remaining = pending.rows.filterNot { it.key == key }
         mutableStep.value = if (remaining.isEmpty()) null else IconUndoStep(
-            pending.profileId, remaining, pending.persisted, pending.operationId,
+            pending.profileId, remaining, pending.operationId,
             pending.unsavedBefore - key
         )
     }

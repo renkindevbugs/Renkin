@@ -12,7 +12,6 @@ import android.graphics.drawable.Drawable
 import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
-import kotlin.math.roundToInt
 
 /**
  * Creates a blank ARGB_8888 bitmap of [width]×[height], runs [draw] on a Canvas backed by it and
@@ -189,24 +188,6 @@ fun Bitmap.contentBounds(): Rect? {
     val right = colCounts.indexOfLast { it >= colFloor }
     val bottom = rowCounts.indexOfLast { it >= rowFloor }
     return Rect(left, top, right + 1, bottom + 1)
-}
-
-/** Shifts the whole image by ([dx], [dy]) whole pixels; content pushed off the edge is dropped. */
-fun Bitmap.translated(dx: Float, dy: Float): Bitmap {
-    val idx = dx.roundToInt()
-    val idy = dy.roundToInt()
-    if (idx == 0 && idy == 0) return this
-    val w = width
-    val h = height
-    val px = IntArray(w * h)
-    getPixels(px, 0, w, 0, 0, w, h)
-    val out = IntArray(w * h)
-    for (y in 0 until h) for (x in 0 until w) {
-        val sx = x - idx
-        val sy = y - idy
-        if (sx in 0 until w && sy in 0 until h) out[y * w + x] = px[sy * w + sx]
-    }
-    return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
 }
 
 fun Bitmap.changeBackgroundColor(color: Int): Bitmap {

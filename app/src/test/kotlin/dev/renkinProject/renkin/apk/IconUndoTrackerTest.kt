@@ -25,7 +25,7 @@ class IconUndoTrackerTest {
     fun callerCannotChangeCapturedRowsAndDiscardKeepsTheRetainedStepStable() {
         val tracker = IconUndoTracker()
         val rows = current.toMutableList()
-        tracker.capture(rows, 1L, false)
+        tracker.capture(rows, 1L)
         val original = tracker.step!!
         rows.clear()
         assertEquals(current, original.rows)
@@ -50,7 +50,7 @@ class IconUndoTrackerTest {
     @Test
     fun capturedRowsAreRestoredWhereTheyNowSit() {
         val tracker = IconUndoTracker()
-        tracker.capture(listOf(firefox), profileId = 1L, persisted = false)
+        tracker.capture(listOf(firefox), profileId = 1L)
 
         val restoration = tracker.restorationFor(current, activeProfileId = 1L)
 
@@ -61,9 +61,9 @@ class IconUndoTrackerTest {
     @Test
     fun capturingNothingWithdrawsTheOffer() {
         val tracker = IconUndoTracker()
-        tracker.capture(listOf(signal), profileId = 1L, persisted = true)
+        tracker.capture(listOf(signal), profileId = 1L)
 
-        tracker.capture(emptyList(), profileId = 1L, persisted = true)
+        tracker.capture(emptyList(), profileId = 1L)
 
         assertNull(tracker.step)
         assertEquals(0, tracker.size)
@@ -73,19 +73,18 @@ class IconUndoTrackerTest {
     @Test
     fun aSecondChangeReplacesTheFirst() {
         val tracker = IconUndoTracker()
-        tracker.capture(listOf(signal), profileId = 1L, persisted = false)
+        tracker.capture(listOf(signal), profileId = 1L)
 
-        tracker.capture(listOf(firefox), profileId = 1L, persisted = true)
+        tracker.capture(listOf(firefox), profileId = 1L)
 
         // Only ever one step back, exactly like the snackbar that offers it.
         assertEquals(listOf(1 to firefox), tracker.restorationFor(current, 1L))
-        assertEquals(true, tracker.step?.persisted)
     }
 
     @Test
     fun anotherProfileCannotRestoreTheStep() {
         val tracker = IconUndoTracker()
-        tracker.capture(listOf(signal), profileId = 1L, persisted = false)
+        tracker.capture(listOf(signal), profileId = 1L)
 
         // The rows describe profile 1's icons; applying them to profile 2 would import them.
         assertTrue(tracker.restorationFor(current, activeProfileId = 2L).isEmpty())
@@ -95,7 +94,7 @@ class IconUndoTrackerTest {
     fun uninstalledAppsAreSkippedAndTheRestStillGoesBack() {
         val gone = app("com.uninstalled")
         val tracker = IconUndoTracker()
-        tracker.capture(listOf(gone, signal), profileId = 1L, persisted = false)
+        tracker.capture(listOf(gone, signal), profileId = 1L)
 
         assertEquals(listOf(0 to signal), tracker.restorationFor(current, 1L))
     }
@@ -103,7 +102,7 @@ class IconUndoTrackerTest {
     @Test
     fun clearWithdrawsTheOffer() {
         val tracker = IconUndoTracker()
-        tracker.capture(listOf(signal), profileId = 1L, persisted = false)
+        tracker.capture(listOf(signal), profileId = 1L)
 
         tracker.clear()
 
@@ -113,7 +112,7 @@ class IconUndoTrackerTest {
     @Test
     fun discardingOneEditedRowPreservesOperationAndOtherRowsDirtyState() {
         val tracker = IconUndoTracker()
-        tracker.capture(current, 1L, false, setOf(signal.key, "unrelated"))
+        tracker.capture(current, 1L, setOf(signal.key, "unrelated"))
         val original = tracker.step!!
         tracker.discard(firefox.key)
         assertEquals(original.operationId, tracker.step!!.operationId)
@@ -127,10 +126,10 @@ class IconUndoTrackerTest {
     @Test
     fun newUndoCannotReuseTheOperationOfAnOlderSnackbar() {
         val tracker = IconUndoTracker()
-        tracker.capture(listOf(signal), 1L, false)
+        tracker.capture(listOf(signal), 1L)
         val old = tracker.step!!
         tracker.clear()
-        tracker.capture(listOf(firefox), 1L, false)
+        tracker.capture(listOf(firefox), 1L)
         assertTrue(tracker.step!!.operationId > old.operationId)
         assertTrue(tracker.step!!.unsavedBefore.isEmpty())
     }

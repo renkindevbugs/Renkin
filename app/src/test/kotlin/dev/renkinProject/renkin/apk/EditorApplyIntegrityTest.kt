@@ -168,7 +168,6 @@ class EditorApplyIntegrityTest {
         apps.forEach { apply(it, originals.getValue(it.key)) }
         val dirty = provider.unsavedIconKeys
         val step = provider.resetIcon(provider.sessionToken, provider.applicationList.first())!!
-        assertFalse(step.persisted)
         assertTrue(provider.undoLastIconChange(provider.sessionToken, step))
         assertEquals(dirty, provider.unsavedIconKeys)
         provider.applicationList.forEach { assertSame(originals[it.key], it.createdIcon) }

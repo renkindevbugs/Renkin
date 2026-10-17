@@ -300,8 +300,6 @@ class MainViewModel @Inject constructor(
     var pendingWatchSuggestionId by mutableStateOf<Long?>(null)
         private set
 
-    fun setPendingWatchSuggestion(id: Long) { pendingWatchSuggestionId = id }
-
     // True when a watch notification pointed at a profile that has since been deleted — the
     // home screen explains why the suggestion can't be applied instead of silently ignoring it.
     var watchProfileMissing by mutableStateOf(false)
@@ -1488,10 +1486,6 @@ class MainViewModel @Inject constructor(
             Log.error("MainViewModel", "Could not reschedule background work for restored settings", error)
         }
     }
-
-    /** Calendar-enabled apps whose source pack is missing day drawables (shown before a build). */
-    suspend fun calendarWarnings(preferences: Preferences): List<ApplicationProvider.CalendarWarning> =
-        appProvider.calendarWarnings(preferences)
 
     /** Of [prefixes], those that are genuine calendar day-rotation sets in [packPackageName]. */
     suspend fun calendarPrefixesAmong(packPackageName: String, prefixes: List<String>): Set<String> =

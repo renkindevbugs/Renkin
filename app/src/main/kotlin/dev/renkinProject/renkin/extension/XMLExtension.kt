@@ -29,10 +29,6 @@ fun XmlPullParser.parseUntil(names: List<String>): String? {
     return null
 }
 
-fun XmlPullParser.isAtStartTag(): Boolean {
-    return eventType == XmlPullParser.START_TAG
-}
-
 fun XmlPullParser.isAtEndDocument(): Boolean {
     return eventType == XmlPullParser.END_DOCUMENT
 }

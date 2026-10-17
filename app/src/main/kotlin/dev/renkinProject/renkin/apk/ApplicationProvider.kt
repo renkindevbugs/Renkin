@@ -540,7 +540,7 @@ class ApplicationProvider internal constructor(
                 )
                 editApplication(live, updated)
                 if (!sameIconState(live, updated)) {
-                    captureUndoRows(listOf(live), persisted = false, unsavedBefore = unsavedBefore)
+                    captureUndoRows(listOf(live), unsavedBefore = unsavedBefore)
                     undoTracker.step
                 } else null
             }
@@ -566,7 +566,7 @@ class ApplicationProvider internal constructor(
                 lockManager.discard(application.key)
                 editApplication(index, live.changeExport(null).changeCalendar(false, null, null))
                 // Reset only changes the live session. Undo must not save unrelated dirty icons.
-                captureUndoRows(listOf(live), persisted = false, unsavedBefore = unsavedBefore)
+                captureUndoRows(listOf(live), unsavedBefore = unsavedBefore)
                 undoTracker.step
             }
         }
@@ -622,7 +622,7 @@ class ApplicationProvider internal constructor(
                 val undoRows = replaced.values.filter { (_, applied) -> liveByKey[applied.key] === applied }
                     .map { (before, _) -> before }
                 val undo = if (undoRows.isNotEmpty()) {
-                    captureUndoRows(undoRows, persisted = false, unsavedBefore = previouslyUnsaved)
+                    captureUndoRows(undoRows, unsavedBefore = previouslyUnsaved)
                     undoTracker.step
                 } else null
                 IconRefreshResult(withheld, conflicted, missing, undo)
@@ -1238,15 +1238,6 @@ class ApplicationProvider internal constructor(
     private fun appFilterDrawableName(packPackage: String, app: PackageInfoStruct): String? =
         appManager.appFilterDrawableName(packPackage, app.toInstalledApplication())
 
-    private suspend fun saveRenkinPack() {
-        // A hand-picked or regenerated icon over a locked slot replaces the held-back original.
-        val replacedKeys = applicationList.filter { it.createdIcon != null }.map { it.key }.toSet()
-        lockManager.releaseReplaced(replacedKeys)
-        renkinPackStore.save(activeProfileId, applicationList, lockManager.preservedRows())
-        savedProfileRevisions[activeProfileId] = (savedProfileRevisions[activeProfileId] ?: 0L) + 1L
-        unsavedIconKeys = emptySet()
-    }
-
     suspend fun forceSync(expected: ProfileSessionToken) = withContext(Dispatchers.Default) {
         runProfileOperation(expected) {
             if (!iconPackRepo.iconPackLoaded) return@runProfileOperation
@@ -1352,14 +1343,9 @@ class ApplicationProvider internal constructor(
     // is offered through.
     private val undoTracker = IconUndoTracker()
 
-    /** How many icons the pending undo would put back; 0 when there is nothing to offer. */
-    val undoableIconCount: Int get() = undoTracker.size
-    /** Action-time snapshot only; UI reads Undo from [applicationState]. */
-    val currentUndoStep: IconUndoStep? get() = undoTracker.step
-
     /** Captures the overwritten rows after their replacement has committed. */
-    private fun captureUndoRows(rows: List<PackageInfoStruct>, persisted: Boolean, unsavedBefore: Set<String>) {
-        undoTracker.capture(rows, activeProfileId, persisted, unsavedBefore)
+    private fun captureUndoRows(rows: List<PackageInfoStruct>, unsavedBefore: Set<String>) {
+        undoTracker.capture(rows, activeProfileId, unsavedBefore)
     }
 
     /** Drops the offer — after a build, a profile switch or anything that invalidates the rows. */
@@ -1373,15 +1359,11 @@ class ApplicationProvider internal constructor(
         runProfileOperation(expected, boundedWait = true) {
             if (!ownsUndo(step)) return@runProfileOperation false
             val pending = undoTracker.step ?: return@runProfileOperation false
-            val persisted = pending.persisted
             val restoration = undoTracker.restorationFor(applicationList, activeProfileId)
             if (restoration.isEmpty()) return@runProfileOperation false
             for ((index, row) in restoration) editApplication(index, row)
             val restoredKeys = restoration.mapTo(mutableSetOf()) { (_, row) -> row.key }
             unsavedIconKeys = (unsavedIconKeys - restoredKeys) + pending.unsavedBefore.intersect(restoredKeys)
-            // A change that reached the database has to be written back, or the restored state
-            // would only live until the next load.
-            if (persisted) saveRenkinPack()
             undoTracker.clear()
             true
         }
@@ -1444,14 +1426,6 @@ class ApplicationProvider internal constructor(
             editApplication(index, app.changeExport(null).changeCalendar(false, null, null), trackUnsaved = false)
         }
     }
-
-    /** Keys ("package/activity") of the apps stored in the last built/saved pack. */
-    suspend fun getSavedPackKeys(profileId: Long = activeProfileId): Set<String> =
-        renkinPackStore.savedKeys(profileId)
-
-    /** Fingerprints of the stored icons — the "saved" half of the changes-since-build compare. */
-    suspend fun getSavedIconHashes(profileId: Long = activeProfileId): Map<String, String> =
-        renkinPackStore.savedHashes(profileId)
 
     internal data class EditorDraftBaselineSource(
         val session: ProfileSessionToken,
@@ -1564,21 +1538,6 @@ class ApplicationProvider internal constructor(
         update(baselines)
         true
     }
-
-    /**
-     * Fingerprints of what the last build shipped; empty when this profile never built. A profile
-     * that built before this record existed adopts its stored icons instead, so upgrading the app
-     * never reports an already-built pack as entirely new.
-     */
-    suspend fun getBuiltIconHashes(profileId: Long = activeProfileId): Map<String, String> {
-        if (profileManager.profile(profileId)?.hasUnbuiltChanges == false) {
-            renkinPackStore.adoptBuiltIfMissing(profileId)
-        }
-        return renkinPackStore.builtHashes(profileId)
-    }
-
-    /** Records the just-built pack's contents, so later saves can be told apart from it. */
-    suspend fun recordBuiltIcons(profileId: Long) = renkinPackStore.recordBuilt(profileId)
 
     // ---- Profiles (delegated to ProfileManager) -------------------------------------
 
@@ -1738,13 +1697,6 @@ class ApplicationProvider internal constructor(
                 profileManager.activeProfile()?.hideMissingPackWarning == true
             )
         }
-
-    /**
-     * The hand-pick path's provenance gate: translates an own-pack source to the origin its
-     * provenance records and says whether that origin is locked here.
-     */
-    suspend fun resolvePickedSource(app: PackageInfoStruct, sourcePackName: String?): Pair<String?, Boolean> =
-        lockManager.resolvePickedSource(app.key, sourcePackName)
 
     /** One row of the "pack usage" stats: how many stored icons really came from [packageName]. */
     data class PackUsage(val packageName: String, val label: String, val count: Int, val installed: Boolean)
