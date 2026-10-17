@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.preferencesOf
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.icon.creator.colorStyle
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -104,6 +105,39 @@ class ProfileStylePreferencesTest {
             assertEquals(source, ProfileEnumValue.fromLegacy(source.ordinal, Source.entries).resolve(Source.NONE))
         }
         assertEquals(Source.ICON_PACK, ProfileEnumValue.fromLegacy(-1, Source.entries).resolve(Source.ICON_PACK))
+    }
+
+    // A style is edited as a whole; every reader and the profile capture must carry all of it
+    // (the Global Save once kept only the first colour of the shape plate).
+    @Test
+    fun everyColorStyleSurvivesItsReaderAndTheProfileStyleCapture() {
+        val styleSets = mapOf(
+            "colorizer" to ColorizerStyleKeys, "background" to BackgroundStyleKeys,
+            "shape plate" to GlobalShapeStyleKeys, "global colorizer" to GlobalColorizerStyleKeys,
+            "outline" to OutlineStyleKeys
+        )
+        val written = mutablePreferencesOf().apply {
+            styleSets.values.forEachIndexed { index, keys ->
+                setColorStyle(
+                    keys, ColorizerMode.GRADIENT.ordinal, GradientType.RADIAL.ordinal, 30 + index,
+                    androidx.compose.ui.graphics.Color(0xFF102030.toInt() + index),
+                    listOf(0xFF405060.toInt() + index, 0xFF708090.toInt()), listOf(0f, .4f, 1f)
+                )
+            }
+        }
+        val captured = ProfileStylePreferences.toPreferences(ProfileStylePreferences.capture(written))
+
+        for ((name, keys) in styleSets) {
+            val style = written.colorStyle(keys, androidx.compose.ui.graphics.Color.Magenta)
+            assertEquals(name, ColorizerMode.GRADIENT, style.mode)
+            assertEquals(name, GradientType.RADIAL, style.gradientType)
+            assertEquals(name, 2, style.gradientStops.size)
+            assertEquals(name, style, captured.colorStyle(keys, androidx.compose.ui.graphics.Color.Magenta))
+            listOfNotNull(
+                keys.mode, keys.gradientType, keys.gradientAngle, keys.firstColor,
+                keys.gradientColors, keys.gradientPositions, keys.legacyGradientColor
+            ).forEach { key -> assertEquals("$name ${key.name}", written[key], captured[key]) }
+        }
     }
 }
 
