@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.data.editor
 
+import dev.renkinProject.renkin.icon.creator.MATERIAL_YOU_STROKE_SCALE_RANGE
+import dev.renkinProject.renkin.icon.creator.MODIFIER_SCALE_RANGE
 import androidx.compose.ui.graphics.Color
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_MAX
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_MIN
@@ -29,8 +31,8 @@ internal object EditorRecoveryValidation {
         with(controls.adjustments) {
             listOf(colorizerStyle, shapeStyle, outlineStyle, shadowStyle).forEach(::style)
             range(edgeThreshold, 0.5f..5f); range(edgeSmoothing, 0.5f..4f)
-            range(iconScale, 0.5f..1.5f); range(offsetX, -0.5f..0.5f); range(offsetY, -0.5f..0.5f)
-            range(backgroundTolerance, 0f..0.5f); range(shapeScale, 0.5f..1.5f)
+            range(iconScale, MODIFIER_SCALE_RANGE); range(offsetX, -0.5f..0.5f); range(offsetY, -0.5f..0.5f)
+            range(backgroundTolerance, 0f..0.5f); range(shapeScale, MODIFIER_SCALE_RANGE)
             range(outlineWidth, OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat())
             validateShadow(shadowBlur, shadowDistance, shadowAngle, shadowOpacity)
             colorizeLayers.forEach { range(it.tolerance, 0f..1f); style(it.style) }
@@ -69,13 +71,13 @@ internal object EditorRecoveryValidation {
             require(effect.edges.highThreshold.isFinite() && effect.edges.highThreshold >= effect.edges.lowThreshold) { "Invalid editor edge thresholds" }
             range(effect.edges.smoothing, 0.5f..4f); range(effect.backgroundRemoval.tolerance, 0f..0.5f)
             effect.segments.forEach { range(it.tolerance, 0f..1f); style(it.style) }
-            range(transform.scale, 0.5f..1.5f); range(transform.offsetX, -0.5f..0.5f); range(transform.offsetY, -0.5f..0.5f)
-            shape?.let { range(it.scale, 0.5f..1.5f); it.fill?.style?.let(::style) }
+            range(transform.scale, MODIFIER_SCALE_RANGE); range(transform.offsetX, -0.5f..0.5f); range(transform.offsetY, -0.5f..0.5f)
+            shape?.let { range(it.scale, MODIFIER_SCALE_RANGE); it.fill?.style?.let(::style) }
             outline?.let { range(it.width, OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat()); it.fill.style?.let(::style) }
             shadow?.let { validateShadow(it.blur, it.distance, it.angle, it.opacity); style(it.style) }
             with(materialYouPack) {
                 require(selectedScheme >= -1) { "Invalid editor pack scheme" }
-                range(strokeScale, 0.5f..2f); customForeground?.let(::style); customBackground?.let(::style)
+                range(strokeScale, MATERIAL_YOU_STROKE_SCALE_RANGE); customForeground?.let(::style); customBackground?.let(::style)
             }
         }
         value.export.background.style?.let(::style); value.export.foregroundStyle?.let(::style)
@@ -84,7 +86,7 @@ internal object EditorRecoveryValidation {
     private fun pack(value: EditorPackControls) {
         // -1 inherits; indices beyond the palette select Custom and must remain intact.
         require(value.selectedScheme >= -1) { "Invalid editor pack scheme" }
-        range(value.strokeScale, 0.5f..2f); style(value.customForeground); style(value.customBackground)
+        range(value.strokeScale, MATERIAL_YOU_STROKE_SCALE_RANGE); style(value.customForeground); style(value.customBackground)
     }
 
     private fun style(value: ColorizerStyle) {

@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui
 
+import dev.renkinProject.renkin.icon.creator.MODIFIER_SCALE_RANGE
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -450,7 +451,7 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
                         label = stringResource(R.string.shapeIconScale),
                         value = state.shape.scale,
                         onValueChange = { state.updateShape { copy(scale = it) } },
-                        valueRange = 0.5f..1.5f,
+                        valueRange = MODIFIER_SCALE_RANGE,
                         centered = true,
                         ruler = percentRuler()
                     )
@@ -493,7 +494,7 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
                 label = stringResource(R.string.iconScale),
                 value = state.modifiers.transform.scale,
                 onValueChange = { state.updateTransform { copy(scale = it) } },
-                valueRange = 0.5f..1.5f,
+                valueRange = MODIFIER_SCALE_RANGE,
                 centered = true,
                 ruler = percentRuler()
             )

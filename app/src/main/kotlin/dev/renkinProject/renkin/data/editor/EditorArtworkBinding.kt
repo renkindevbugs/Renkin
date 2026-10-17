@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.data.editor
 
+import dev.renkinProject.renkin.icon.creator.MATERIAL_YOU_STROKE_SCALE_RANGE
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Rect
@@ -61,7 +62,7 @@ internal suspend fun restoreEditorArtwork(value: EditorArtworkSnapshot): IconPac
                     decoded.recycle(); owner.ensureActive(); return png
                 }
                 val state = value.controls?.let {
-                    require(it.selectedScheme >= -1 && it.strokeScale in 0.5f..2f) { "Invalid adaptive edit state" }
+                    require(it.selectedScheme >= -1 && it.strokeScale in MATERIAL_YOU_STROKE_SCALE_RANGE) { "Invalid adaptive edit state" }
                     MaterialYouPackEditState(it.selectedScheme, it.customForeground, it.customBackground, it.strokeScale)
                 }
                 AdaptiveIconPackDrawable(layer(value.foreground), layer(value.background), value.monochrome?.let(::layer), state,

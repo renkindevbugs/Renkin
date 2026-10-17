@@ -69,7 +69,7 @@ internal fun previewScaleToBakeForShape(icon: IconPackDrawable, shaped: Boolean)
     if (shaped) (icon as? BitmapIconDrawable)?.previewScale ?: 1f else 1f
 
 internal fun effectiveMaterialYouPackStrokeScale(modifierScale: Float): Float =
-    modifierScale.coerceIn(0.5f, 2f)
+    modifierScale.coerceIn(MATERIAL_YOU_STROKE_SCALE_RANGE)
 
 internal fun shouldNormalizeAdaptiveForeground(preserveAdaptiveAppearance: Boolean): Boolean =
     !preserveAdaptiveAppearance
@@ -388,14 +388,14 @@ class IconGenerator(
             // Apps without an official layer still get a clearly-labelled Renkin-generated
             // approximation. Rasterising the complete launcher icon preserves its optical size;
             // getAppIconBitmap extracts the adaptive foreground and would enlarge it here.
-            val bitmapIcon = applicationIcon.shrinkIfBiggerThan(500) ?: return null
+            val bitmapIcon = applicationIcon.shrinkIfBiggerThan(ICON_WORK_SIZE) ?: return null
             val generated = generateMaterialYouFromOriginal(bitmapIcon)
             return IconSourceStage(generated, ModifierInputPipeline.IMAGE_EDIT, imageEdit)
         }
         if (source.applicationIconVariant == ApplicationIconVariant.DEFAULT &&
             source.useFullApplicationIcon
         ) {
-            val completeIcon = applicationIcon.shrinkIfBiggerThan(500) ?: return null
+            val completeIcon = applicationIcon.shrinkIfBiggerThan(ICON_WORK_SIZE) ?: return null
             return generateImage(
                 bitmapIcon = completeIcon,
                 parsedIcon = null,
@@ -719,7 +719,7 @@ class IconGenerator(
         return layer.takeIf { unwrapped is BitmapDrawable || unwrapped is VectorDrawable }
     }
 
-    private fun getAppIconBitmap(icon: Drawable, maxSize: Int = 500): Bitmap? {
+    private fun getAppIconBitmap(icon: Drawable, maxSize: Int = ICON_WORK_SIZE): Bitmap? {
         var newIcon = icon
 
         if (newIcon.isAdaptiveIconDrawable()) {
@@ -837,7 +837,7 @@ class IconGenerator(
         return builder.build()
     }
 
-    private fun getIconBitmap(icon: Drawable, maxSize: Int = 500): Bitmap? {
+    private fun getIconBitmap(icon: Drawable, maxSize: Int = ICON_WORK_SIZE): Bitmap? {
         return if (icon.isAdaptiveIconDrawable()) {
             icon as AdaptiveIconDrawable
             // An adaptive icon's foreground only fills the inner 72/108 safe zone,
@@ -891,13 +891,13 @@ class IconGenerator(
         val adaptive = parsedIcon as? AdaptiveIconDrawable ?: return parsedIcon
         val vector = adaptive.foregroundVectorOrNull()
 
-        val modifierStrokeScale = modifiers.materialYouPack.strokeScale.coerceIn(0.5f, 2f)
+        val strokeScale = effectiveMaterialYouPackStrokeScale(modifiers.materialYouPack.strokeScale)
         // Lawnicons ships real strokes (for example _10.svg is 12 units in a 192-unit
         // viewport) inside a 32% adaptive foreground inset. Preserve that source geometry:
         // centred 100% means the pack's real stroke width. The same 500 px render is used by
         // browser tiles, the comparison header, modifiers, persistence and APK export so changing
         // a modifier cannot silently switch to a thinner preview raster.
-        vector?.root?.scaleStrokePaths(effectiveMaterialYouPackStrokeScale(modifierStrokeScale))
+        vector?.root?.scaleStrokePaths(strokeScale)
         modifiers.materialYouPack.foreground?.let { foreground ->
             if (vector != null) {
                 vector.root.setReferenceColorPaths(SolidColor(Color(foreground)))
@@ -911,7 +911,7 @@ class IconGenerator(
             ?: adaptive.background
         val monochrome = if (adaptive.haveMonochrome()) adaptive.monochrome else null
         monochrome?.foregroundVectorOrNull()?.root
-            ?.scaleStrokePaths(effectiveMaterialYouPackStrokeScale(modifierStrokeScale))
+            ?.scaleStrokePaths(strokeScale)
         return newAdaptiveIconDrawable(adaptive.foreground, background, monochrome)
     }
 
@@ -982,6 +982,8 @@ class IconGenerator(
     }
 
     private companion object {
+        // App icons are reduced to this raster size before generation and modifiers work on them.
+        const val ICON_WORK_SIZE = 500
         const val ADAPTIVE_PACK_RENDER_SIZE = 500
         const val FALLBACK_BITMAP_CACHE_BYTES = 8 * 1024 * 1024
     }

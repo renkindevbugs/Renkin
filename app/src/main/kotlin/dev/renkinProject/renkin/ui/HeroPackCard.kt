@@ -96,6 +96,7 @@ import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.packages.isMissingIcon
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.GoldBase
 import dev.renkinProject.renkin.ui.theme.RemovedRed
@@ -153,7 +154,7 @@ internal fun calculateHeroPackStats(
             if (app.isFallback) fallbackCount++
         } else {
             if (app.key in builtKeys) removedCount++
-            if (!locked) missingCount++
+            if (app.isMissingIcon(lockedKeys)) missingCount++
         }
     }
 

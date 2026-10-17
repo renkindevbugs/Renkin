@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui.modifier
 
+import dev.renkinProject.renkin.icon.creator.MATERIAL_YOU_STROKE_SCALE_RANGE
 import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
@@ -88,7 +89,7 @@ internal fun MaterialYouPackSection(
                     valueRange = 0f..2f,
                     centered = true,
                     ruler = percentRuler(
-                        valueRange = 0.5f..2f,
+                        valueRange = MATERIAL_YOU_STROKE_SCALE_RANGE,
                         toRulerValue = ::centeredSliderToLineWeight,
                         fromRulerValue = ::lineWeightToCenteredSlider
                     )

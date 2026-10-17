@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.icon.parser
 
+import dev.renkinProject.renkin.icon.creator.MATERIAL_YOU_STROKE_SCALE_RANGE
 import android.graphics.BitmapFactory
 import android.util.Base64
 import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
@@ -67,7 +68,7 @@ internal object AdaptiveIconPayload {
             val selectedScheme = requireNotNull(it.getAttributeValue("scheme")).toInt()
             require(selectedScheme >= -1)
             val strokeScale = requireNotNull(it.getAttributeValue("stroke-scale")).toFloat()
-            require(strokeScale.isFinite() && strokeScale in 0.5f..2f)
+            require(strokeScale.isFinite() && strokeScale in MATERIAL_YOU_STROKE_SCALE_RANGE)
             MaterialYouPackEditState(
                 selectedScheme = selectedScheme,
                 customForeground = requireNotNull(

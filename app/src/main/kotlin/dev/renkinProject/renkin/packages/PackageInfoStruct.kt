@@ -178,3 +178,9 @@ class PackageInfoStruct(
         val DIACRITICS_REGEX = "\\p{Mn}+".toRegex()
     }
 }
+
+/**
+ * No icon and not held back by a locked pack. The missing filter, the hero card count and the
+ * Global options "without an icon" group must all agree on this.
+ */
+fun PackageInfoStruct.isMissingIcon(lockedKeys: Set<String>): Boolean = createdIcon == null && key !in lockedKeys
