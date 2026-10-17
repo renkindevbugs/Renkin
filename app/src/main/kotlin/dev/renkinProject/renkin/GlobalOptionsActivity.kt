@@ -20,7 +20,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewmodel.compose.SavedStateHandleSaveableApi
@@ -356,17 +355,42 @@ class GlobalOptionsViewModel @Inject constructor(
 
     /** Saves the staged draft; the outcome arrives as a toast and as the updated [baseline]. */
     fun saveGlobalStyle(): Job? {
-        if (saveJob?.isActive == true || globalApplyProgress != null) return null
+        if (saveJob?.isActive == true || globalApplyProgress != null || !draft.initialized) return null
+        if (profileChanged) {
+            _toastEvents.trySend(expiredSessionNotice)
+            return null
+        }
+        val expected = screenSession ?: return null
+        globalApplyProgress = 0 to 0
         return viewModelScope.launch {
-            val savedState = draft.snapshot()
-            val preferences = getApplication<Application>().dataStore.getPreferencesAfterPendingWrites()
-            val applied = applyGlobalModifiers(
-                draft.overlay(preferences), draft.toModifierOptions(),
-                draft.applyGenerated, draft.applyExisting, draft.applyCustom, draft.includeEmpty
-            )
-            if (applied) {
-                baseline = savedState
-                _toastEvents.trySend(R.string.globalOptionsApplied)
+            try {
+                val savedState = draft.snapshot()
+                // Read the captured draft after suspension, never the live controls.
+                val stagedDraft = GlobalModifierState().apply { restore(savedState) }
+                val preferences = getApplication<Application>().dataStore.getPreferencesAfterPendingWrites()
+                appProvider.applyGlobalModifiers(
+                    expected, stagedDraft.overlay(preferences), stagedDraft.toModifierOptions(),
+                    savedState.applyGenerated, savedState.applyExisting,
+                    savedState.applyCustom, savedState.includeEmpty
+                ) { done, total -> globalApplyProgress = done to total }
+                val committed = appProvider.commitSessionState(expected) {
+                    appliedGlobal = true
+                    baseline = savedState
+                }
+                _toastEvents.trySend(if (committed) R.string.globalOptionsApplied else expiredSessionNotice)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ProfileOperationBusyException) {
+                _toastEvents.trySend(R.string.profileRenderBusy)
+            } catch (e: ProfileOperationSupersededException) {
+                _toastEvents.trySend(R.string.profileOperationSuperseded)
+            } catch (e: ProfileSessionChangedException) {
+                _toastEvents.trySend(e.userMessage())
+            } catch (e: Exception) {
+                Log.error("GlobalOptionsViewModel", "Saving global style failed", e)
+                _toastEvents.trySend(R.string.globalOptionsApplyFailed)
+            } finally {
+                globalApplyProgress = null
             }
         }.also { saveJob = it }
     }
@@ -471,56 +495,6 @@ class GlobalOptionsViewModel @Inject constructor(
             }
         }
         return deferred.await()
-    }
-
-    /**
-     * Re-renders the global layer without mutating persisted bases (see the provider).
-     * [preferences] contains the screen's staged values. The provider persists that recipe and
-     * the rendered icons as one profile operation. Returns success for the screen's outcome toast.
-     */
-    private suspend fun applyGlobalModifiers(
-        preferences: Preferences,
-        modifierOptions: GenerationOptions,
-        applyGenerated: Boolean,
-        applyExisting: Boolean,
-        applyCustom: Boolean,
-        includeEmpty: Boolean
-    ): Boolean {
-        // Staged values belong to the profile this screen opened with; the activity closes on a
-        // change, but a Save already in flight when it happens must not land in the new profile.
-        if (globalApplyProgress != null) return false
-        if (profileChanged) {
-            _toastEvents.trySend(expiredSessionNotice)
-            return false
-        }
-        val expected = screenSession ?: return false
-        globalApplyProgress = 0 to 0
-        return try {
-            appProvider.applyGlobalModifiers(
-                expected, preferences, modifierOptions,
-                applyGenerated, applyExisting, applyCustom, includeEmpty
-            ) { done, total -> globalApplyProgress = done to total }
-            appProvider.commitSessionState(expected) { appliedGlobal = true }.also { committed ->
-                if (!committed) _toastEvents.trySend(expiredSessionNotice)
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: ProfileOperationBusyException) {
-            _toastEvents.trySend(R.string.profileRenderBusy)
-            false
-        } catch (e: ProfileOperationSupersededException) {
-            _toastEvents.trySend(R.string.profileOperationSuperseded)
-            false
-        } catch (e: ProfileSessionChangedException) {
-            _toastEvents.trySend(e.userMessage())
-            false
-        } catch (e: Exception) {
-            Log.error("GlobalOptionsViewModel", "Applying global modifiers failed", e)
-            _toastEvents.trySend(R.string.globalOptionsApplyFailed)
-            false
-        } finally {
-            globalApplyProgress = null
-        }
     }
 
     /**

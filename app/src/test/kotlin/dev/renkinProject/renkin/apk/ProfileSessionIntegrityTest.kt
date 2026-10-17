@@ -5,6 +5,7 @@ import android.graphics.drawable.ColorDrawable
 import android.content.Context
 import android.content.ContextWrapper
 import android.os.Looper
+import androidx.activity.ComponentActivity
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
 import dev.renkinProject.renkin.GlobalOptionsViewModel
@@ -42,6 +43,7 @@ import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.Collections
+import java.io.IOException
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -55,6 +57,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Robolectric
 import org.robolectric.annotation.Config
 import org.robolectric.Shadows.shadowOf
 
@@ -499,6 +502,107 @@ class ProfileSessionIntegrityTest {
         assertEquals(baseline, vm.baseline)
         assertTrue(vm.isDirty)
         assertFalse(context.dataStore.data.first()[GlobalApplyExistingKey] == vm.draft.applyExisting)
+    }
+
+    @Test
+    fun globalSaveReportsPreferenceReadFailureAndKeepsItsBaseline() = runBlocking {
+        provider.ensureInitialized()
+        val vm = globalOptionsViewModel()
+        awaitMain { vm.baseline != null }
+        val baseline = vm.baseline
+        vm.draft.applyExisting = !vm.draft.applyExisting
+        val events = mutableListOf<Int>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) { vm.toastEvents.collect { events += it } }
+        try {
+            StorageOperationGate.requireRecovery(IOException("Preference read failed"))
+
+            val job = requireNotNull(vm.saveGlobalStyle())
+            awaitMain { job.isCompleted }
+            awaitMain { R.string.globalOptionsApplyFailed in events }
+
+            assertFalse(job.isCancelled)
+            assertEquals(baseline, vm.baseline)
+            assertTrue(vm.isDirty)
+            assertEquals(null, vm.globalApplyProgress)
+            assertFalse(vm.appliedGlobal)
+        } finally {
+            collector.cancelAndJoin()
+            StorageOperationGate.resetForTests()
+        }
+    }
+
+    @Test
+    fun globalSaveKeepsTheCapturedDraftWhileItsPreferenceReadWaits() = runBlocking {
+        provider.ensureInitialized()
+        val vm = globalOptionsViewModel()
+        awaitMain { vm.baseline != null }
+        vm.draft.applyExisting = !vm.draft.applyExisting
+        val captured = vm.draft.snapshot()
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val blocker = launch(Dispatchers.Default) {
+            StorageOperationGate.run {
+                started.complete(Unit)
+                release.await()
+            }
+        }
+        try {
+            withTimeout(5_000) { started.await() }
+            val job = requireNotNull(vm.saveGlobalStyle())
+            awaitMain { vm.globalApplyProgress != null }
+            assertEquals(null, vm.saveGlobalStyle())
+            vm.draft.applyExisting = !captured.applyExisting
+            release.complete(Unit)
+            awaitMain { job.isCompleted }
+
+            assertEquals(captured.applyExisting, context.dataStore.data.first()[GlobalApplyExistingKey])
+            assertEquals(captured, vm.baseline)
+            assertTrue(vm.isDirty)
+            vm.resetDraft()
+            assertFalse(vm.isDirty)
+        } finally {
+            release.complete(Unit)
+            blocker.join()
+        }
+    }
+
+    @Test
+    fun activityRecreationRetainsTheRunningGlobalSaveAndItsCompletedBaseline() = runBlocking {
+        provider.ensureInitialized()
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+        val vm = globalOptionsViewModel()
+        controller.get().viewModelStore.put("global", vm)
+        awaitMain { vm.baseline != null }
+        vm.draft.applyExisting = !vm.draft.applyExisting
+        val captured = vm.draft.snapshot()
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val blocker = launch(Dispatchers.Default) {
+            StorageOperationGate.run {
+                started.complete(Unit)
+                release.await()
+            }
+        }
+        try {
+            withTimeout(5_000) { started.await() }
+            val job = requireNotNull(vm.saveGlobalStyle())
+            awaitMain { vm.globalApplyProgress != null }
+
+            controller.recreate()
+            assertSame(vm, controller.get().viewModelStore.get("global"))
+            assertTrue(job.isActive)
+            release.complete(Unit)
+            awaitMain { job.isCompleted }
+
+            assertEquals(captured, vm.baseline)
+            assertTrue(vm.appliedGlobal)
+            assertFalse(vm.isDirty)
+            assertEquals(null, vm.globalApplyProgress)
+        } finally {
+            release.complete(Unit)
+            blocker.join()
+            controller.pause().stop().destroy()
+        }
     }
 
     private suspend fun pausedGlobalSave(

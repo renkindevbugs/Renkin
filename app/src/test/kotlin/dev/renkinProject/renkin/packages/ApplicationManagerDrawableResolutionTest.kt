@@ -10,14 +10,53 @@ import dev.renkinProject.renkin.drawable.ResourceDrawable
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33])
 class ApplicationManagerDrawableResolutionTest {
+
+    private fun assertBrokenWinnerDoesNotReviveEarlierDrawable(brokenName: String) {
+        val context = RuntimeEnvironment.getApplication()
+        val manager = ApplicationManager(context)
+        val application = InstalledApplication("com.app", "com.app.Main", 1)
+        val other = InstalledApplication("com.other", "com.other.Main", 2)
+        val valid = "mdpi_ic_launcher"
+        val pack = context.packageName
+        assertTrue(requireNotNull(manager.getResourceDrawableByName(pack, valid)).resourceId > 0)
+        assertNull(manager.getResourceDrawableByName(pack, brokenName))
+        val elements = listOf(
+            RawItem(application.toComponentInfo(), valid),
+            RawItem(other.toComponentInfo(), valid),
+            RawItem(application.toComponentInfo(), brokenName)
+        )
+
+        val bulk = manager.getDrawableFromAppFilterElements(pack, listOf(application, other), elements)
+
+        assertEquals(brokenName, appFilterDrawableName(elements, application.toComponentInfo()))
+        assertEquals(brokenName, appFilterDrawableNames(elements)[application.toComponentInfo()])
+        assertNull(manager.getDrawableFromAppFilterElements(pack, application, elements))
+        assertNull(bulk[application])
+        assertEquals(setOf(other), bulk.keys)
+    }
+
+    @Test
+    fun missingLastDrawableIsAbsentInBothTargetedAndBulkLookup() {
+        assertBrokenWinnerDoesNotReviveEarlierDrawable("missing_last_drawable")
+    }
+
+    @Test
+    fun malformedLastDrawableIsAbsentInBothTargetedAndBulkLookup() {
+        val context = RuntimeEnvironment.getApplication()
+        val broken = "xml/manifest"
+        assertTrue(context.resources.getIdentifier(broken, "drawable", context.packageName) > 0)
+        assertBrokenWinnerDoesNotReviveEarlierDrawable(broken)
+    }
 
     @Test
     fun missingName_doesNotShiftFollowingNameToTheWrongResource() {

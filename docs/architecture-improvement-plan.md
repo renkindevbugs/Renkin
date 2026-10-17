@@ -1,6 +1,6 @@
 # Architecture improvement plan — 2026-10-17
 
-Status: agreed direction; steps 1–11 merged, step 12 is next and waits for the developer.
+Status: steps 1–11 merged; review follow-up verified, step 12 is next.
 Base: `dev` at `7ec9e93a`, revised after a second review of the plan at `a2eeab20`.
 Inputs: two architecture audits (`reports/Audit architektúry MVVM a DRY.md`,
 `reports/Umiestnenie kódu MVVM a DRY.md`, local and uncommitted, with notes in `research_notes/`)
@@ -135,7 +135,46 @@ Status values: `todo`, `in progress`, `device check`, `merged`.
 | 25 | Pack usage counts update reactively | test after an edit and a profile switch | todo |
 | 26 | First letter of generated text icons respects Unicode grapheme clusters (emoji) | test with emoji and combining characters | todo |
 
-## 5. Open questions for the developer
+## 5. Review follow-up — verified
+
+Branch: `fix/global-save-appfilter-review`, based on `dev` at `c32cba30`.
+Device checks and automated verification passed on 2026-10-17. The developer authorized
+on-device verification and, conditional on success, commit and merge.
+
+- Global Save now handles errors from preference reads as well as rendering and persistence.
+  Cancellation still propagates, and progress covers the entire operation.
+- Save uses one captured draft for rendering, preferences, target flags and its saved baseline.
+  Later control edits remain dirty. Baseline and the applied flag publish only for the captured
+  profile session.
+- Appfilter bulk loading selects the last declaration before loading resources, matching the
+  name and targeted lookup paths. A missing or malformed winning drawable does not fall back to
+  an earlier declaration of the same component.
+
+Device results (CPH2663, debug package only):
+
+1. Saved a circle plate with a radial gradient. Room retained `GRADIENT` / `RADIAL`; after a
+   cold restart, the editor retained the style and its Save button was disabled.
+2. Applied the captured style to 217 empty slots, switched to the app's MainActivity while it
+   ran, and reopened Global style after completion. The profile increased from 3 to 220 stored
+   icons; all 217 new icons were saved and Save was disabled on reopen. No debug-process crash.
+3. An existing stale watch suggestion correctly refused Apply. A manual watch check refreshed
+   it; applying the Lawnicons AntennaPod candidate matched its preview and removed that rule.
+   Watch suggestions decreased from 10 to 9.
+4. Restored all 47 persistent files, including `no_backup`, byte-for-byte against their original
+   SHA-256 manifest. All six profiles returned to their original icon counts (939 stored rows
+   total), and relaunch returned to the original active profile with its original three icons.
+
+The phone locks portrait, so physical rotation during Save was not tested. A Robolectric host
+Activity recreation test retains the running GlobalOptionsViewModel and verifies its completed
+baseline. Deterministic tests also cover a blocked preference read with a later draft edit,
+Reset and duplicate-Save rejection, preference-read failure, and missing/malformed last
+appfilter drawables without reviving an older entry or losing unrelated healthy components.
+
+Both targeted classes passed (34 tests). The full `testDebugUnitTest` suite passed all 1,462
+tests across 197 suites with no failures, errors or skips. `assembleDebug` and `git diff --check`
+passed. Tests use the existing local `build/verify-jvm.gradle` JVM workaround.
+
+## 6. Open questions for the developer
 
 - `restorePrefs` keeps only 3 of the 4 `DEVICE_LOCAL_PREF_NAMES`; `LastWatchCheckAtKey` is
   cleared on restore. Intended?

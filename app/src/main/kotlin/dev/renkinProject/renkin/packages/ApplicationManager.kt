@@ -177,17 +177,16 @@ internal class ApplicationManager(
         val map = mutableMapOf<String, ResourceDrawable>()
         val res = resourceResolver.getResources(iconPackName) ?: return map
 
-        for (element in elements) {
-            if (element is RawItem) {
-                val resourceId = runCatching {
-                    res.getIdentifierByName(element.drawableLink, "drawable", iconPackName)
-                }.getOrNull() ?: continue
+        // Resolve only the winning declaration; a broken winner must not revive an older icon.
+        for ((component, drawableName) in appFilterDrawableNames(elements)) {
+            val resourceId = runCatching {
+                res.getIdentifierByName(drawableName, "drawable", iconPackName)
+            }.getOrNull() ?: continue
 
-                if (resourceId > 0) {
-                    val drawable = runCatching { resourceResolver.getDrawable(res, resourceId) }.getOrNull()
-                    if (drawable != null)
-                        map[element.component] = ResourceDrawable(resourceId, drawable)
-                }
+            if (resourceId > 0) {
+                val drawable = runCatching { resourceResolver.getDrawable(res, resourceId) }.getOrNull()
+                if (drawable != null)
+                    map[component] = ResourceDrawable(resourceId, drawable)
             }
         }
 
