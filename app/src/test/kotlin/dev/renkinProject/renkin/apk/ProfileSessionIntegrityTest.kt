@@ -407,6 +407,17 @@ class ProfileSessionIntegrityTest {
         }
         assertFalse(buildStarted)
     }
+
+    @Test
+    fun clearingIconsMarksTheProfileAsWaitingForABuild() = runBlocking {
+        provider.ensureInitialized()
+        val profileId = provider.sessionToken.profileId
+        repository.updateProfile(requireNotNull(repository.profile(profileId)).copy(hasUnbuiltChanges = false))
+
+        provider.clearIcons(provider.sessionToken)
+
+        assertTrue(requireNotNull(repository.profile(profileId)).hasUnbuiltChanges)
+    }
     private suspend fun pausedGlobalSave(
         started: CompletableDeferred<Unit>, release: CountDownLatch
     ) {

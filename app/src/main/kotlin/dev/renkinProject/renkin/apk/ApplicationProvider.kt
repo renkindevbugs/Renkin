@@ -1407,7 +1407,8 @@ class ApplicationProvider internal constructor(
             // Explicit removal includes held-back rows and calendar-only assignments.
             lockManager.clear()
             resetInMemoryIcons()
-            saveRenkinPack()
+            // The installed pack still carries the cleared icons until the next build.
+            persistActiveProfileIcons(unbuiltAfter = true)
             sessionToken
         }
     }
