@@ -95,6 +95,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
@@ -155,6 +156,7 @@ import dev.renkinProject.renkin.feature.watch.WatchViewModel
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -962,6 +964,7 @@ fun ApplicationList(
 }
 
 private val EmptyStateMinHeight = 260.dp
+private const val DELIVERY_REVEAL_CAP_MS = 1000L
 
 private fun LazyGridState.isItemFullyVisible(index: Int): Boolean {
     val item = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return false
@@ -1003,6 +1006,10 @@ fun ApplicationItem(
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
     var quickActionsOpen by rememberSaveable { mutableStateOf(false) }
+    // Plain remember: a flight holds a bitmap and is meaningless after recreation, so a
+    // restored editor simply opens without one.
+    val iconAnchor = remember { IconAnchor() }
+    var iconFlight by remember { mutableStateOf<IconFlightState?>(null) }
 
     // Closing the edit dialog (whose icon-search field had keyboard focus) otherwise lets the
     // system hand focus to the home search field, popping the keyboard. Clear focus only on the
@@ -1026,8 +1033,11 @@ fun ApplicationItem(
             .combinedClickable(
                 role = Role.Button,
                 onClick = {
+                    // Its editor is still closing (icons flying home); let that finish first.
+                    if (openAppOptions) return@combinedClickable
                     view.performTapHaptic()
                     if (viewModel.iconPackState.value.loaded) {
+                        iconFlight = iconAnchor.launch()
                         openAppOptions = true
                     } else {
                         toaster.show(syncWarning)
@@ -1049,8 +1059,11 @@ fun ApplicationItem(
             // Decoded once at the on-screen size (56.dp) by the shared helper, so scrolling
             // new rows in doesn't decode oversized bitmaps on the main thread (scroll jank).
             val bitmap = rememberAppBitmap(app, 56.dp)
+            SideEffect { iconAnchor.bitmap = bitmap }
             Box(
                 modifier = Modifier
+                    .iconAnchor(iconAnchor)
+                    .graphicsLayer { alpha = if (iconFlight.inFlight) 0f else 1f }
                     .size(56.dp)
                     .clip(IconShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -1085,10 +1098,30 @@ fun ApplicationItem(
 
             // Crossfade the trailing slot so assigning or clearing an icon fades
             // between the preview and the edit bubble instead of popping
-            Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .deliveryAnchor(iconAnchor)
+                    .graphicsLayer { alpha = if (iconFlight.holdsResultSlot) 0f else 1f }
+                    .size(56.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 // Rasterised at the row's size: a vector painter grows into place over the first
                 // frames, which read as the icon jumping after it appeared.
                 val createdBitmap = rememberCreatedIconBitmap(app, 56.dp)
+                SideEffect { iconAnchor.resultBitmap = createdBitmap }
+                // An icon has landed here: a returning one shows at once; an applied one once the
+                // row draws it (or after a short cap, if the raster takes longer).
+                val landedDelivery = iconFlight?.takeIf {
+                    it.delivery != null && it.phase == IconFlightPhase.HOME
+                }
+                LaunchedEffect(landedDelivery, createdBitmap) {
+                    if (landedDelivery == null) return@LaunchedEffect
+                    val applied = landedDelivery.delivery?.applied == true
+                    if (applied && (createdBitmap == null || createdBitmap === landedDelivery.resultBefore)) {
+                        delay(DELIVERY_REVEAL_CAP_MS)
+                    }
+                    iconFlight = null
+                }
                 // Fixed frame for every state: the edit bubble is smaller than an icon, and
                 // letting Crossfade shrink the slot around it slid the bubble into place after
                 // the fade. Each branch centres itself inside the same 56.dp box instead.
@@ -1205,8 +1238,10 @@ fun ApplicationItem(
     }
 
     if (openAppOptions) {
-        OpenAppOptions(iconPacks, app, themed, sourceSession = sourceSession) {
+        OpenAppOptions(iconPacks, app, themed, sourceSession = sourceSession, flight = iconFlight) {
             openAppOptions = false
+            // A delivered icon keeps its flight until the row draws it (see the result slot).
+            if (iconFlight?.delivery == null) iconFlight = null
         }
     }
 }
@@ -1219,6 +1254,7 @@ fun OpenAppOptions(
     sourceSession: ProfileSessionToken,
     recoveredSessionId: String? = null,
     onSessionInvalidated: (() -> Unit)? = null,
+    flight: IconFlightState? = null,
     onDismiss: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
@@ -1281,8 +1317,8 @@ fun OpenAppOptions(
     }
 
     OptionsDialog(iconPacks, session, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, modifierRecipe, modifierInput ->
+        // Only stores the icon: the dialog closes itself through closeEditor, after any flight.
         viewModel.applyIcon(session.application, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, expected, modifierRecipe, modifierInput)
-        closeEditor()
     }, closeEditor, onIconClear = {
         closeEditor()
         viewModel.resetIcon(session.application, expected)
@@ -1296,7 +1332,8 @@ fun OpenAppOptions(
                 EditorAutosaveNotice(it, draftOwner::retryAutosave, draftOwner::discardForAutosave,
                     onReview = { shown -> if (draftOwner.reviewSavedEdit(shown)) onDismiss() })
             }
-        })
+        },
+        flight = flight)
 }
 
 @Composable
