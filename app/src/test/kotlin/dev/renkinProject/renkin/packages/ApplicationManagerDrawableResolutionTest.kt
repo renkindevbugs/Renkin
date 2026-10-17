@@ -83,4 +83,22 @@ class ApplicationManagerDrawableResolutionTest {
 
         assertSame(last, result)
     }
+
+    @Test
+    fun drawableNames_followTheSameLastDeclarationAsTheDrawableLookup() {
+        // Mello declares the Snapdragon camera twice: "camera" first, "google_camera" last.
+        val camera = "ComponentInfo{org.codeaurora.snapcam/com.android.camera.CameraLauncher}"
+        val other = "ComponentInfo{com.other/com.other.Main}"
+        val elements = listOf(
+            RawItem(camera, "camera"),
+            RawItem(other, "other_icon"),
+            RawCalendar(camera, "calendar_"),
+            RawItem(camera, "google_camera")
+        )
+
+        assertEquals(lastAppFilterItem(elements, camera)?.drawableLink, appFilterDrawableName(elements, camera))
+        assertEquals("google_camera", appFilterDrawableName(elements, camera))
+        assertNull(appFilterDrawableName(elements, "ComponentInfo{com.missing/com.missing.Main}"))
+        assertEquals(mapOf(camera to "google_camera", other to "other_icon"), appFilterDrawableNames(elements))
+    }
 }

@@ -33,6 +33,13 @@ internal fun lastAppFilterItem(
     elements.asReversed()
         .firstOrNull { it is RawItem && it.component == component } as? RawItem
 
+// A pack may declare one component several times; like the drawable lookup, the last one wins.
+internal fun appFilterDrawableName(elements: List<RawElement>, component: String): String? =
+    lastAppFilterItem(elements, component)?.drawableLink
+
+internal fun appFilterDrawableNames(elements: List<RawElement>): Map<String, String> =
+    elements.filterIsInstance<RawItem>().associate { it.component to it.drawableLink }
+
 internal data class NamedResourceDrawable(val name: String, val resource: ResourceDrawable)
 
 internal interface PackBrowserDataSource {
@@ -94,9 +101,7 @@ internal class ApplicationManager(
     fun appFilterDrawableName(iconPackName: String, application: InstalledApplication): String? =
         runCatching { getAppFilterRawElements(iconPackName, listOf(application)) }
             .getOrDefault(emptyList())
-            .filterIsInstance<RawItem>()
-            .firstOrNull { it.component == application.toComponentInfo() }
-            ?.drawableLink
+            .let { appFilterDrawableName(it, application.toComponentInfo()) }
 
     /**
      * Parses the pack's classic fallback styling (`<iconback>`, `<iconmask>`, `<iconupon>`,

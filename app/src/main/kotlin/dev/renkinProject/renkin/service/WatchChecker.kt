@@ -4,7 +4,6 @@ import android.content.Context
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.IconPack
-import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.BaselineInput
@@ -17,6 +16,8 @@ import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.contentHash
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.appFilterDrawableName
+import dev.renkinProject.renkin.packages.appFilterDrawableNames
 import dev.renkinProject.renkin.packages.InstalledAppCatalog
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.util.Log
@@ -311,10 +312,7 @@ class WatchChecker(
                 )
             } ?: continue
             val (elements, resources) = parsed
-            val drawableNames = mutableMapOf<String, String>()
-            elements.filterIsInstance<RawItem>().forEach { item ->
-                drawableNames.putIfAbsent(item.component, item.drawableLink)
-            }
+            val drawableNames = appFilterDrawableNames(elements)
 
             for (installedApp in installedApps) {
                 val drawableName = drawableNames[installedApp.toComponentInfo()]
@@ -358,8 +356,7 @@ class WatchChecker(
         return readWatchPackOrNull(packPackage) {
             val elements = appMan.getAppFilterRawElements(packPackage, listOf(installedApp))
             val component = installedApp.toComponentInfo()
-            val drawableName = elements.filterIsInstance<RawItem>()
-                .firstOrNull { it.component == component }?.drawableLink
+            val drawableName = appFilterDrawableName(elements, component)
             val resource = appMan.getDrawableFromAppFilterElements(
                 packPackage, listOf(installedApp), elements
             )[installedApp]
