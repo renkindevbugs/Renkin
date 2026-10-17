@@ -1,6 +1,6 @@
 # Architecture improvement plan — 2026-10-17
 
-Status: agreed direction; steps 1–5 merged, step 6 is next and waits for the developer.
+Status: agreed direction; steps 1–6 merged, step 7 is next and waits for the developer.
 Base: `dev` at `7ec9e93a`, revised after a second review of the plan at `a2eeab20`.
 Inputs: two architecture audits (`reports/Audit architektúry MVVM a DRY.md`,
 `reports/Umiestnenie kódu MVVM a DRY.md`, local and uncommitted, with notes in `research_notes/`)
@@ -88,7 +88,7 @@ Status values: `todo`, `in progress`, `device check`, `merged`.
 | # | Step | Verification | Status |
 |---|---|---|---|
 | 5 | Clear icons goes through the shared save path (`markUnbuilt`, `afterProfileSaved`), after confirming the omission was not deliberate | history check; tests on the unbuilt flag and draft invalidation | merged |
-| 6 | `GlobalOptionsViewModel` owns the Global draft, its baseline, the Save progress and the Save result, and runs Save/Apply in `viewModelScope` | tests: Activity recreation shows the finished Save; background and return; a result after a profile switch is rejected | todo |
+| 6 | `GlobalOptionsViewModel` owns the Global draft, its baseline, the Save progress and the Save result, and runs Save/Apply in `viewModelScope` | tests: Activity recreation shows the finished Save; background and return; a result after a profile switch is rejected | merged |
 
 ### Phase 3 — guards against forgotten fields
 
