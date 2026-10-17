@@ -33,6 +33,18 @@ class BoundedXmlDecoderTest {
         assertEquals("XML exceeds decoding limits", error.message)
     }
 
+    @Test fun siblingAfterNestedGroupsKeepsItsOwnParent() {
+        val xml = "<vector><group name='outer'><group name='inner'><path name='deep'/></group></group>" +
+            "<path name='top'/><group name='second'><path name='leaf'/></group></vector>"
+        val vector = XmlDecoder.fromBase64(encoded(xml), 100, 64) {}.children.single()
+
+        assertEquals(listOf("outer", "top", "second"), vector.children.map { it.getAttributeValue("name") })
+        val outer = vector.children[0]
+        assertEquals(listOf("inner"), outer.children.map { it.getAttributeValue("name") })
+        assertEquals(listOf("deep"), outer.children.single().children.map { it.getAttributeValue("name") })
+        assertEquals(listOf("leaf"), vector.children[2].children.map { it.getAttributeValue("name") })
+    }
+
     @Test fun parsingDoesNotSwallowCancellation() {
         assertThrows(CancellationException::class.java) {
             XmlDecoder.fromBase64(encoded("<vector><path/></vector>"), 100, 64) { throw CancellationException("cancelled") }
