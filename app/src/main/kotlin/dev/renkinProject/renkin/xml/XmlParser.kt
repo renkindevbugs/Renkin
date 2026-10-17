@@ -25,11 +25,11 @@ class XmlParser {
             checkActive()
             val node = nodes.removeFirst()
 
-            if (node.depth < current.depth) {
-                parent = parent.parent!!
-            }
             if (node.depth > current.depth) {
                 parent = current
+            } else {
+                // A closing run can drop several levels at once; climb to this node's own level.
+                while (parent.depth >= node.depth) parent = parent.parent!!
             }
 
             parent.addChild(node)
