@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui
 
+import android.view.WindowManager
 import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -85,6 +88,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import kotlinx.coroutines.Dispatchers
@@ -164,7 +169,8 @@ internal fun OptionsDialog(
     onIconClear: () -> Unit,
     onRestoreModifiers: () -> Unit,
     onCancelModifierRestore: () -> Unit,
-    autosaveNotice: @Composable () -> Unit = {}
+    autosaveNotice: @Composable () -> Unit = {},
+    flight: IconFlightState? = null
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val app = session.application
@@ -235,10 +241,15 @@ internal fun OptionsDialog(
     val activateVector = session::activateVector
 
     val dialogTransition = remember { MutableTransitionState(false).apply { targetState = true } }
-    LaunchedEffect(dialogTransition.targetState, dialogTransition.isIdle) {
-        if (!dialogTransition.targetState && dialogTransition.isIdle) onDismiss()
+    // A returning icon must land in its row before the window, and the overlay with it, goes.
+    val returning = flight?.phase == IconFlightPhase.RETURNING
+    LaunchedEffect(dialogTransition.targetState, dialogTransition.isIdle, returning) {
+        if (!dialogTransition.targetState && dialogTransition.isIdle && !returning) onDismiss()
     }
-    val startClose: () -> Unit = { dialogTransition.targetState = false }
+    val startClose: () -> Unit = {
+        flight?.beginReturn()
+        dialogTransition.targetState = false
+    }
 
     // The Create tab's icon-pack browser is heavy to mount, so defer it until the open
     // animation has settled — the dialog then appears instantly
@@ -468,10 +479,16 @@ internal fun OptionsDialog(
             IconOrigin.UPLOAD -> onlineImageUrl
             else -> null
         }
+        if (!dialogTransition.targetState) return@confirm
         onConfirm(
             draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName,
             sourcePackToPersist, sourceUrlToPersist, draft.modifierRecipeToConfirm, draft.modifierInputToConfirm
         )
+        // The icon is stored already; with a flight only the window waits, so the original
+        // can fly home and the applied icon to the row's result slot before it closes.
+        flight?.beginReturn(applied = true)
+        if (flight?.phase == IconFlightPhase.RETURNING) dialogTransition.targetState = false
+        else onDismiss()
     }
 
     val adaptiveLayoutInfo = LocalAdaptiveLayoutInfo.current
@@ -490,6 +507,22 @@ internal fun OptionsDialog(
             decorFitsSystemWindows = false
         )
     ) {
+        // The system's dialog window animation (a scale/slide on some OEM skins) would carry the
+        // flying icon with it, so the icon visibly dropped before taking off. With a flight the
+        // content's own slide is the only entrance.
+        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+        if (flight != null) SideEffect { dialogWindow?.setWindowAnimations(0) }
+        // Once closing, the window lets touches and keys through to home, so the list is usable
+        // at once while the icons finish flying, as in apps whose transitions never block input.
+        LaunchedEffect(dialogTransition.targetState) {
+            if (!dialogTransition.targetState && flight != null) {
+                dialogWindow?.addFlags(
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                )
+            }
+        }
+        CompositionLocalProvider(LocalIconFlight provides flight) {
+        Box(Modifier.fillMaxSize()) {
         AnimatedVisibility(
             visibleState = dialogTransition,
             enter = slideInHorizontally(
@@ -813,6 +846,10 @@ internal fun OptionsDialog(
                     .padding(bottom = 96.dp)
             )
             }
+        }
+        }
+        // Outside the sliding content, so the icon flies on its own path while the dialog enters.
+        flight?.let { IconFlightOverlay(it) }
         }
         }
     }

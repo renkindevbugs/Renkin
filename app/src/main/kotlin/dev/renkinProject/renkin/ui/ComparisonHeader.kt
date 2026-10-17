@@ -33,12 +33,15 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalConfiguration
@@ -437,27 +440,39 @@ private fun CurrentSlot(
     size: Dp,
     labelExpand: Float
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
-            if (heroBitmap != null) {
-                Image(
-                    painter = BitmapPainter(heroBitmap.asImageBitmap()),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(size)
-                        .clip(iconTileShape(size))
-                )
-            } else {
-                Surface(
-                    modifier = Modifier.size(size),
-                    shape = iconTileShape(size),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.Face, null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(size / 2))
-                    }
+    val heroIcon: @Composable () -> Unit = {
+        if (heroBitmap != null) {
+            Image(
+                painter = BitmapPainter(heroBitmap.asImageBitmap()),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(size)
+                    .clip(iconTileShape(size))
+            )
+        } else {
+            Surface(
+                modifier = Modifier.size(size),
+                shape = iconTileShape(size),
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Face, null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(size / 2))
                 }
             }
+        }
+    }
+    val flight = LocalIconFlight.current
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (flight != null) {
+            // The tapped row's icon flies here and back: report where "here" is, and stay hidden
+            // while it travels so the two never show at once.
+            Box(
+                Modifier
+                    .onGloballyPositioned { if (flight.tracksSlot) flight.target = it.boundsOnScreen() }
+                    .graphicsLayer { alpha = if (flight.slotVisible) 1f else 0f }
+            ) { heroIcon() }
+        } else {
+            AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) { heroIcon() }
         }
         // Pixel-tied to the scroll: the label's height and opacity track [labelExpand], so it
         // shrinks/fades away as the list leaves the top and Apply rises smoothly with it.
@@ -493,10 +508,21 @@ private fun NewSlot(
             showLoading = false
         }
     }
+    // The row's custom icon flies into this slot as the editor opens, and this preview flies to
+    // the row's result slot as it closes, so the flight needs its position and icon, and the slot
+    // steps aside while a copy is in the air.
+    val flight = LocalIconFlight.current
+    if (flight != null) SideEffect { flight.newSlotIcon = previewIcon }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
             Surface(
                 modifier = Modifier
+                    .then(
+                        if (flight == null) Modifier
+                        else Modifier
+                            .onGloballyPositioned { if (flight.tracksSlot) flight.newSlotBounds = it.boundsOnScreen() }
+                            .graphicsLayer { alpha = if (flight.newSlotHidden) 0f else 1f }
+                    )
                     .size(size)
                     .clickable(enabled = previewIcon != null) { enlarged = true },
                 shape = iconTileShape(size),
