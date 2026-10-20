@@ -17,6 +17,17 @@ import dev.renkinProject.renkin.data.ColorStyleKeys
 import dev.renkinProject.renkin.data.BackgroundStyleKeys
 import dev.renkinProject.renkin.data.GlobalShapeStyleKeys
 import dev.renkinProject.renkin.data.GlobalColorizerStyleKeys
+import dev.renkinProject.renkin.data.GLOBAL_SHADOW_ANGLE_DEFAULT
+import dev.renkinProject.renkin.data.GLOBAL_SHADOW_BLUR_DEFAULT
+import dev.renkinProject.renkin.data.GLOBAL_SHADOW_DISTANCE_DEFAULT
+import dev.renkinProject.renkin.data.GLOBAL_SHADOW_OPACITY_DEFAULT
+import dev.renkinProject.renkin.data.GlobalShadowAllDirectionsKey
+import dev.renkinProject.renkin.data.GlobalShadowAngleKey
+import dev.renkinProject.renkin.data.GlobalShadowBlurKey
+import dev.renkinProject.renkin.data.GlobalShadowDistanceKey
+import dev.renkinProject.renkin.data.GlobalShadowKey
+import dev.renkinProject.renkin.data.GlobalShadowOpacityKey
+import dev.renkinProject.renkin.data.GlobalShadowStyleKeys
 import dev.renkinProject.renkin.data.OutlineStyleKeys
 import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.OverrideIconKey
@@ -194,10 +205,24 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
                 if (preferences.getBooleanValue(OutlineAddKey)) OutlineMode.ADD else OutlineMode.NONE,
                 normalizeOutlineWidth(preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)).toFloat(),
                 ColorFill(outlineStyle.firstColor, outlineStyle)
-            )
+            ),
+            shadow = preferences.globalShadow()
         )
     )
 }
+
+// Stored as whole px, degrees and percent (see GlobalShadowKey), clamped to the editor ranges.
+internal fun Preferences.globalShadow(): ShadowModifier = ShadowModifier(
+    blur = getIntValue(GlobalShadowBlurKey, GLOBAL_SHADOW_BLUR_DEFAULT).toFloat().coerceIn(SHADOW_BLUR_MIN, SHADOW_BLUR_MAX),
+    distance = getIntValue(GlobalShadowDistanceKey, GLOBAL_SHADOW_DISTANCE_DEFAULT).toFloat()
+        .coerceIn(SHADOW_DISTANCE_MIN, SHADOW_DISTANCE_MAX),
+    angle = getIntValue(GlobalShadowAngleKey, GLOBAL_SHADOW_ANGLE_DEFAULT).toFloat(),
+    allDirections = getBooleanValue(GlobalShadowAllDirectionsKey),
+    style = colorStyle(GlobalShadowStyleKeys, androidx.compose.ui.graphics.Color.Black),
+    opacity = (getIntValue(GlobalShadowOpacityKey, GLOBAL_SHADOW_OPACITY_DEFAULT) / 100f)
+        .coerceIn(SHADOW_OPACITY_MIN, SHADOW_OPACITY_MAX),
+    enabled = getBooleanValue(GlobalShadowKey)
+)
 
 /**
  * Any [ColorStyleKeys] group read back as a style. Used for the surfaces whose colour is only a

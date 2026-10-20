@@ -32,6 +32,17 @@ import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
 import dev.renkinProject.renkin.data.OutlineAddKey
 import dev.renkinProject.renkin.data.OutlineStyleKeys
 import dev.renkinProject.renkin.data.OutlineWidthKey
+import dev.renkinProject.renkin.data.GLOBAL_SHADOW_ANGLE_DEFAULT
+import dev.renkinProject.renkin.data.GLOBAL_SHADOW_BLUR_DEFAULT
+import dev.renkinProject.renkin.data.GLOBAL_SHADOW_DISTANCE_DEFAULT
+import dev.renkinProject.renkin.data.GLOBAL_SHADOW_OPACITY_DEFAULT
+import dev.renkinProject.renkin.data.GlobalShadowAllDirectionsKey
+import dev.renkinProject.renkin.data.GlobalShadowAngleKey
+import dev.renkinProject.renkin.data.GlobalShadowBlurKey
+import dev.renkinProject.renkin.data.GlobalShadowDistanceKey
+import dev.renkinProject.renkin.data.GlobalShadowKey
+import dev.renkinProject.renkin.data.GlobalShadowOpacityKey
+import dev.renkinProject.renkin.data.GlobalShadowStyleKeys
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimarySourceKey
 import dev.renkinProject.renkin.data.SOURCE_DEFAULT
@@ -54,6 +65,7 @@ import dev.renkinProject.renkin.icon.creator.ShapeModifier
 import dev.renkinProject.renkin.icon.creator.TransformModifier
 import dev.renkinProject.renkin.icon.creator.colorStyle
 import dev.renkinProject.renkin.icon.creator.globalModifierOptions
+import dev.renkinProject.renkin.icon.creator.ShadowModifier
 import dev.renkinProject.renkin.icon.creator.normalizedFlags
 import dev.renkinProject.renkin.icon.creator.withEffect
 import kotlin.math.roundToInt
@@ -90,6 +102,7 @@ internal class GlobalModifierState {
     // Both groups and their styles remain configured while disabled, so toggles retain drafts.
     val shape: ShapeModifier get() = requireNotNull(modifiers.shape)
     val outline: OutlineModifier get() = requireNotNull(modifiers.outline)
+    val shadow: ShadowModifier get() = requireNotNull(modifiers.shadow)
     val hasAnyEffect: Boolean get() = modifiers.hasVisibleEffect
 
     fun updateEffect(update: EffectModifier.() -> EffectModifier) {
@@ -106,6 +119,10 @@ internal class GlobalModifierState {
 
     fun updateOutline(update: OutlineModifier.() -> OutlineModifier) {
         modifiers = modifiers.copy(outline = outline.update()).withGlobalDraftDefaults()
+    }
+
+    fun updateShadow(shadow: ShadowModifier) {
+        modifiers = modifiers.copy(shadow = shadow).withGlobalDraftDefaults()
     }
 
     fun seedFrom(preferences: Preferences) {
@@ -143,7 +160,8 @@ internal class GlobalModifierState {
             effect = modifiers.effect.copy(colorizer = modifiers.effect.colorizer.normalizedFlags().roundedForSnapshot()),
             transform = modifiers.transform.copy(scale = modifiers.transform.scale.roundedGlobalScale()),
             shape = shape.copy(scale = shape.scale.roundedGlobalScale(), fill = shape.fill?.roundedForSnapshot()),
-            outline = outline.copy(width = outline.width.roundToInt().toFloat(), fill = outline.fill.roundedForSnapshot())
+            outline = outline.copy(width = outline.width.roundToInt().toFloat(), fill = outline.fill.roundedForSnapshot()),
+            shadow = shadow.roundedForSnapshot()
         ),
         applyGenerated = applyGenerated,
         applyExisting = applyExisting,
@@ -182,6 +200,13 @@ internal class GlobalModifierState {
         mutable[OutlineAddKey] = outline.isEnabled
         mutable[OutlineWidthKey] = outline.width.roundToInt()
         mutable.writeColorStyle(OutlineStyleKeys, requireNotNull(outline.fill.style))
+        mutable[GlobalShadowKey] = shadow.enabled
+        mutable[GlobalShadowBlurKey] = shadow.blur.roundToInt()
+        mutable[GlobalShadowDistanceKey] = shadow.distance.roundToInt()
+        mutable[GlobalShadowAngleKey] = shadow.angle.roundToInt()
+        mutable[GlobalShadowAllDirectionsKey] = shadow.allDirections
+        mutable[GlobalShadowOpacityKey] = (shadow.opacity * 100).roundToInt()
+        mutable.writeColorStyle(GlobalShadowStyleKeys, shadow.style)
         val effect = modifiers.effect
         val colorizer = effect.colorizer.normalizedFlags()
         mutable[GlobalColorizeKey] = effect.imageEdit == ImageEdit.COLORIZE
@@ -208,7 +233,8 @@ internal class GlobalModifierState {
 private fun defaultGlobalModifiers() = ModifierStack(
     effect = EffectModifier(ImageEdit.NONE, ColorizerStyle(firstColor = android.graphics.Color.WHITE)),
     shape = defaultGlobalShape,
-    outline = defaultGlobalOutline
+    outline = defaultGlobalOutline,
+    shadow = defaultGlobalShadow
 )
 
 private val defaultGlobalShape = ShapeModifier(
@@ -217,6 +243,11 @@ private val defaultGlobalShape = ShapeModifier(
 private val defaultGlobalOutline = OutlineModifier(
     OutlineMode.NONE, OUTLINE_WIDTH_DEFAULT.toFloat(), ColorizerStyle(firstColor = android.graphics.Color.BLACK).asFill()
 )
+private val defaultGlobalShadow = ShadowModifier(
+    GLOBAL_SHADOW_BLUR_DEFAULT.toFloat(), GLOBAL_SHADOW_DISTANCE_DEFAULT.toFloat(), GLOBAL_SHADOW_ANGLE_DEFAULT.toFloat(),
+    allDirections = false, ColorizerStyle(firstColor = android.graphics.Color.BLACK),
+    GLOBAL_SHADOW_OPACITY_DEFAULT / 100f, enabled = false
+)
 
 internal fun ModifierStack.withGlobalDraftDefaults(): ModifierStack {
     val shape = shape ?: defaultGlobalShape
@@ -224,7 +255,8 @@ internal fun ModifierStack.withGlobalDraftDefaults(): ModifierStack {
     val outline = outline ?: defaultGlobalOutline
     return copy(
         shape = shape.copy(fill = shapeFill.withStyleFallback()),
-        outline = outline.copy(fill = outline.fill.withStyleFallback())
+        outline = outline.copy(fill = outline.fill.withStyleFallback()),
+        shadow = shadow ?: defaultGlobalShadow
     )
 }
 
@@ -239,6 +271,13 @@ internal fun ColorizerStyle.asFill(): ColorFill = ColorFill(firstColor, this)
 private fun Float.roundedGlobalScale(): Float = (this * 100).roundToInt() / 100f
 private fun ColorizerStyle.roundedForSnapshot(): ColorizerStyle = copy(gradientAngle = gradientAngle.roundToInt().toFloat())
 private fun ColorFill.roundedForSnapshot(): ColorFill = copy(style = style?.roundedForSnapshot())
+private fun ShadowModifier.roundedForSnapshot(): ShadowModifier = copy(
+    blur = blur.roundToInt().toFloat(),
+    distance = distance.roundToInt().toFloat(),
+    angle = angle.roundToInt().toFloat(),
+    opacity = (opacity * 100).roundToInt() / 100f,
+    style = style.roundedForSnapshot()
+)
 
 private fun MutablePreferences.writeColorStyle(keys: ColorStyleKeys, style: ColorizerStyle) {
     setColorStyle(

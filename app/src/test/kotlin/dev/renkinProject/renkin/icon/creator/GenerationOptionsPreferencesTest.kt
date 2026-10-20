@@ -24,6 +24,13 @@ import dev.renkinProject.renkin.data.GlobalColorizerGradientTypeKey
 import dev.renkinProject.renkin.data.GlobalColorizerModeKey
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
 import dev.renkinProject.renkin.data.GlobalShapeKey
+import dev.renkinProject.renkin.data.GlobalShadowAllDirectionsKey
+import dev.renkinProject.renkin.data.GlobalShadowAngleKey
+import dev.renkinProject.renkin.data.GlobalShadowBlurKey
+import dev.renkinProject.renkin.data.GlobalShadowColorKey
+import dev.renkinProject.renkin.data.GlobalShadowDistanceKey
+import dev.renkinProject.renkin.data.GlobalShadowKey
+import dev.renkinProject.renkin.data.GlobalShadowOpacityKey
 import dev.renkinProject.renkin.data.OutlineAddKey
 import dev.renkinProject.renkin.data.SecondaryImageEditKey
 import dev.renkinProject.renkin.data.SecondarySourceKey
@@ -34,6 +41,7 @@ import dev.renkinProject.renkin.data.PrimarySourceKey
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextFontKey
 import dev.renkinProject.renkin.data.getDefaultIconColor
+import dev.renkinProject.renkin.ui.GlobalModifierState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -119,6 +127,64 @@ class GenerationOptionsPreferencesTest {
         assertEquals(IconShape.CIRCLE, global.modifiers.shape?.shape)
         assertEquals(OutlineMode.ADD, global.modifiers.outline?.mode)
         assertTrue(global.hasVisibleModifierEffect())
+    }
+
+    @Test
+    fun globalShadow_isADisabledSoftPresetWhenNothingIsStored() {
+        val shadow = requireNotNull(globalModifierOptions(preferencesOf()).modifiers.shadow)
+
+        assertFalse(shadow.enabled)
+        assertFalse(shadow.isVisible)
+        assertEquals(14f, shadow.blur)
+        assertEquals(7f, shadow.distance)
+        assertEquals(135f, shadow.angle)
+        assertEquals(0.32f, shadow.opacity)
+        assertEquals(Color.Black.toArgb(), shadow.style.firstColor)
+    }
+
+    @Test
+    fun globalShadow_readsWholeUnitsAndClampsToTheEditorRanges() {
+        val prefs = preferencesOf(
+            GlobalShadowKey to true,
+            GlobalShadowBlurKey to 99,
+            GlobalShadowDistanceKey to 12,
+            GlobalShadowAngleKey to 200,
+            GlobalShadowAllDirectionsKey to true,
+            GlobalShadowOpacityKey to 150,
+            GlobalShadowColorKey to Color.Red.toHexString()
+        )
+
+        val global = globalModifierOptions(prefs)
+        val shadow = requireNotNull(global.modifiers.shadow)
+
+        assertEquals(SHADOW_BLUR_MAX, shadow.blur)
+        assertEquals(12f, shadow.distance)
+        assertEquals(200f, shadow.angle)
+        assertTrue(shadow.allDirections)
+        assertEquals(SHADOW_OPACITY_MAX, shadow.opacity)
+        assertEquals(Color.Red.toArgb(), shadow.style.firstColor)
+        assertTrue(global.hasVisibleShadow())
+        assertTrue(global.hasVisibleModifierEffect())
+    }
+
+    @Test
+    fun globalShadow_draftWritesThePreferencesARefreshReadsBack() {
+        val draft = GlobalModifierState().apply {
+            seedFrom(preferencesOf())
+            updateShadow(shadow.copy(
+                enabled = true, blur = 1.4f, distance = 11.6f, angle = 135f, opacity = 0.654f,
+                style = ColorizerStyle(firstColor = Color.Blue.toArgb())
+            ))
+        }
+
+        val reread = requireNotNull(globalModifierOptions(draft.overlay(preferencesOf())).modifiers.shadow)
+
+        assertTrue(reread.enabled)
+        assertEquals(Color.Blue.toArgb(), reread.style.firstColor)
+        assertEquals(1f, reread.blur)
+        assertEquals(12f, reread.distance)
+        assertEquals(0.65f, reread.opacity)
+        assertEquals(reread, draft.toModifierOptions().modifiers.shadow)
     }
 
     @Test

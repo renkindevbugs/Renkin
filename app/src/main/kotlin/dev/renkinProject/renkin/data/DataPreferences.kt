@@ -189,6 +189,25 @@ val GlobalColorizerGradientPositionsKey =
     stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_POSITIONS")
 val GlobalColorizerGradientAngleKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_ANGLE")
 val GlobalColorizerGradientTypeKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_TYPE")
+// Pack-wide shadow, the per-icon Shadow modifier for every icon (issue #22). Blur, distance and
+// angle are Int px/degrees and opacity an Int percent: the profile snapshot restore only carries
+// Bool/Int/Long/String. The defaults are the Soft preset.
+val GlobalShadowKey = booleanPreferencesKey("GLOBAL_SHADOW")
+val GlobalShadowBlurKey = intPreferencesKey("GLOBAL_SHADOW_BLUR")
+val GlobalShadowDistanceKey = intPreferencesKey("GLOBAL_SHADOW_DISTANCE")
+val GlobalShadowAngleKey = intPreferencesKey("GLOBAL_SHADOW_ANGLE")
+val GlobalShadowAllDirectionsKey = booleanPreferencesKey("GLOBAL_SHADOW_ALL_DIRECTIONS")
+val GlobalShadowOpacityKey = intPreferencesKey("GLOBAL_SHADOW_OPACITY")
+val GlobalShadowColorKey = stringPreferencesKey("GLOBAL_SHADOW_COLOR")
+val GlobalShadowColorizerModeKey = intPreferencesKey("GLOBAL_SHADOW_COLORIZER_MODE")
+val GlobalShadowGradientTypeKey = intPreferencesKey("GLOBAL_SHADOW_GRADIENT_TYPE")
+val GlobalShadowGradientAngleKey = intPreferencesKey("GLOBAL_SHADOW_GRADIENT_ANGLE")
+val GlobalShadowGradientColorsKey = stringPreferencesKey("GLOBAL_SHADOW_GRADIENT_COLORS")
+val GlobalShadowGradientPositionsKey = stringPreferencesKey("GLOBAL_SHADOW_GRADIENT_POSITIONS")
+const val GLOBAL_SHADOW_BLUR_DEFAULT = 14
+const val GLOBAL_SHADOW_DISTANCE_DEFAULT = 7
+const val GLOBAL_SHADOW_ANGLE_DEFAULT = 135
+const val GLOBAL_SHADOW_OPACITY_DEFAULT = 32
 // How a refresh draws apps when the primary source is the app's own icon (issue #12): the same
 // Default / Material You / Monochrome choice the editor offers per app, for every app at once.
 val AppIconVariantKey = intPreferencesKey("APP_ICON_VARIANT")
@@ -254,7 +273,8 @@ private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
     GlobalColorizeLightenKey,
     GlobalColorizeMonochromeKey, GlobalColorizeInverseKey,
     GlobalApplyGeneratedKey, GlobalApplyExistingKey, GlobalApplyCustomKey, GlobalIncludeEmptyKey,
-    AppIconFullIconKey, AppIconInvertMonochromeKey
+    AppIconFullIconKey, AppIconInvertMonochromeKey,
+    GlobalShadowKey, GlobalShadowAllDirectionsKey
 )
 
 private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
@@ -271,7 +291,9 @@ private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
     AppIconMaterialYouForegroundModeKey, AppIconMaterialYouForegroundGradientTypeKey,
     AppIconMaterialYouForegroundGradientAngleKey,
     AppIconMaterialYouBackgroundModeKey, AppIconMaterialYouBackgroundGradientTypeKey,
-    AppIconMaterialYouBackgroundGradientAngleKey
+    AppIconMaterialYouBackgroundGradientAngleKey,
+    GlobalShadowBlurKey, GlobalShadowDistanceKey, GlobalShadowAngleKey, GlobalShadowOpacityKey,
+    GlobalShadowColorizerModeKey, GlobalShadowGradientTypeKey, GlobalShadowGradientAngleKey
 )
 
 private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
@@ -287,7 +309,8 @@ private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
     AppIconMaterialYouForegroundKey, AppIconMaterialYouForegroundGradientColorsKey,
     AppIconMaterialYouForegroundGradientPositionsKey,
     AppIconMaterialYouBackgroundKey, AppIconMaterialYouBackgroundGradientColorsKey,
-    AppIconMaterialYouBackgroundGradientPositionsKey
+    AppIconMaterialYouBackgroundGradientPositionsKey,
+    GlobalShadowColorKey, GlobalShadowGradientColorsKey, GlobalShadowGradientPositionsKey
 )
 
 val ProfilePrefKeys: List<Preferences.Key<*>> =
@@ -365,6 +388,13 @@ private fun MutablePreferences.copyGlobalModifierPrefsFrom(source: Preferences) 
     this[OutlineAddKey] = source.getBooleanValue(OutlineAddKey)
     this[OutlineWidthKey] = source.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
     copyColorStyleFrom(source, OutlineStyleKeys)
+    this[GlobalShadowKey] = source.getBooleanValue(GlobalShadowKey)
+    this[GlobalShadowBlurKey] = source.getIntValue(GlobalShadowBlurKey, GLOBAL_SHADOW_BLUR_DEFAULT)
+    this[GlobalShadowDistanceKey] = source.getIntValue(GlobalShadowDistanceKey, GLOBAL_SHADOW_DISTANCE_DEFAULT)
+    this[GlobalShadowAngleKey] = source.getIntValue(GlobalShadowAngleKey, GLOBAL_SHADOW_ANGLE_DEFAULT)
+    this[GlobalShadowAllDirectionsKey] = source.getBooleanValue(GlobalShadowAllDirectionsKey)
+    this[GlobalShadowOpacityKey] = source.getIntValue(GlobalShadowOpacityKey, GLOBAL_SHADOW_OPACITY_DEFAULT)
+    copyColorStyleFrom(source, GlobalShadowStyleKeys)
     this[GlobalColorizeKey] = source.getBooleanValue(GlobalColorizeKey)
     this[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
     this[GlobalColorizeLightenKey] = source.getBooleanValue(GlobalColorizeLightenKey)
@@ -726,6 +756,15 @@ val GlobalColorizerStyleKeys = ColorStyleKeys(
     gradientColors = GlobalColorizerGradientColorsKey,
     gradientPositions = GlobalColorizerGradientPositionsKey,
     legacyGradientColor = GlobalColorizerGradientColorKey
+)
+
+val GlobalShadowStyleKeys = ColorStyleKeys(
+    mode = GlobalShadowColorizerModeKey,
+    gradientType = GlobalShadowGradientTypeKey,
+    gradientAngle = GlobalShadowGradientAngleKey,
+    firstColor = GlobalShadowColorKey,
+    gradientColors = GlobalShadowGradientColorsKey,
+    gradientPositions = GlobalShadowGradientPositionsKey
 )
 
 // The outline's first colour IS its legacy key, so there is no separate legacy stop to write —

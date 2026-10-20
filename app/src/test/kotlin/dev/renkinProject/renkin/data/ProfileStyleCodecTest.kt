@@ -160,4 +160,37 @@ class ProfileStyleCodecTest {
     fun documentsWithoutAppIconStyleStillDecode() {
         assertEquals(ProfileApplicationIconStyle(), ProfileStyleCodec.decode(document()).source.applicationIcon)
     }
+
+    @Test
+    fun globalShadowRoundTripsUnderModifiersGlobalShadow() {
+        val style = ProfileStyle(
+            modifiers = ProfileModifierStyle(
+                global = ProfileGlobalStyle(
+                    shadow = ProfileShadowStyle(
+                        enabled = true,
+                        blurPx = 1,
+                        distancePx = 12,
+                        angleDegrees = 135,
+                        allDirections = false,
+                        opacityPercent = 65,
+                        color = ProfileColorStyle(firstColor = "#FF000000")
+                    )
+                )
+            )
+        )
+
+        val encoded = ProfileStyleCodec.encode(style)
+        val shadow = JSONObject(encoded).getJSONObject("modifiers").getJSONObject("global").getJSONObject("shadow")
+
+        assertTrue(shadow.getBoolean("enabled"))
+        assertEquals(12, shadow.getInt("distancePx"))
+        assertEquals(65, shadow.getInt("opacityPercent"))
+        assertEquals("#FF000000", shadow.getJSONObject("color").getString("firstColor"))
+        assertEquals(style, ProfileStyleCodec.decode(encoded))
+    }
+
+    @Test
+    fun documentsWithoutGlobalShadowStillDecode() {
+        assertEquals(ProfileShadowStyle(), ProfileStyleCodec.decode(document()).modifiers.global.shadow)
+    }
 }

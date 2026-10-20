@@ -50,6 +50,12 @@ internal object ProfileStylePreferences {
                     ),
                     outline = ProfileOutlineStyle(
                         add = this[OutlineAddKey], widthPx = this[OutlineWidthKey], color = color(OutlineStyleKeys)
+                    ),
+                    shadow = ProfileShadowStyle(
+                        enabled = this[GlobalShadowKey], blurPx = this[GlobalShadowBlurKey],
+                        distancePx = this[GlobalShadowDistanceKey], angleDegrees = this[GlobalShadowAngleKey],
+                        allDirections = this[GlobalShadowAllDirectionsKey], opacityPercent = this[GlobalShadowOpacityKey],
+                        color = color(GlobalShadowStyleKeys)
                     )
                 )
             ),
