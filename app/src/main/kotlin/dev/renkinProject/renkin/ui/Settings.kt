@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.ui.text.AnnotatedString
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -30,6 +31,7 @@ import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.NewReleases
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.School
@@ -76,6 +78,7 @@ import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.feature.buildinstall.InstallerPickerScreen
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.feature.debug.DialogGalleryScreen
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.data.DARK_MODE_DEFAULT
@@ -114,6 +117,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     var showCrashLogs by rememberSaveable { mutableStateOf(false) }
     var showWhatsNew by rememberSaveable { mutableStateOf(false) }
     var showStartupWhatsNewPreview by rememberSaveable { mutableStateOf(false) }
+    var showDialogGallery by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var confirmClearIcons by rememberSaveable { mutableStateOf(false) }
     var showIpsBackupWarning by rememberSaveable { mutableStateOf(false) }
@@ -347,6 +351,12 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                             showStartupWhatsNewPreview = true
                         }
                         SettingsRow(
+                            Icons.Filled.Dashboard,
+                            stringResource(R.string.dialogGallery)
+                        ) {
+                            showDialogGallery = true
+                        }
+                        SettingsRow(
                             Icons.Filled.Warning,
                             stringResource(R.string.forceCrash),
                             tint = MaterialTheme.colorScheme.error
@@ -411,6 +421,9 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     if (showWhatsNew) {
         WhatsNewScreen { showWhatsNew = false }
     }
+    if (BuildConfig.DEBUG && showDialogGallery) {
+        DialogGalleryScreen { showDialogGallery = false }
+    }
     if (BuildConfig.DEBUG && showStartupWhatsNewPreview) {
         WhatsNewDialog { showStartupWhatsNewPreview = false }
     }
@@ -423,6 +436,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
         ConfirmDialog(
             title = stringResource(R.string.clearIconsTitle),
             text = stringResource(R.string.clearIconsText),
+            confirmLabel = stringResource(R.string.clearIcons),
             icon = Icons.Filled.DeleteSweep,
             // The acknowledgement toast comes from the view model once the clear really
             // finished — the list change alone is easy to miss from Settings.
@@ -437,6 +451,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
         ConfirmDialog(
             title = stringResource(R.string.restorePreviousState),
             text = stringResource(R.string.restorePreviousStateConfirmation),
+            confirmLabel = stringResource(R.string.backupRestoreAction),
             icon = Icons.Filled.Restore,
             onConfirm = {
                 confirmRestorePreviousState = false
@@ -449,6 +464,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
         ConfirmDialog(
             title = stringResource(R.string.discardPreviousState),
             text = stringResource(R.string.discardPreviousStateConfirmation),
+            confirmLabel = stringResource(R.string.editorRecoveryDiscard),
             icon = Icons.Filled.Delete,
             onConfirm = {
                 confirmDiscardPreviousState = false
@@ -461,6 +477,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
         ConfirmDialog(
             title = stringResource(R.string.discardAbandonedRecovery),
             text = stringResource(R.string.discardAbandonedRecoveryConfirmation),
+            confirmLabel = stringResource(R.string.editorRecoveryDiscard),
             icon = Icons.Filled.Delete,
             onConfirm = {
                 confirmDiscardAbandonedRecovery = false
@@ -473,7 +490,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
 
 /** Muted section label above a group of settings rows. */
 @Composable
-private fun SettingsSectionHeader(text: String, color: Color = MaterialTheme.colorScheme.primary) {
+internal fun SettingsSectionHeader(text: String, color: Color = MaterialTheme.colorScheme.primary) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,
@@ -676,68 +693,32 @@ private fun PackUsageDialog(onDismiss: () -> Unit) {
     val entries by produceState<List<ApplicationProvider.PackUsage>?>(null) {
         value = viewModel.packUsageEntries()
     }
-    val rows = entries.orEmpty()
-    val max = (rows.maxOfOrNull { it.count } ?: 0).coerceAtLeast(1)
+    PackUsageDialog(entries, onDismiss)
+}
 
-    RenkinAlertDialog(
+@Composable
+internal fun PackUsageDialog(entries: List<ApplicationProvider.PackUsage>?, onDismiss: () -> Unit) {
+    MessageDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.packUsageTitle)) },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                when {
-                    entries == null -> Box(
-                        Modifier.fillMaxWidth().padding(vertical = 16.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        LoadingIndicator(color = MaterialTheme.colorScheme.primary)
-                    }
-                    rows.isEmpty() -> Text(
-                        text = stringResource(R.string.packUsageEmpty),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                rows.forEach { entry ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = entry.label,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (entry.count == 0) MaterialTheme.colorScheme.onSurfaceVariant
-                                        else MaterialTheme.colorScheme.onSurface
-                                )
-                                if (!entry.installed) {
-                                    Text(
-                                        text = " · " + stringResource(R.string.packUsageNotInstalled),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.tertiary
-                                    )
-                                }
-                            }
-                            LinearProgressIndicator(
-                                progress = { entry.count / max.toFloat() },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 3.dp)
-                            )
-                        }
-                        Text(
-                            text = "${entry.count}",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (entry.count == 0) MaterialTheme.colorScheme.onSurfaceVariant
-                                else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 12.dp)
+        badge = { if (entries == null) DialogProgressBadge() else DialogBadge(Icons.Filled.BarChart, DialogTone.Neutral) },
+        title = stringResource(R.string.packUsageTitle),
+        body = if (entries?.isEmpty() == true) AnnotatedString(stringResource(R.string.packUsageEmpty)) else null,
+        actions = { DialogPrimaryAction(stringResource(R.string.ok), onDismiss) }
+    ) {
+        if (!entries.isNullOrEmpty()) {
+            val max = entries.maxOf { it.count }.coerceAtLeast(1)
+            DialogCard {
+                entries.forEach { entry ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        DialogFactRow(
+                            entry.label + if (entry.installed) "" else " · " + stringResource(R.string.packUsageNotInstalled),
+                            "${entry.count}"
                         )
+                        LinearProgressIndicator(progress = { entry.count / max.toFloat() }, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
         }
-    )
+    }
 }
+

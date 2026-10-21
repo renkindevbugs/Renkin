@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.ui.text.AnnotatedString
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Row
@@ -225,14 +226,12 @@ fun IconPackDropdown(
 
 @Composable
 fun OptionInfoDialog(text: String, onDismiss: () -> Unit) {
-    RenkinAlertDialog(
-        onDismissRequest = { onDismiss() },
-        title = { },
-        text = {
-            Text(text)
-        },
-        confirmButton = { },
-        dismissButton = { }
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(Icons.Filled.Info, DialogTone.Neutral) },
+        title = null,
+        body = AnnotatedString(text),
+        actions = { DialogPrimaryAction(stringResource(R.string.ok), onDismiss) }
     )
 }
 

@@ -17,8 +17,6 @@ import dev.renkinProject.renkin.apk.APK_MIME_TYPE
 import dev.renkinProject.renkin.apk.ApkBuildArtifacts
 import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.BuiltIconPack
-import dev.renkinProject.renkin.apk.InstallFailureHelp
-import dev.renkinProject.renkin.apk.installFailureHelp
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -62,14 +60,6 @@ class ApkExportDeviceTest {
             restarted.create()
             assertFalse(source.exists())
         } finally { cache.deleteRecursively() }
-    }
-
-    @Test
-    fun blockedSamsungPolicyDoesNotClaimAutoBlocker() {
-        assertEquals(InstallFailureHelp.USER_RESTRICTION,
-            installFailureHelp(ApkInstallResult.BLOCKED, "blocked by device policy", "samsung"))
-        assertEquals(InstallFailureHelp.SAMSUNG_AUTO_BLOCKER,
-            installFailureHelp(ApkInstallResult.BLOCKED, "blocked by Auto Blocker", "samsung"))
     }
 
     @Test

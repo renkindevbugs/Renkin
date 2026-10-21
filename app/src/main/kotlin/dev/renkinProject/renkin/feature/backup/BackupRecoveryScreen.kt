@@ -1,5 +1,9 @@
 package dev.renkinProject.renkin.feature.backup
 
+import dev.renkinProject.renkin.ui.DialogNote
+import dev.renkinProject.renkin.ui.DialogSecondaryAction
+import dev.renkinProject.renkin.ui.DialogProgressBadge
+import dev.renkinProject.renkin.ui.MessageDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -84,6 +88,7 @@ fun BackupRecoveryScreen(
         ConfirmDialog(
             title = stringResource(R.string.backupRecoveryKeepCurrent),
             text = stringResource(R.string.backupRecoveryKeepCurrentConfirmation),
+            confirmLabel = stringResource(R.string.continueAction),
             onConfirm = { confirmKeepCurrent = false; onKeepCurrent() },
             onDismiss = { confirmKeepCurrent = false }
         )
@@ -96,7 +101,9 @@ fun BackupRestoreProgress(
     snapshotStage: BackupSnapshotStage?,
     cancellable: Boolean,
     cancelling: Boolean,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    // Only the debug dialog gallery passes this; a committing restore must not be dismissed.
+    onPreviewDismiss: (() -> Unit)? = null
 ) {
     if (stage == BackupManager.RestoreStage.IDLE) return
     val message = when (stage) {
@@ -114,35 +121,21 @@ fun BackupRestoreProgress(
         BackupSnapshotStage.VERIFYING -> R.string.backupVerifyingSavedState
         null -> null
     }
-    RenkinAlertDialog(
-        onDismissRequest = { if (cancellable) onCancel() },
-        properties = DialogProperties(dismissOnBackPress = cancellable, dismissOnClickOutside = false),
-        icon = { CircularProgressIndicator(modifier = Modifier.size(40.dp), strokeWidth = 3.dp) },
-        title = { Text(stringResource(R.string.backupRestoreProgressTitle), textAlign = TextAlign.Center) },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    stringResource(if (cancelling) R.string.backupPreparationCancelling else message),
-                    style = MaterialTheme.typography.titleMedium,
-                    textAlign = TextAlign.Center
-                )
-                if (!cancelling && stage == BackupManager.RestoreStage.SAVING_CURRENT_STATE && detail != null) {
-                    Text(stringResource(detail), textAlign = TextAlign.Center)
-                }
-                Text(
-                    stringResource(if (cancellable || cancelling) R.string.backupRestorePreparingHint else R.string.backupRestoreCommittingHint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
-        },
-        dismissButton = if (cancellable) {
-            { TextButton(onClick = onCancel) { Text(stringResource(R.string.colorizeCancel)) } }
-        } else null
-    )
+    MessageDialog(
+        onDismissRequest = onPreviewDismiss ?: { if (cancellable) onCancel() },
+        properties = DialogProperties(
+            dismissOnBackPress = cancellable || onPreviewDismiss != null,
+            dismissOnClickOutside = false
+        ),
+        badge = { DialogProgressBadge() },
+        title = stringResource(R.string.backupRestoreProgressTitle),
+        supporting = stringResource(if (cancelling) R.string.backupPreparationCancelling else message) +
+            (detail?.takeIf { !cancelling && stage == BackupManager.RestoreStage.SAVING_CURRENT_STATE }
+                ?.let { " · " + stringResource(it) } ?: ""),
+        actions = { if (cancellable) DialogSecondaryAction(stringResource(R.string.colorizeCancel), onCancel) }
+    ) {
+        DialogNote(stringResource(
+            if (cancellable || cancelling) R.string.backupRestorePreparingHint else R.string.backupRestoreCommittingHint
+        ))
+    }
 }

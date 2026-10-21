@@ -1,5 +1,9 @@
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.ErrorOutline
 import android.content.Intent
 import dev.renkinProject.renkin.EditorSessionViewModel
 import dev.renkinProject.renkin.EditorDraftRecoveryViewModel
@@ -40,6 +44,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
@@ -127,12 +132,10 @@ import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.apk.APK_MIME_TYPE
-import dev.renkinProject.renkin.apk.HomeLauncher
-import dev.renkinProject.renkin.apk.InstallFailureHelp
-import dev.renkinProject.renkin.apk.LauncherIconPackSupport
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.GlobalOptionsActivity
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.ProfileActionProgress
 import dev.renkinProject.renkin.apk.ApplicationListState
 import dev.renkinProject.renkin.profileSession
 import dev.renkinProject.renkin.withProfileSession
@@ -346,12 +349,10 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // collector here covers every VM-originated toast (build installed, packs synced,
     // app list refreshed) regardless of which dialog/button triggered it.
     val toaster = LocalToaster.current
-    val clipboard = LocalClipboard.current
     val optionsViewModel: OptionsViewModel = hiltViewModel()
     LaunchedEffect(optionsViewModel) {
         optionsViewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
     }
-    val coroutineScope = rememberCoroutineScope()
     LaunchedEffect(viewModel) {
         launch {
             viewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
@@ -366,19 +367,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // the provider keeps.
     val snackbarHostState = remember { SnackbarHostState() }
     val profileActionProgress by viewModel.profileActionProgress.collectAsStateWithLifecycle()
-    profileActionProgress?.let { progress ->
-        RenkinAlertDialog(
-            onDismissRequest = {},
-            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
-            title = { Text(stringResource(progress.messageRes)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    progress.applicationName?.let { Text(it) }
-                    WavyLoadingBar(Modifier.fillMaxWidth())
-                }
-            }
-        )
-    }
+    profileActionProgress?.let { ProfileActionProgressDialog(it) }
     val undoLabel = stringResource(R.string.undoAction)
     LaunchedEffect(Unit) {
         viewModel.undoEvents.combine(viewModel.undoStepState) { prompt, step ->
@@ -434,131 +423,27 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val failedApkExport = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument(APK_MIME_TYPE)
     ) { target -> viewModel.finishFailedApkExport(target) }
-    val installFailure = viewModel.installFailure
-    if (installFailure != null) {
-        val copiedMessage = stringResource(R.string.installFailureCopied)
-        val reportLabel = stringResource(R.string.installFailureTitle)
-        RenkinAlertDialog(
-            onDismissRequest = { viewModel.dismissInstallFailure() },
-            icon = {
-                Icon(
-                    Icons.Filled.Warning,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
-                )
+    viewModel.installFailure?.let { installFailure ->
+        InstallFailureDialog(
+            failure = installFailure,
+            onChooseInstaller = {
+                viewModel.dismissInstallFailure()
+                chooseFailureInstaller = true
             },
-            title = { Text(stringResource(R.string.installFailureTitle)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(if (installFailure.missingSystemInstaller)
-                        R.string.installNoSystemInstaller else R.string.installFailureText))
-                    Text(
-                        text = installFailure.summary,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    installFailure.help?.let { Text(boldStringResource(installFailureHelpText(it))) }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    coroutineScope.launch {
-                        clipboard.copyPlainText(reportLabel, installFailure.report)
-                        toaster.show(copiedMessage)
-                    }
-                }) {
-                    Icon(Icons.Filled.ContentCopy, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.installFailureCopy))
-                }
-            },
-            dismissButton = {
-                Column {
-                    if (installFailure.missingSystemInstaller) {
-                        TextButton(onClick = {
-                            viewModel.dismissInstallFailure()
-                            chooseFailureInstaller = true
-                        }) { Text(stringResource(R.string.installerSelect)) }
-                    }
-                    if (installFailure.canSaveApk) {
-                        TextButton(onClick = {
-                            viewModel.beginFailedApkExport { failedApkExport.launch(it) }
-                        }) { Text(stringResource(R.string.installFailureSaveApk)) }
-                    }
-                    TextButton(onClick = { viewModel.dismissInstallFailure() }) {
-                        Text(stringResource(R.string.dismiss))
-                    }
-                }
-            }
+            onSaveApk = { viewModel.beginFailedApkExport { failedApkExport.launch(it) } },
+            onDismiss = { viewModel.dismissInstallFailure() }
         )
     }
 
     if (viewModel.installFallbackPending) {
-        RenkinAlertDialog(
-            onDismissRequest = { viewModel.dismissInstallFallback() },
-            icon = {
-                Icon(
-                    Icons.Filled.Warning,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
-                )
-            },
-            title = { Text(stringResource(R.string.installFallbackTitle)) },
-            text = { Text(boldStringResource(if (viewModel.installFallbackSignatureMismatch)
-                R.string.installFallbackSignatureText else R.string.installFallbackText)) },
-            confirmButton = {
-                TextButton(onClick = { viewModel.confirmInstallFallback() }) {
-                    Text(stringResource(R.string.installFallbackAction))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissInstallFallback() }) {
-                    Text(stringResource(R.string.dismiss))
-                }
-            }
+        InstallFallbackDialog(
+            signatureMismatch = viewModel.installFallbackSignatureMismatch,
+            onConfirm = { viewModel.confirmInstallFallback() },
+            onDismiss = { viewModel.dismissInstallFallback() }
         )
     }
 
-    // Launcher setup differs for a first install and an update of cached icons.
-    val buildOutcome = viewModel.buildOutcome
-    if (buildOutcome != null) {
-        val isUpdate = buildOutcome.outcome == MainViewModel.BuildOutcome.UPDATE
-        RenkinAlertDialog(
-            onDismissRequest = { viewModel.dismissBuildOutcome() },
-            icon = {
-                Icon(
-                    imageVector = if (isUpdate) Icons.Filled.Refresh else Icons.Filled.CheckCircle,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            },
-            title = {
-                Text(stringResource(
-                    if (isUpdate) R.string.buildUpdatedTitle else R.string.buildInstalledTitle
-                ))
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(boldStringResource(
-                        if (isUpdate) R.string.buildUpdatedText else R.string.buildInstalledText,
-                        buildOutcome.packLabel, buildOutcome.installerLabel
-                    ))
-                    if (!isUpdate) Text(launcherSetupGuide(buildOutcome.launcher, buildOutcome.packLabel))
-                    if (buildOutcome.savingProfile) {
-                        Text(stringResource(R.string.buildSavingInstalledProfile),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else if (buildOutcome.profileSaveFailed) {
-                        Text(stringResource(R.string.buildInstalledProfileSaveFailed),
-                            color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.dismissBuildOutcome() }) { Text(stringResource(R.string.ok)) }
-            }
-        )
-    }
+    viewModel.buildOutcome?.let { BuildOutcomeDialog(it, onDismiss = { viewModel.dismissBuildOutcome() }) }
 
     val pressBackMessage = stringResource(R.string.pressBackToExit)
     var lastBackPress by remember { mutableStateOf(0L) }
@@ -696,20 +581,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
         }
     }
 
-    // The notification pointed at a profile that no longer exists — explain instead of
-    // silently doing nothing (or worse, applying the icon to the wrong profile).
     if (viewModel.watchProfileMissing) {
-        RenkinAlertDialog(
-            onDismissRequest = { viewModel.clearWatchProfileMissing() },
-            icon = { Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-            title = { Text(stringResource(R.string.watchProfileGoneTitle)) },
-            text = { Text(boldStringResource(R.string.watchProfileGoneText)) },
-            confirmButton = {
-                TextButton(onClick = { viewModel.clearWatchProfileMissing() }) {
-                    Text(stringResource(R.string.ok))
-                }
-            }
-        )
+        WatchProfileGoneDialog(onDismiss = { viewModel.clearWatchProfileMissing() })
     }
     val startupPromptsAllowed = onboardingSeen && !viewModel.whatsNewVisible && pendingSuggestion == null &&
         viewModel.pendingBackupImport == null && !viewModel.backupInProgress &&
@@ -750,17 +623,161 @@ fun MainColumn(iconPacks: List<IconPack>) {
  */
 @Composable
 fun NewIconPackDialog(packLabel: String, onReload: () -> Unit, onDismiss: () -> Unit) {
-    RenkinAlertDialog(
+    MessageDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Filled.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        title = { Text(stringResource(R.string.newIconPackTitle)) },
-        text = { Text(boldStringResource(R.string.newIconPackText, packLabel)) },
-        confirmButton = {
-            TextButton(onClick = onReload) { Text(stringResource(R.string.reload)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
+        badge = { DialogBadge(Icons.Filled.Extension) },
+        eyebrow = stringResource(R.string.newIconPackTitle),
+        title = packLabel,
+        body = boldStringResource(R.string.newIconPackText, packLabel),
+        actions = {
+            DialogPrimaryAction(stringResource(R.string.reload), onReload)
+            DialogSecondaryAction(stringResource(R.string.dismiss), onDismiss)
         }
+    )
+}
+
+@Composable
+internal fun ProfileActionProgressDialog(
+    progress: ProfileActionProgress,
+    // Only the debug dialog gallery passes this; the real progress dialog blocks back.
+    onPreviewDismiss: (() -> Unit)? = null
+) {
+    MessageDialog(
+        onDismissRequest = onPreviewDismiss ?: {},
+        properties = DialogProperties(dismissOnBackPress = onPreviewDismiss != null, dismissOnClickOutside = false),
+        badge = { DialogProgressBadge() },
+        title = stringResource(progress.messageRes),
+        supporting = progress.applicationName,
+        actions = {}
+    )
+}
+
+@Composable
+internal fun InstallFailureDialog(
+    failure: MainViewModel.InstallFailureInfo,
+    onChooseInstaller: () -> Unit,
+    onSaveApk: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val clipboard = LocalClipboard.current
+    val toaster = LocalToaster.current
+    val coroutineScope = rememberCoroutineScope()
+    val copiedMessage = stringResource(R.string.installFailureCopied)
+    val reportLabel = stringResource(R.string.installFailureTitle)
+    val copyReport: () -> Unit = {
+        coroutineScope.launch {
+            clipboard.copyPlainText(reportLabel, failure.report)
+            toaster.show(copiedMessage)
+        }
+    }
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(Icons.Filled.ErrorOutline, DialogTone.Danger) },
+        title = stringResource(R.string.installFailureTitle),
+        body = AnnotatedString(stringResource(
+            if (failure.missingSystemInstaller) R.string.installNoSystemInstaller else R.string.installFailureText
+        )),
+        actions = {
+            if (failure.missingSystemInstaller) {
+                DialogPrimaryAction(stringResource(R.string.installerSelect), onChooseInstaller)
+            } else {
+                DialogPrimaryAction(stringResource(R.string.installFailureCopy), copyReport)
+            }
+            if (failure.canSaveApk) DialogSecondaryAction(stringResource(R.string.installFailureSaveApk), onSaveApk)
+            if (failure.missingSystemInstaller) DialogSecondaryAction(stringResource(R.string.installFailureCopy), copyReport)
+            DialogSecondaryAction(stringResource(R.string.dismiss), onDismiss)
+        }
+    ) {
+        DialogCard {
+            SelectionContainer {
+                Text(
+                    failure.summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun InstallFallbackDialog(signatureMismatch: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(Icons.Filled.SwapHoriz, DialogTone.Danger) },
+        title = stringResource(R.string.installFallbackTitle),
+        body = AnnotatedString(stringResource(
+            if (signatureMismatch) R.string.installFallbackSignatureText else R.string.installFallbackText
+        )),
+        actions = {
+            DialogPrimaryAction(stringResource(R.string.installFallbackAction), onConfirm, DialogTone.Danger)
+            DialogSecondaryAction(stringResource(R.string.dismiss), onDismiss)
+        }
+    ) {
+        DialogSteps(
+            title = stringResource(R.string.installFallbackStepsTitle),
+            steps = listOf(
+                boldStringResource(R.string.installFallbackStepUninstall),
+                boldStringResource(R.string.installFallbackStepInstall)
+            ),
+            footnote = stringResource(R.string.installFallbackConfirmBoth)
+        )
+    }
+}
+
+/** The pack name leads; first installs get setup steps, updates get the cache-refresh steps. */
+@Composable
+internal fun BuildOutcomeDialog(outcome: MainViewModel.BuildOutcomeInfo, onDismiss: () -> Unit) {
+    val isUpdate = outcome.outcome == MainViewModel.BuildOutcome.UPDATE
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(if (isUpdate) Icons.Filled.Refresh else Icons.Filled.Check) },
+        eyebrow = stringResource(if (isUpdate) R.string.buildUpdatedTitle else R.string.buildInstalledTitle),
+        title = outcome.packLabel,
+        supporting = stringResource(R.string.installDoneVia, outcome.installerLabel),
+        body = if (isUpdate) AnnotatedString(stringResource(R.string.installDoneUpdateCacheNote)) else null,
+        actions = { DialogPrimaryAction(stringResource(R.string.installDoneConfirm), onDismiss) }
+    ) {
+        if (isUpdate) {
+            DialogSteps(
+                title = stringResource(R.string.installDoneRefreshTitle),
+                steps = listOf(
+                    boldStringResource(R.string.installDoneStepSwitchAway),
+                    boldStringResource(R.string.installDoneStepSwitchBack, outcome.packLabel)
+                ),
+                footnote = stringResource(R.string.installDoneUpdateStillOld)
+            )
+        } else {
+            DialogSteps(
+                title = stringResource(R.string.installDoneNextTitle),
+                steps = listOf(
+                    boldStringResource(R.string.installDoneStepOpenSettings),
+                    boldStringResource(R.string.installDoneStepFindIconPack),
+                    boldStringResource(R.string.installDoneStepChoosePack, outcome.packLabel)
+                )
+            )
+        }
+        if (outcome.savingProfile) {
+            DialogNote(stringResource(R.string.buildSavingInstalledProfile))
+        } else if (outcome.profileSaveFailed) {
+            DialogNote(stringResource(R.string.buildInstalledProfileSaveFailed), isError = true)
+        }
+    }
+}
+
+/**
+ * The notification pointed at a profile that no longer exists — explain instead of
+ * silently doing nothing (or worse, applying the icon to the wrong profile).
+ */
+@Composable
+internal fun WatchProfileGoneDialog(onDismiss: () -> Unit) {
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(Icons.Filled.Info, DialogTone.Neutral) },
+        title = stringResource(R.string.watchProfileGoneTitle),
+        body = boldStringResource(R.string.watchProfileGoneText),
+        actions = { DialogPrimaryAction(stringResource(R.string.ok), onDismiss) }
     )
 }
 
@@ -1538,24 +1555,4 @@ fun SearchBar(
             }
         )
     }
-}
-
-@Composable
-private fun launcherSetupGuide(launcher: HomeLauncher?, packLabel: String): AnnotatedString = when {
-    launcher == null -> boldStringResource(R.string.launcherGuideGeneric)
-    else -> when (launcher.iconPackSupport) {
-        LauncherIconPackSupport.PICK_IN_SETTINGS -> boldStringResource(R.string.launcherGuidePick, launcher.label, packLabel)
-        LauncherIconPackSupport.THEME_PARK -> boldStringResource(R.string.launcherGuideThemePark, packLabel)
-        LauncherIconPackSupport.NONE -> boldStringResource(R.string.launcherGuideUnsupported, launcher.label, packLabel)
-        LauncherIconPackSupport.UNKNOWN -> boldStringResource(R.string.launcherGuideUnknown, launcher.label, packLabel)
-    }
-}
-
-@StringRes
-private fun installFailureHelpText(help: InstallFailureHelp): Int = when (help) {
-    InstallFailureHelp.HYPEROS_ISOLATION -> R.string.installHelpHyperOsIsolation
-    InstallFailureHelp.XIAOMI_INSTALL_VIA_USB -> R.string.installHelpXiaomiUsb
-    InstallFailureHelp.USER_RESTRICTION -> R.string.installHelpUserRestriction
-    InstallFailureHelp.SAMSUNG_AUTO_BLOCKER -> R.string.installHelpAutoBlocker
-    InstallFailureHelp.PLAY_PROTECT -> R.string.installHelpPlayProtect
 }

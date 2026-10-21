@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import dev.renkinProject.renkin.data.UploadedImageLibrary
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Create
@@ -864,21 +865,18 @@ internal fun OptionsDialog(
             }
         )
     }
-    if (session.restoringModifiers) {
-        RenkinAlertDialog(
-            onDismissRequest = onCancelModifierRestore,
-            title = { Text(stringResource(R.string.restoreSavedModifiers)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(stringResource(R.string.verifyingSavedModifiers))
-                    WavyLoadingBar(Modifier.fillMaxWidth())
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onCancelModifierRestore) { Text(stringResource(R.string.colorizeCancel)) }
-            }
-        )
-    }
+    if (session.restoringModifiers) RestoringModifiersDialog(onCancel = onCancelModifierRestore)
+}
+
+@Composable
+internal fun RestoringModifiersDialog(onCancel: () -> Unit) {
+    MessageDialog(
+        onDismissRequest = onCancel,
+        badge = { DialogProgressBadge() },
+        title = stringResource(R.string.restoreSavedModifiers),
+        supporting = stringResource(R.string.verifyingSavedModifiers),
+        actions = { DialogSecondaryAction(stringResource(R.string.colorizeCancel), onCancel) }
+    )
 }
 
 @Composable
@@ -1269,8 +1267,10 @@ internal fun rememberMaterialYouSchemes(): List<Pair<Color, Color>> {
 @Composable
 fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
     ConfirmDialog(
-        title = stringResource(R.string.confirmClear),
-        text = stringResource(R.string.confirmClearText),
+        title = stringResource(R.string.clearIconTitle),
+        text = null,
+        confirmLabel = stringResource(R.string.clear),
+        icon = Icons.Filled.DeleteSweep,
         onConfirm = onIconClear,
         onDismiss = onDismiss
     )

@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.LostUnsavedWork
@@ -69,7 +70,7 @@ class LostUnsavedSessionDialogTest {
 
         compose.onNodeWithText("Renkin was closed before 2 edited icons in Main could be built or saved. They can be restored as unsaved changes.")
             .assertIsDisplayed()
-        compose.onNodeWithText("1 edited icon couldn't be kept (too large).").assertIsDisplayed()
+        compose.onNodeWithText("1 edited icon couldn't be kept (too large).").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(string(R.string.lostUnsavedRefresh)).performClick()
         assertEquals(1, refreshed)
         compose.onNodeWithText(string(R.string.lostIconsRestore)).performClick()
@@ -88,7 +89,7 @@ class LostUnsavedSessionDialogTest {
         compose.onNodeWithText("Renkin was closed before 1 edited icon in Main could be built or saved. It can be restored as an unsaved change.")
             .assertIsDisplayed()
         compose.onNodeWithText("1 refreshed icon wasn't kept. Refresh again restores the icons above and regenerates it.")
-            .assertIsDisplayed()
+            .performScrollTo().assertIsDisplayed()
     }
 
     @Test fun unbuiltChangesLabelAgreesWithItsCount() {

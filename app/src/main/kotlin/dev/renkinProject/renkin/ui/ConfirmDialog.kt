@@ -1,50 +1,38 @@
 package dev.renkinProject.renkin.ui
 
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import dev.renkinProject.renkin.R
 
 /**
- * Shared confirmation dialog for destructive actions (delete / clear / replace). Gives every
- * such prompt one look — it delegates to [RenkinAlertDialog] (the app-wide dialog chrome) and
- * adds an error-tinted confirm, a neutral dismiss and a confirm haptic. An optional [icon]
- * (error-tinted) shows at a glance what kind of action is being confirmed, and `**bold**`
- * markers in [text] highlight its load-bearing part (see [withBoldMarkers]).
+ * Shared confirmation dialog for destructive actions (delete / clear / replace): a danger badge,
+ * an error-coloured confirm with a confirm haptic and a neutral dismiss. `**bold**` markers in
+ * [text] highlight its load-bearing part. When the action targets one named thing, pass the
+ * action as [eyebrow] and the name as [title] so the name leads.
  */
 @Composable
 fun ConfirmDialog(
     title: String,
-    text: String,
+    text: String?,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
     confirmLabel: String = stringResource(R.string.confirm),
     dismissLabel: String = stringResource(R.string.dismiss),
     icon: ImageVector? = null,
+    eyebrow: String? = null,
 ) {
-    val view = LocalView.current
-    RenkinAlertDialog(
+    MessageDialog(
         onDismissRequest = onDismiss,
-        icon = icon?.let {
-            { Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.error) }
-        },
-        title = { Text(title) },
-        text = { Text(text.withBoldMarkers()) },
-        confirmButton = {
-            TextButton(onClick = {
-                view.performConfirmHaptic()
-                onConfirm()
-            }) {
-                Text(confirmLabel, color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(dismissLabel) }
+        badge = { DialogBadge(icon ?: Icons.Filled.Warning, DialogTone.Danger) },
+        eyebrow = eyebrow,
+        title = title,
+        body = text?.withBoldMarkers(),
+        actions = {
+            DialogPrimaryAction(confirmLabel, onConfirm, DialogTone.Danger)
+            DialogSecondaryAction(dismissLabel, onDismiss)
         }
     )
 }

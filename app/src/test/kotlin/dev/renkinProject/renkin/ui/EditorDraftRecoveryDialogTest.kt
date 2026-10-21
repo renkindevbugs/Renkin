@@ -3,7 +3,6 @@ package dev.renkinProject.renkin.ui
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -31,14 +30,14 @@ class EditorDraftRecoveryDialogTest {
     private var discarded: EditorDraftRecoveryState? = null
     private var postponed: EditorDraftRecoveryState? = null
     private var retried: EditorDraftRecoveryState? = null
+    private var switched: EditorDraftRecoveryState.NeedsProfile? = null
     private fun string(id: Int, vararg args: Any) = RuntimeEnvironment.getApplication().getString(id, *args)
     private fun show(state: EditorDraftRecoveryState = offer) = compose.setContent {
-        EditorDraftRecoveryDialog(state, { restored = it }, { retried = it }, { discarded = it }, { postponed = it })
+        EditorDraftRecoveryDialog(state, { restored = it }, { retried = it }, { discarded = it }, { postponed = it }) { switched = it }
     }
 
     @Test fun restoreUsesTheDisplayedOfferOnly() {
         show()
-        compose.onNodeWithText(string(R.string.editorRecoveryText)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(string(R.string.editorRecoveryRestore)).performClick()
         assertSame(offer, restored)
         assertNull(discarded); assertNull(postponed)
@@ -70,27 +69,52 @@ class EditorDraftRecoveryDialogTest {
         assertNull(discarded)
     }
 
-    @Test fun failureWithoutCheckpointOrLeaseDisablesDiscardButAllowsRetry() {
+    @Test fun failureWithoutCheckpointOrLeaseHidesDiscardButAllowsRetry() {
         val failed = EditorDraftRecoveryState.Failed(null, null)
         show(failed)
-        compose.onNodeWithText(string(R.string.editorRecoveryDiscard)).assertIsNotEnabled()
+        compose.onNodeWithText(string(R.string.editorRecoveryDiscard)).assertDoesNotExist()
         compose.onNodeWithText(string(R.string.editorRecoveryRetry)).performClick()
         assertSame(failed, retried)
         assertNull(discarded)
     }
 
-    @Test fun cleanupFailureExplainsRetryAndKeepsCheckpointDiscardAvailable() {
+    @Test fun cleanupFailureOfAClosedEditorDiscardsWithoutAsking() {
         val failed = EditorDraftRecoveryState.Failed(checkpoint, null, closingEditor = true)
         show(failed)
-        compose.onNodeWithText(string(R.string.editorRecoveryCleanupFailed)).assertIsDisplayed()
-        compose.onNodeWithText(string(R.string.editorRecoveryRetry)).performClick()
-        assertSame(failed, retried)
+        compose.waitForIdle()
+        assertSame(failed, discarded)
+        compose.onNodeWithText(string(R.string.editorRecoveryRetry)).assertDoesNotExist()
+    }
+
+    @Test fun unidentifiableCleanupFailureIsPostponedNotDiscarded() {
+        val failed = EditorDraftRecoveryState.Failed(null, null, closingEditor = true)
+        show(failed)
+        compose.waitForIdle()
+        assertSame(failed, postponed)
+        assertNull(discarded)
+    }
+
+    @Test fun obsoleteDraftIsDiscardedWithoutAPrompt() {
+        val obsolete = EditorDraftRecoveryState.Obsolete(checkpoint)
+        show(obsolete)
+        compose.waitForIdle()
+        assertSame(obsolete, discarded)
+        compose.onNodeWithText(string(R.string.editorRecoveryTitle)).assertDoesNotExist()
+    }
+
+    @Test fun otherProfileOffersASwitchToItsOwner() {
+        val other = EditorDraftRecoveryState.NeedsProfile(checkpoint, 42, "Work")
+        show(other)
+        compose.onNodeWithText("Work").assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.editorRecoverySwitchProfile, "Work")).performClick()
+        assertSame(other, switched)
+        assertNull(discarded)
     }
 
     @Test fun otherProfileNamesItsOwnerAndCanBePostponed() {
         val other = EditorDraftRecoveryState.NeedsProfile(checkpoint, 42, "Work")
         show(other)
-        compose.onNodeWithText(string(R.string.editorRecoveryOtherProfile, "Work")).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.editorRecoveryOtherProfileText)).assertIsDisplayed()
         compose.onNodeWithText(string(R.string.editorRecoveryLater)).performClick()
         assertSame(other, postponed)
         assertNull(restored); assertNull(discarded)

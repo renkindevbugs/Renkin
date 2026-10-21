@@ -2,6 +2,13 @@
 
 package dev.renkinProject.renkin.feature.watch
 
+import dev.renkinProject.renkin.ui.DialogSecondaryAction
+import dev.renkinProject.renkin.ui.DialogPrimaryAction
+import dev.renkinProject.renkin.ui.DialogTone
+import dev.renkinProject.renkin.ui.DialogBadge
+import dev.renkinProject.renkin.ui.MessageDialog
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.material.icons.filled.NotificationsOff
 import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -35,6 +42,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BugReport
@@ -140,23 +148,13 @@ fun WatchScreen(
     }
 
     if (showNotificationSettings) {
-        RenkinAlertDialog(
-            onDismissRequest = { showNotificationSettings = false },
-            icon = { Icon(Icons.Filled.Warning, contentDescription = null) },
-            title = { Text(stringResource(R.string.notificationsDisabledTitle)) },
-            text = { Text(stringResource(R.string.notificationsDisabledText)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showNotificationSettings = false
-                    // The settings app may be missing/locked down on odd ROMs.
-                    runCatching { activity.startActivity(notificationSettingsIntent(activity)) }
-                }) { Text(stringResource(R.string.settings)) }
+        NotificationsDisabledDialog(
+            onOpenSettings = {
+                showNotificationSettings = false
+                // The settings app may be missing/locked down on odd ROMs.
+                runCatching { activity.startActivity(notificationSettingsIntent(activity)) }
             },
-            dismissButton = {
-                TextButton(onClick = { showNotificationSettings = false }) {
-                    Text(stringResource(R.string.dismiss))
-                }
-            }
+            onDismiss = { showNotificationSettings = false }
         )
     }
 
@@ -258,6 +256,8 @@ fun WatchScreen(
         ConfirmDialog(
             title = stringResource(R.string.deleteRuleTitle),
             text = stringResource(R.string.deleteRuleText),
+            confirmLabel = stringResource(R.string.deleteRule),
+            icon = Icons.Filled.Delete,
             onDismiss = { pendingDelete = null },
             onConfirm = {
                 pendingDelete = null
@@ -270,6 +270,8 @@ fun WatchScreen(
         ConfirmDialog(
             title = stringResource(R.string.deleteAllCompletedTitle),
             text = stringResource(R.string.deleteAllCompletedText),
+            confirmLabel = stringResource(R.string.deleteAllCompleted),
+            icon = Icons.Filled.DeleteSweep,
             onDismiss = { pendingDeleteAllCompleted = false },
             onConfirm = {
                 pendingDeleteAllCompleted = false
@@ -789,4 +791,18 @@ private fun AppPill(app: PackageInfoStruct?, fallbackPackage: String) {
 @Composable
 private fun PackLabel(packPackage: String, name: String?) {
     Pill(name ?: packPackage) { PackIconImage(packPackage, 18.dp) }
+}
+
+@Composable
+internal fun NotificationsDisabledDialog(onOpenSettings: () -> Unit, onDismiss: () -> Unit) {
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(Icons.Filled.NotificationsOff, DialogTone.Neutral) },
+        title = stringResource(R.string.notificationsDisabledTitle),
+        body = AnnotatedString(stringResource(R.string.notificationsDisabledText)),
+        actions = {
+            DialogPrimaryAction(stringResource(R.string.settings), onOpenSettings)
+            DialogSecondaryAction(stringResource(R.string.dismiss), onDismiss)
+        }
+    )
 }

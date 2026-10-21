@@ -1,5 +1,13 @@
 package dev.renkinProject.renkin.feature.profiles
 
+import dev.renkinProject.renkin.ui.DialogSplitActions
+import dev.renkinProject.renkin.ui.DialogSecondaryAction
+import dev.renkinProject.renkin.ui.DialogPrimaryAction
+import dev.renkinProject.renkin.ui.DialogBadge
+import dev.renkinProject.renkin.ui.MessageDialog
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -312,51 +320,46 @@ fun ProfileSwitcherTitle() {
     // Save-before-switch prompt: Save keeps the current profile's icons without building
     // (marked "not built yet"), Don't save discards them; tapping outside cancels the switch.
     if (savePromptRequested && savePromptCurrent) {
-        RenkinAlertDialog(
-            onDismissRequest = { pendingSwitch = null; pendingCreate = false },
-            icon = { Icon(Icons.Filled.Save, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-            title = { Text(stringResource(R.string.saveBeforeSwitchTitle)) },
-            text = { Text(boldStringResource(R.string.saveBeforeSwitchText)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    // Saving an unchanged profile would still mark it "not built yet".
-                    val saveFirst = viewModel.hasUnsavedChanges()
-                    pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = saveFirst) }
-                    if (pendingCreate) {
-                        viewModel.createProfile(
-                            pendingCreateName,
-                            pendingCreateDescription,
-                            pendingCreatePackLabel,
-                            saveFirst = saveFirst
-                        )
-                        // The form did its job — close it only once the profile is on its way.
-                        createOpen = false
-                    }
-                    pendingSwitch = null; pendingCreate = false
-                }) { Text(stringResource(R.string.saveAction)) }
+        SaveBeforeSwitchDialog(
+            onSave = {
+                // Saving an unchanged profile would still mark it "not built yet".
+                val saveFirst = viewModel.hasUnsavedChanges()
+                pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = saveFirst) }
+                if (pendingCreate) {
+                    viewModel.createProfile(
+                        pendingCreateName,
+                        pendingCreateDescription,
+                        pendingCreatePackLabel,
+                        saveFirst = saveFirst
+                    )
+                    // The form did its job — close it only once the profile is on its way.
+                    createOpen = false
+                }
+                pendingSwitch = null; pendingCreate = false
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = false) }
-                    if (pendingCreate) {
-                        viewModel.createProfile(
-                            pendingCreateName,
-                            pendingCreateDescription,
-                            pendingCreatePackLabel,
-                            saveFirst = false
-                        )
-                        createOpen = false
-                    }
-                    pendingSwitch = null; pendingCreate = false
-                }) { Text(stringResource(R.string.discardAction)) }
-            }
+            onDiscard = {
+                pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = false) }
+                if (pendingCreate) {
+                    viewModel.createProfile(
+                        pendingCreateName,
+                        pendingCreateDescription,
+                        pendingCreatePackLabel,
+                        saveFirst = false
+                    )
+                    createOpen = false
+                }
+                pendingSwitch = null; pendingCreate = false
+            },
+            onDismiss = { pendingSwitch = null; pendingCreate = false }
         )
     }
 
     pendingDelete?.let { profile ->
         ConfirmDialog(
-            title = stringResource(R.string.deleteProfile),
+            eyebrow = stringResource(R.string.deleteProfile),
+            title = profile.name,
             text = stringResource(R.string.deleteProfileText, profile.name),
+            confirmLabel = stringResource(R.string.deleteProfile),
             icon = Icons.Filled.Delete,
             onConfirm = {
                 pendingDelete = null
@@ -452,7 +455,7 @@ internal fun ProfileActionsMenu(
  * the name becomes the top-bar title and the label the pack's launcher name.
  */
 @Composable
-private fun ProfileDetailsDialog(
+internal fun ProfileDetailsDialog(
     title: String,
     confirmLabel: String,
     onConfirm: (name: String, description: String, packLabel: String) -> Unit,
@@ -464,48 +467,67 @@ private fun ProfileDetailsDialog(
     var name by rememberSaveable { mutableStateOf(initialName) }
     var description by rememberSaveable { mutableStateOf(initialDescription) }
     var packLabel by rememberSaveable { mutableStateOf(initialPackLabel) }
+    val editing = initialName.isNotEmpty()
 
-    RenkinAlertDialog(
+    MessageDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it.take(MAX_PROFILE_NAME) },
-                    label = { Text(stringResource(R.string.profileName) + " *") },
-                    supportingText = if (name.isBlank()) {
-                        { Text(stringResource(R.string.requiredField)) }
-                    } else null,
-                    singleLine = true,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it.take(MAX_PROFILE_DESCRIPTION) },
-                    label = { Text(stringResource(R.string.profileDescription)) },
-                    singleLine = true,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                OutlinedTextField(
-                    value = packLabel,
-                    onValueChange = { packLabel = it.take(MAX_PACK_LABEL) },
-                    label = { Text(stringResource(R.string.profilePackLabel) + " *") },
-                    supportingText = if (packLabel.isBlank()) {
-                        { Text(stringResource(R.string.requiredField)) }
-                    } else null,
-                    singleLine = true
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
+        badge = { DialogBadge(if (editing) Icons.Filled.Edit else Icons.Filled.PersonAdd) },
+        title = title,
+        actions = {
+            DialogPrimaryAction(
+                confirmLabel,
                 onClick = { onConfirm(name.trim(), description.trim(), packLabel.trim()) },
                 enabled = name.isNotBlank() && packLabel.isNotBlank()
-            ) { Text(confirmLabel) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
+            )
+            DialogSecondaryAction(stringResource(R.string.dismiss), onDismiss)
+        }
+    ) {
+        Column(Modifier.padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(MAX_PROFILE_NAME) },
+                label = { Text(stringResource(R.string.profileName) + " *") },
+                supportingText = if (name.isBlank()) {
+                    { Text(stringResource(R.string.requiredField)) }
+                } else null,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it.take(MAX_PROFILE_DESCRIPTION) },
+                label = { Text(stringResource(R.string.profileDescription)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = packLabel,
+                onValueChange = { packLabel = it.take(MAX_PACK_LABEL) },
+                label = { Text(stringResource(R.string.profilePackLabel) + " *") },
+                supportingText = {
+                    Text(stringResource(if (packLabel.isBlank()) R.string.requiredField else R.string.profilePackLabelHint))
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+internal fun SaveBeforeSwitchDialog(onSave: () -> Unit, onDiscard: () -> Unit, onDismiss: () -> Unit) {
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(Icons.Filled.Save) },
+        title = stringResource(R.string.saveBeforeSwitchTitle),
+        body = boldStringResource(R.string.saveBeforeSwitchText),
+        actions = {
+            DialogSplitActions(
+                startText = stringResource(R.string.discardAction), onStart = onDiscard,
+                endText = stringResource(R.string.saveAction), onEnd = onSave,
+                startDanger = true
+            )
+            DialogSecondaryAction(stringResource(R.string.colorizeCancel), onDismiss)
         }
     )
 }

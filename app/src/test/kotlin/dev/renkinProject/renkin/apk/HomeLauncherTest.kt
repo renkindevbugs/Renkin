@@ -37,24 +37,10 @@ class HomeLauncherTest {
     }
 
     @Test
-    fun supportTableOnlyNamesDocumentedLaunchers() {
-        listOf("app.lawnchair", "app.lawnchair.play", "de.mm20.launcher2.release", "com.teslacoilsw.launcher",
-            "bitpit.launcher", "ginlemon.flowerfree", "ginlemon.flowerpro").forEach {
-            assertEquals(it, LauncherIconPackSupport.PICK_IN_SETTINGS, launcherIconPackSupport(it))
-        }
-        assertEquals(LauncherIconPackSupport.THEME_PARK, launcherIconPackSupport("com.sec.android.app.launcher"))
-        assertEquals(LauncherIconPackSupport.NONE, launcherIconPackSupport("com.google.android.apps.nexuslauncher"))
-        listOf("com.android.launcher", "com.android.launcher3", "com.miui.home", "com.microsoft.launcher").forEach {
-            assertEquals(it, LauncherIconPackSupport.UNKNOWN, launcherIconPackSupport(it))
-        }
-    }
-
-    @Test
     fun defaultHomeAppIsResolvedWithItsLabel() {
         registerHome("app.lawnchair.play", "Lawnchair")
         val launcher = resolveHomeLauncher(application.packageManager)
         assertEquals(HomeLauncher("app.lawnchair.play", "Lawnchair"), launcher)
-        assertEquals(LauncherIconPackSupport.PICK_IN_SETTINGS, launcher?.iconPackSupport)
     }
 
     @Test

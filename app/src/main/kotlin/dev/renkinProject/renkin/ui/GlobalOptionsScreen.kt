@@ -3,6 +3,8 @@
 package dev.renkinProject.renkin.ui
 
 
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -31,6 +33,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Create
@@ -239,32 +242,12 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     var editApp by remember { mutableStateOf<PackageInfoStruct?>(null) }
 
     if (showBetaDialog) {
-        RenkinAlertDialog(
-            onDismissRequest = { showBetaDialog = false },
-            icon = {
-                Icon(
-                    imageVector = Icons.Filled.Info,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
+        GlobalBetaDialog(
+            onOpenIssues = {
+                showBetaDialog = false
+                openLink(githubIssuesUrl)
             },
-            title = { Text(stringResource(R.string.globalBetaTitle)) },
-            text = { Text(stringResource(R.string.globalBetaText)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showBetaDialog = false
-                        openLink(githubIssuesUrl)
-                    }
-                ) {
-                    Text(stringResource(R.string.globalBetaGithub))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBetaDialog = false }) {
-                    Text(stringResource(R.string.continueAction))
-                }
-            }
+            onDismiss = { showBetaDialog = false }
         )
     }
 
@@ -576,6 +559,8 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
         ConfirmDialog(
             title = stringResource(R.string.globalDiscardTitle),
             text = stringResource(R.string.globalDiscardText),
+            confirmLabel = stringResource(R.string.editorRecoveryDiscard),
+            icon = Icons.Filled.Delete,
             onConfirm = {
                 confirmDiscard = false
                 onClose(viewModel.editedKeys, viewModel.appliedGlobal)
@@ -1121,4 +1106,18 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
             }
         }
     }
+}
+
+@Composable
+internal fun GlobalBetaDialog(onOpenIssues: () -> Unit, onDismiss: () -> Unit) {
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(Icons.Filled.Science) },
+        title = stringResource(R.string.globalBetaTitle),
+        body = AnnotatedString(stringResource(R.string.globalBetaText)),
+        actions = {
+            DialogPrimaryAction(stringResource(R.string.continueAction), onDismiss)
+            DialogSecondaryAction(stringResource(R.string.globalBetaGithub), onOpenIssues)
+        }
+    )
 }
