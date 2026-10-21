@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.ui
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,76 +47,47 @@ fun MissingPacksDialog(packs: List<MissingPack>, onDismiss: (dontShowAgain: Bool
     val openLink = rememberLinkOpener()
     var dontShowAgain by rememberSaveable { mutableStateOf(false) }
 
-    RenkinAlertDialog(
+    MessageDialog(
         onDismissRequest = { onDismiss(dontShowAgain) },
-        icon = { Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-        title = { Text(stringResource(R.string.missingPacksTitle)) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(
-                    text = boldStringResource(R.string.missingPacksText),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                packs.forEach { pack ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Decisive verdict = the pack is installable somewhere, so the fix is to
-                        // install it; UNKNOWN = still checking availability.
-                        val pending = pack.verdict == VERDICT_UNKNOWN
-                        Icon(
-                            imageVector = if (pending) Icons.Filled.CloudOff else Icons.Filled.Lock,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = pack.label,
-                                style = MaterialTheme.typography.bodyLarge,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = stringResource(
-                                    if (pending) R.string.missingPackPending else R.string.missingPackInstall,
-                                    pack.iconCount
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        TextButton(onClick = {
-                            openLink("https://play.google.com/store/apps/details?id=${pack.packageName}")
-                        }) {
-                            Text(stringResource(R.string.missingPackOpenStore))
-                        }
-                    }
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp)
-                ) {
-                    Checkbox(checked = dontShowAgain, onCheckedChange = { dontShowAgain = it })
-                    Text(
-                        text = stringResource(R.string.missingPackDontShowAgain),
-                        style = MaterialTheme.typography.bodyMedium
+        badge = { DialogBadge(Icons.Filled.Lock, DialogTone.Neutral) },
+        title = stringResource(R.string.missingPacksTitle),
+        body = boldStringResource(R.string.missingPacksText),
+        actions = { DialogPrimaryAction(stringResource(R.string.ok), { onDismiss(dontShowAgain) }) }
+    ) {
+        DialogCard {
+            packs.forEach { pack ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Decisive verdict = the pack is installable somewhere, so the fix is to
+                    // install it; UNKNOWN = still checking availability.
+                    val pending = pack.verdict == VERDICT_UNKNOWN
+                    Icon(
+                        imageVector = if (pending) Icons.Filled.CloudOff else Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
+                    Column(Modifier.weight(1f)) {
+                        Text(pack.label, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        DialogCardNote(stringResource(
+                            if (pending) R.string.missingPackPending else R.string.missingPackInstall, pack.iconCount
+                        ))
+                    }
+                    TextButton(onClick = {
+                        openLink("https://play.google.com/store/apps/details?id=${pack.packageName}")
+                    }) { Text(stringResource(R.string.missingPackOpenStore)) }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onDismiss(dontShowAgain) }) { Text(stringResource(R.string.ok)) }
         }
-    )
+        DontShowAgainRow(dontShowAgain, R.string.missingPackDontShowAgain) { dontShowAgain = it }
+    }
+}
+
+@Composable
+private fun DontShowAgainRow(checked: Boolean, @StringRes label: Int, onCheckedChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+        Text(stringResource(label), style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 /**
@@ -126,38 +98,18 @@ fun MissingPacksDialog(packs: List<MissingPack>, onDismiss: (dontShowAgain: Bool
 @Composable
 fun ProfileShareWarningDialog(onShare: (dontShowAgain: Boolean) -> Unit, onDismiss: () -> Unit) {
     var dontShowAgain by rememberSaveable { mutableStateOf(false) }
-    RenkinAlertDialog(
+    MessageDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Filled.Share, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        title = { Text(stringResource(R.string.shareWarningTitle)) },
-        text = {
-            Column {
-                Text(
-                    text = boldStringResource(R.string.shareWarningText),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp)
-                ) {
-                    Checkbox(checked = dontShowAgain, onCheckedChange = { dontShowAgain = it })
-                    Text(
-                        text = stringResource(R.string.shareWarningDontShowAgain),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onShare(dontShowAgain) }) { Text(stringResource(R.string.shareWarningShare)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
+        badge = { DialogBadge(Icons.Filled.Share) },
+        title = stringResource(R.string.shareWarningTitle),
+        body = boldStringResource(R.string.shareWarningText),
+        actions = {
+            DialogPrimaryAction(stringResource(R.string.shareWarningShare), { onShare(dontShowAgain) })
+            DialogSecondaryAction(stringResource(R.string.dismiss), onDismiss)
         }
-    )
+    ) {
+        DontShowAgainRow(dontShowAgain, R.string.shareWarningDontShowAgain) { dontShowAgain = it }
+    }
 }
 
 enum class IconPackStudioWarningTarget { PROFILE, BACKUP }
@@ -181,28 +133,14 @@ fun IconPackStudioExportWarningDialog(
         IconPackStudioWarningTarget.PROFILE -> R.string.continueAction
         IconPackStudioWarningTarget.BACKUP -> R.string.exportBackup
     }
-    RenkinAlertDialog(
+    MessageDialog(
         onDismissRequest = onDismiss,
-        icon = {
-            Icon(
-                Icons.Filled.Warning,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.tertiary
-            )
-        },
-        title = { Text(stringResource(R.string.ipsExportWarningTitle)) },
-        text = {
-            Text(
-                text = boldStringResource(message),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onContinue) { Text(stringResource(action)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
+        badge = { DialogBadge(Icons.Filled.Warning, DialogTone.Neutral) },
+        title = stringResource(R.string.ipsExportWarningTitle),
+        body = boldStringResource(message),
+        actions = {
+            DialogPrimaryAction(stringResource(action), onContinue)
+            DialogSecondaryAction(stringResource(R.string.dismiss), onDismiss)
         }
     )
 }

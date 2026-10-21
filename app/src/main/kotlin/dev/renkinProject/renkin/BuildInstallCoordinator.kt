@@ -17,9 +17,7 @@ import dev.renkinProject.renkin.apk.ApkExportLease
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.HomeLauncher
-import dev.renkinProject.renkin.apk.InstallFailureHelp
 import dev.renkinProject.renkin.apk.InstallerSelection
-import dev.renkinProject.renkin.apk.installFailureHelp
 import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
@@ -76,11 +74,9 @@ internal sealed interface BuildInstallState {
         val route: ApkInstallRoute? = null) : BuildInstallState
     data class Conflict(val request: PackInstallRequest, val signatureMismatch: Boolean = false) : BuildInstallState
     data class Done(val wasUpdate: Boolean, val packLabel: String, val installerLabel: String,
-        val savingProfile: Boolean = false, val profileSaveFailed: Boolean = false,
-        val launcher: HomeLauncher? = null) : BuildInstallState
+        val savingProfile: Boolean = false, val profileSaveFailed: Boolean = false) : BuildInstallState
     data class Failed(@StringRes val message: Int, val summary: String, val report: String,
-        val result: ApkInstallResult? = null, val pack: BuiltIconPack? = null,
-        val help: InstallFailureHelp? = null) : BuildInstallState
+        val result: ApkInstallResult? = null, val pack: BuiltIconPack? = null) : BuildInstallState
 }
 
 internal class BuildInstallCoordinator(
@@ -309,7 +305,7 @@ internal class BuildInstallCoordinator(
                     val wasUpdate = if (replacing) request.wasUpdate else confirmed.wasUpdate ?: request.wasUpdate
                     publish(owner, BuildInstallState.Done(
                         wasUpdate, request.pack.packLabel, installerLabel,
-                        savingProfile = true, launcher = launcher
+                        savingProfile = true
                     ))
                     if (BuildConfig.DEBUG) confirmed.confirmedAtMillis?.let { confirmedAt ->
                         Log.debug("InstallPerformance", "confirmedToUiPublicationMs=${SystemClock.elapsedRealtime() - confirmedAt}")
@@ -393,9 +389,7 @@ internal class BuildInstallCoordinator(
             append(detail)
         }
         if (publish(owner, BuildInstallState.Failed(request.failedMessage,
-            "${outcome.result.name}: ${detail.lineSequence().first().take(300)}", report, outcome.result, request.pack,
-            installFailureHelp(outcome.result, outcome.attempts.lastOrNull()?.detail ?: detail,
-                android.os.Build.MANUFACTURER)))) notify(request.failedMessage)
+            "${outcome.result.name}: ${detail.lineSequence().first().take(300)}", report, outcome.result, request.pack))) notify(request.failedMessage)
     }
 
     private fun fail(owner: Long, @StringRes message: Int) {

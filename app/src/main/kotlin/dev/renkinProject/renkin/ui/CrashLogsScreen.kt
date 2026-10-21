@@ -178,6 +178,8 @@ fun CrashLogsScreen(onDismiss: () -> Unit) {
         ConfirmDialog(
             title = stringResource(R.string.crashLogsClearAllTitle),
             text = stringResource(R.string.crashLogsClearAllText),
+            confirmLabel = stringResource(R.string.crashLogsClearAll),
+            icon = Icons.Filled.DeleteSweep,
             onConfirm = {
                 CrashReporter.clearAll(context)
                 confirmClearAll = false
@@ -272,7 +274,7 @@ private fun CrashLogCard(entry: CrashReporter.CrashEntry, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CrashLogDetailDialog(
+internal fun CrashLogDetailDialog(
     entry: CrashReporter.CrashEntry,
     onDismiss: () -> Unit,
     onDelete: () -> Unit

@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -39,26 +40,19 @@ internal fun LostUnsavedSessionDialog(
     val counts = if (edited != null && refreshed != null) {
         stringResource(R.string.lostUnsavedCountsBoth, edited, refreshed)
     } else edited ?: refreshed ?: return
-    RenkinAlertDialog(
+    MessageDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-        title = { Text(stringResource(R.string.lostUnsavedTitle)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    if (profileName != null) boldStringResource(R.string.lostUnsavedText, counts, profileName)
-                    else boldStringResource(R.string.lostUnsavedTextNoProfile, counts)
-                )
-                Text(stringResource(R.string.lostUnsavedTip))
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) }
-        },
-        dismissButton = if (canRefresh) {
-            { TextButton(onClick = onRefresh) { Text(stringResource(R.string.lostUnsavedRefresh)) } }
-        } else null
-    )
+        badge = { DialogBadge(Icons.Filled.Warning, DialogTone.Danger) },
+        title = stringResource(R.string.lostUnsavedTitle),
+        body = if (profileName != null) boldStringResource(R.string.lostUnsavedText, counts, profileName)
+            else boldStringResource(R.string.lostUnsavedTextNoProfile, counts),
+        actions = {
+            DialogPrimaryAction(stringResource(R.string.ok), onDismiss)
+            if (canRefresh) DialogSecondaryAction(stringResource(R.string.lostUnsavedRefresh), onRefresh)
+        }
+    ) {
+        DialogCard { DialogCardNote(stringResource(R.string.lostUnsavedTip)) }
+    }
 }
 
 @Composable
@@ -77,6 +71,7 @@ internal fun RestoreLostIconsDialog(
             title = stringResource(R.string.lostIconsDiscardTitle),
             text = stringResource(R.string.lostIconsDiscardText),
             confirmLabel = stringResource(R.string.editorRecoveryDiscard),
+            icon = Icons.Filled.Delete,
             onConfirm = { confirmDiscard = false; onDiscard() },
             onDismiss = { confirmDiscard = false }
         )
@@ -85,43 +80,28 @@ internal fun RestoreLostIconsDialog(
     val restorable = lost.restorableCount
     val refreshed = lost.refreshedCount
     val dropped = lost.offer?.droppedCount ?: 0
-    RenkinAlertDialog(
+    MessageDialog(
         onDismissRequest = onLater,
-        icon = { Icon(Icons.Filled.Restore, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        title = { Text(stringResource(R.string.lostIconsRestoreTitle)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    pluralStringResource(R.plurals.lostIconsRestoreText, restorable, restorable, profileName)
-                        .withBoldMarkers()
-                )
+        badge = { DialogBadge(Icons.Filled.Restore) },
+        title = stringResource(R.string.lostIconsRestoreTitle),
+        body = pluralStringResource(R.plurals.lostIconsRestoreText, restorable, restorable, profileName).withBoldMarkers(),
+        actions = {
+            DialogPrimaryAction(stringResource(R.string.lostIconsRestore), onRestore)
+            if (refreshed > 0) DialogSecondaryAction(stringResource(R.string.lostUnsavedRefresh), onRefresh)
+            DialogSecondaryAction(stringResource(R.string.editorRecoveryLater), onLater)
+            DialogSecondaryAction(stringResource(R.string.editorRecoveryDiscard), { confirmDiscard = true }, danger = true)
+        }
+    ) {
+        if (dropped > 0 || refreshed > 0) {
+            DialogCard {
                 if (dropped > 0) {
-                    Text(stringResource(
+                    DialogCardNote(stringResource(
                         R.string.lostIconsDroppedNote,
                         pluralStringResource(R.plurals.lostUnsavedEditedCount, dropped, dropped)
                     ))
                 }
-                if (refreshed > 0) {
-                    Text(
-                        pluralStringResource(R.plurals.lostIconsRefreshedNote, refreshed, refreshed),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = onRestore) { Text(stringResource(R.string.lostIconsRestore)) }
-        },
-        dismissButton = {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (refreshed > 0) {
-                    TextButton(onClick = onRefresh) { Text(stringResource(R.string.lostUnsavedRefresh)) }
-                }
-                TextButton(onClick = onLater) { Text(stringResource(R.string.editorRecoveryLater)) }
-                TextButton(onClick = { confirmDiscard = true }) {
-                    Text(stringResource(R.string.editorRecoveryDiscard), color = MaterialTheme.colorScheme.error)
-                }
+                if (refreshed > 0) DialogCardNote(pluralStringResource(R.plurals.lostIconsRefreshedNote, refreshed, refreshed))
             }
         }
-    )
+    }
 }

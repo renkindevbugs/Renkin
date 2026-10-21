@@ -108,7 +108,7 @@ broadcasts wake a baseline verifier, with polling and active-session return prot
 Installer progress and success carry the actual route's captured label, including fallbacks.
 MainViewModel forwards one formatted success notice to the shared Toaster, with Shizuku fallback
 explained in the success text. Opening an external installer updates progress without a toast.
-Both first installs and updates also show the existing launcher guide, with separate instructions
+Both first installs and updates also show a generic launcher guide as numbered steps, with separate steps
 for selecting a new pack and refreshing cached icons. Dismissing it consumes the Done state.
 A profile-save failure appears in the open dialog or as a separate notice after dismissal.
 
@@ -141,15 +141,15 @@ installation or records the profile as built. See
 Regression checks and the device procedure for picker handoffs are recorded in
 [apk-export-recovery-checkpoint.md](apk-export-recovery-checkpoint.md).
 
-Each install attempt resolves the default home app on IO (`HomeLauncher`). The first-install
-dialog maps it through an evidence-only support table; unknown launchers get neutral wording,
-never a brand-based verdict. Failure reports name the launcher. See
+Each install attempt resolves the default home app on IO (`HomeLauncher`).
+The success dialog no longer names launchers: per-launcher guidance was dropped in favour of one
+generic guide (2026-10-21). Failure reports still name the launcher. See
 [install-compatibility-c3-checkpoint.md](install-compatibility-c3-checkpoint.md).
 
 Before an install starts, a definite signer mismatch between the installed pack and the built APK
 becomes a CONFLICT with a signature-specific Replace explanation; an unreadable signature never
-blocks. Failure reports add help only for recognised failure classes, with the brand choosing
-wording. Sessions created while Renkin is in the background use Ackpine's notification
+blocks. Failure reports carry one generic explanation; brand-specific help was dropped (2026-10-21).
+Sessions created while Renkin is in the background use Ackpine's notification
 confirmation (API 26+, notifications allowed, not Shizuku). See
 [install-compatibility-c4-checkpoint.md](install-compatibility-c4-checkpoint.md).
 
@@ -1907,8 +1907,12 @@ follow-ups; CRC verifies transport integrity only.
 - **Loading**: the startup shell and full-page application-list loader use Material's
   morphing-shape `LoadingIndicator`, preserving the established startup animation. Linear
   progress uses the shared `WavyLoadingBar` (ControlWidgets.kt); no hand-rolled indicators.
-- **Dialogs**: `RenkinAlertDialog` is the app-wide dialog chrome; `ConfirmDialog` (destructive
-  confirmations) delegates to it.
+- **Dialogs**: `RenkinAlertDialog` is the app-wide dialog chrome. Message, confirm and progress
+  dialogs use `MessageDialog` (ui/MessageDialog.kt): a toned badge (or `DialogProgressBadge`), an
+  optional eyebrow over a hero title (the named pack, profile or app leads), body, `DialogCard` /
+  `DialogSteps` blocks and full-width stacked actions; `DialogSplitActions` puts opposite choices
+  side by side, Save on the right. `ConfirmDialog` (destructive confirmations) is built on it.
+  Debug builds list every modal with mock data in Settings → Dialog gallery (`feature/debug`).
 - **Tooltips**: `RenkinTooltipBox` (UIHelper.kt) — a custom position provider clamps the popup
   into the window (the stock M3 plain-tooltip provider doesn't, so edge tooltips ran off
   screen) and text wraps in a width-capped rounded bubble. Pack icons show their

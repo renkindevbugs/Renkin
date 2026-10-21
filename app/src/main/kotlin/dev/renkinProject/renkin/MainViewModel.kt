@@ -18,8 +18,6 @@ import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApkInstallBackend
 import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApplicationProvider
-import dev.renkinProject.renkin.apk.HomeLauncher
-import dev.renkinProject.renkin.apk.InstallFailureHelp
 import dev.renkinProject.renkin.apk.ApplicationRuntimeState
 import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.PackChangeBaselines
@@ -768,17 +766,17 @@ class MainViewModel @Inject constructor(
 
     enum class BuildOutcome { FIRST_INSTALL, UPDATE }
     data class BuildOutcomeInfo(val outcome: BuildOutcome, val packLabel: String, val installerLabel: String,
-        val savingProfile: Boolean, val profileSaveFailed: Boolean, val launcher: HomeLauncher?)
+        val savingProfile: Boolean, val profileSaveFailed: Boolean)
     val buildOutcome: BuildOutcomeInfo? get() = (buildState as? BuildInstallState.Done)?.let {
         BuildOutcomeInfo(if (it.wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL,
-            it.packLabel, it.installerLabel, it.savingProfile, it.profileSaveFailed, it.launcher)
+            it.packLabel, it.installerLabel, it.savingProfile, it.profileSaveFailed)
     }
     fun dismissBuildOutcome() = buildCoordinator.dismissBuildOutcome()
 
     data class InstallFailureInfo(val summary: String, val report: String, val missingSystemInstaller: Boolean,
-        val canSaveApk: Boolean, val help: InstallFailureHelp?)
+        val canSaveApk: Boolean)
     val installFailure: InstallFailureInfo? get() = (buildState as? BuildInstallState.Failed)?.let {
-        InstallFailureInfo(it.summary, it.report, it.result == ApkInstallResult.NO_SYSTEM_INSTALLER, it.pack != null, it.help)
+        InstallFailureInfo(it.summary, it.report, it.result == ApkInstallResult.NO_SYSTEM_INSTALLER, it.pack != null)
     }
     fun dismissInstallFailure() = buildCoordinator.dismissInstallFailure()
     fun beginFailedApkExport(openPicker: (String) -> Unit) = buildCoordinator.beginFailedApkExport(openPicker)
