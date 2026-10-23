@@ -18,6 +18,7 @@ import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.di.AppModule
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope

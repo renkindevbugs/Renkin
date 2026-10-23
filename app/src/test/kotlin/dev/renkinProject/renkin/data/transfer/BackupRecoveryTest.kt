@@ -13,7 +13,7 @@ import dev.renkinProject.renkin.data.editor.EditorDraftOwner
 import dev.renkinProject.renkin.apk.PackKeystore
 import dev.renkinProject.renkin.data.*
 import dev.renkinProject.renkin.data.watch.*
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.async

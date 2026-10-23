@@ -17,7 +17,7 @@ import dev.renkinProject.renkin.data.normalizeAutoBackupInterval
 import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.data.observePreferences
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.service.AutoBackupWorker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map

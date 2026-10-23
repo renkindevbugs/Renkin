@@ -22,6 +22,7 @@ import dev.renkinProject.renkin.data.transfer.BackupSizeException
 import dev.renkinProject.renkin.data.transfer.BackupSpaceException
 import dev.renkinProject.renkin.data.watch.WatchDatabase
 import dev.renkinProject.renkin.data.watch.WatchRepository
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.di.AppModule
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope

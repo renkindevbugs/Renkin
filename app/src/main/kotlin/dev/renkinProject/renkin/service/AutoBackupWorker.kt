@@ -23,7 +23,7 @@ import dev.renkinProject.renkin.data.setLongValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.data.transfer.BackupManagerEntryPoint
 import dev.renkinProject.renkin.data.StorageOperationGate
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import java.io.IOException

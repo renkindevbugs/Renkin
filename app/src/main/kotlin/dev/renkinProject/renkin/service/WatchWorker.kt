@@ -22,7 +22,7 @@ import dev.renkinProject.renkin.data.getLongValue
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
 import dev.renkinProject.renkin.data.setLongValue
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
