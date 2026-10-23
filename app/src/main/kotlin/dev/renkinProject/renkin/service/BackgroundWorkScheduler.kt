@@ -11,7 +11,7 @@ import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.normalizeAutoBackupInterval
 import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 
 object BackgroundWorkScheduler {
     suspend fun reconcile(context: Context): Unit = StorageOperationGate.run {

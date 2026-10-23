@@ -12,7 +12,7 @@ import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.data.*
 import dev.renkinProject.renkin.data.watch.WatchDatabase
 import dev.renkinProject.renkin.data.watch.WatchRepository
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext

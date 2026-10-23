@@ -28,7 +28,7 @@ import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.RenkinPackRepository
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.di.AppModule
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable

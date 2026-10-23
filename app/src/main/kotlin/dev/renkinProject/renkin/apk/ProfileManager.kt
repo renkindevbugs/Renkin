@@ -15,7 +15,7 @@ import dev.renkinProject.renkin.data.persistBuiltPrimaryPrefs
 import dev.renkinProject.renkin.data.switchProfilePrefs
 import dev.renkinProject.renkin.data.withBuiltPrimaryPrefs
 import dev.renkinProject.renkin.data.watch.WatchRepository
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 
 /**
  * Owns persistent profile selection and stored profile metadata: CRUD, the per-profile

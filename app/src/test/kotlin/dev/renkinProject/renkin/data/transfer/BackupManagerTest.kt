@@ -14,7 +14,7 @@ import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.ProfileStyleStore
 import dev.renkinProject.renkin.data.StorageOperationGate
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore

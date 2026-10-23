@@ -74,6 +74,7 @@ import dev.renkinProject.renkin.service.BackgroundWorkScheduler
 import dev.renkinProject.renkin.data.transfer.AutoBackupManager
 import dev.renkinProject.renkin.data.transfer.isIconPackStudioExport
 import dev.renkinProject.renkin.data.watch.WatchRepository
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions

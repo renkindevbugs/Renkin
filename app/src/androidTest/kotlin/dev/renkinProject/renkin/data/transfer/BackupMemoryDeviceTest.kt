@@ -22,7 +22,7 @@ import dev.renkinProject.renkin.data.UnsavedIconJournalStore
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
 import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import java.io.File

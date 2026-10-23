@@ -53,7 +53,7 @@ import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.InstalledAppCatalog
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.supportDynamicColors
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.util.timeProfilePhase
 import kotlinx.coroutines.CancellationException

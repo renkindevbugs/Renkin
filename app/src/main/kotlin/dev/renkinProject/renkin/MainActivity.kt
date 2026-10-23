@@ -1,6 +1,5 @@
 package dev.renkinProject.renkin
 
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.net.Uri
@@ -26,9 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.lifecycleScope
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.preferencesDataStore
 import dev.renkinProject.renkin.feature.presets.PresetLibraryViewModel
 import dev.renkinProject.renkin.feature.backup.BackupRecoveryScreen
 import dev.renkinProject.renkin.feature.presets.ProvideColorPresets
@@ -36,6 +32,7 @@ import dev.renkinProject.renkin.feature.presets.ProvideModifierPresets
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.StorageRecoveryState
 import dev.renkinProject.renkin.data.isDarkModeEnabled
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.apk.ExternalInstallAwaiter
 import dev.renkinProject.renkin.packages.ApplicationManager
@@ -49,8 +46,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
-
-val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {

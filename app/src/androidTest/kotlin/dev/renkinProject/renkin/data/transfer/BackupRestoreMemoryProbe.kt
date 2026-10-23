@@ -18,7 +18,7 @@ import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.watch.WatchDatabase
 import dev.renkinProject.renkin.data.watch.WatchRepository
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException

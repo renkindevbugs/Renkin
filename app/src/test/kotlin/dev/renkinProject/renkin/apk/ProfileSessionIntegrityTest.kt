@@ -25,7 +25,7 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import kotlinx.collections.immutable.toPersistentList
 import dev.renkinProject.renkin.data.transfer.BackupOsShadow
 import dev.renkinProject.renkin.data.watch.WatchDatabase
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.di.AppModule
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
