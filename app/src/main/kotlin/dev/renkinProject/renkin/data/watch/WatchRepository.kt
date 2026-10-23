@@ -95,11 +95,12 @@ class WatchRepository(private val db: WatchDatabase) {
     /** Deletes a rule and returns the notification-backed suggestion ids removed with it. */
     suspend fun deleteRule(ruleId: Long): List<Long> = deleteRules(listOf(ruleId))
 
-    /**
-     * Deletes every rule owned by [profileId] — called when the profile itself is deleted, so
-     * the worker stops firing notifications for a profile that no longer exists.
-     */
-    suspend fun deleteRulesForProfile(profileId: Long): List<Long> = access { deleteRules(dao.ruleIdsForProfile(profileId)) }
+    suspend fun ruleIdsForProfile(profileId: Long): List<Long> = access { dao.ruleIdsForProfile(profileId) }
+
+    /** Rules whose profile is not among [profileIds]: leftovers of an interrupted profile deletion. */
+    suspend fun ruleIdsOutsideProfiles(profileIds: Collection<Long>): List<Long> = access { dao.ruleIdsOutsideProfiles(profileIds) }
+
+    suspend fun suggestionIdsForRules(ruleIds: List<Long>): List<Long> = access { dao.suggestionIdsForRules(ruleIds) }
 
     /** Deletes several rules atomically and returns their removed suggestion ids. */
     suspend fun deleteRules(ruleIds: List<Long>): List<Long> {
