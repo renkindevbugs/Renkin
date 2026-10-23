@@ -179,6 +179,7 @@
     <string name="overrideIcon">Refresh replaces existing icons</string>
     <string name="deleteIconPack">Uninstall icon pack</string>
     <string name="iconPackUninstalled">Renkin Pack uninstalled</string>
+    <string name="iconPackUninstallFailed">Couldn\'t uninstall Renkin Pack</string>
     <string name="refreshApplicationList">Refresh application list</string>
     <string name="applicationIcon">Application Icon</string>
     <string name="primarySource">Primary source</string>
@@ -275,6 +276,7 @@
     <string name="profileSessionChanged">The profile session changed. The action wasn\'t applied.</string>
     <string name="iconEditTargetGone">This app is no longer available to edit</string>
     <string name="profileOperationFailed">Couldn\'t update the profile</string>
+    <string name="settingSaveFailed">Couldn\'t save the setting</string>
     <string name="profileOperationBusy">A profile operation is running. Try changing the setting again when it finishes.</string>
     <string name="profileOperationSuperseded">The icons or settings changed while this operation was running. Try again.</string>
     <string name="editorSessionLost">The editing session was lost when the app restarted. Reopen the editor to repeat your unsaved changes.</string>

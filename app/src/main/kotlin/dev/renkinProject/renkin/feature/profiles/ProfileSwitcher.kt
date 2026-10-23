@@ -302,6 +302,12 @@ fun ProfileSwitcherTitle() {
         )
     }
 
+    val savedDetailsId = viewModel.savedProfileDetailsId
+    LaunchedEffect(savedDetailsId) {
+        if (savedDetailsId == null) return@LaunchedEffect
+        if (editing?.id == savedDetailsId) editing = null
+        viewModel.consumeSavedProfileDetails()
+    }
     editing?.let { profile ->
         ProfileDetailsDialog(
             title = stringResource(R.string.editProfile),
@@ -310,7 +316,6 @@ fun ProfileSwitcherTitle() {
             initialDescription = profile.description,
             initialPackLabel = profile.packLabel,
             onConfirm = { name, description, packLabel ->
-                editing = null
                 viewModel.updateProfileDetails(profile.id, name, description, packLabel)
             },
             onDismiss = { editing = null }

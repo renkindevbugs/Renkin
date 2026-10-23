@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin
 
 import android.app.Application
+import androidx.annotation.StringRes
 import androidx.lifecycle.SavedStateHandle
 import android.graphics.Bitmap
 import android.graphics.Typeface
@@ -84,9 +85,11 @@ import dev.renkinProject.renkin.icon.creator.PackRowPreviews
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.util.timeProfilePhase
+import dev.renkinProject.renkin.util.launchGuarded
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -277,6 +280,16 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /** A user action outside profile ownership (device settings, pack uninstall): failure becomes a toast. */
+    private fun launchUserAction(@StringRes failure: Int, action: suspend CoroutineScope.() -> Unit): Job =
+        viewModelScope.launchGuarded(
+            onFailure = { error ->
+                Log.error("MainViewModel", "User action failed", error)
+                _toastEvents.trySend(failure)
+            },
+            block = action
+        )
+
     /** One shared diff; a newly published list cannot use another profile/session's baselines. */
     val pendingPackChanges = observePackChanges(
         applicationState,
@@ -311,7 +324,8 @@ class MainViewModel @Inject constructor(
      * shows the apply modal. Waits out a cold start so the switch doesn't race initialization.
      */
     fun openSuggestionInProfile(suggestionId: Long) {
-        viewModelScope.launch {
+        // Not serialized here: performSwitch takes the non-reentrant profile mutex itself.
+        launchProfileOperation(serialize = false) {
             // Cold start from a notification: the app list / saved icons may still be loading.
             // Safety beats a timeout here: opening in the current profile after a slow startup
             // could apply the icon to the wrong profile. The ViewModel-scoped coroutine is
@@ -319,11 +333,11 @@ class MainViewModel @Inject constructor(
             runtimeState.first { it.startupComplete }
             // The database is authoritative. Intent extras can be stale (or supplied by another
             // app because MainActivity is exported), so never trust them for profile ownership.
-            val suggestion = watchRepo.getSuggestion(suggestionId) ?: return@launch
-            val profileId = watchRepo.getRule(suggestion.ruleId)?.rule?.profileId ?: return@launch
+            val suggestion = watchRepo.getSuggestion(suggestionId) ?: return@launchProfileOperation
+            val profileId = watchRepo.getRule(suggestion.ruleId)?.rule?.profileId ?: return@launchProfileOperation
             if (!appProvider.profileExists(profileId)) {
                 watchProfileMissing = true
-                return@launch
+                return@launchProfileOperation
             }
             if (profileId != appProvider.activeProfileId) {
                 performSwitch(profileId, saveFirst = false, saveIfChanged = true)
@@ -598,7 +612,7 @@ class MainViewModel @Inject constructor(
     fun dismissLostUnsavedWork() = unsavedSessionMonitor.dismiss()
 
     fun discardLostIcons() {
-        viewModelScope.launch { unsavedSessionMonitor.closeOffer() }
+        launchUserAction(R.string.profileOperationFailed) { unsavedSessionMonitor.closeOffer() }
     }
 
     /** Restores the offered hand-made icons; with [refreshAfter] also regenerates refresh output. */
@@ -718,7 +732,7 @@ class MainViewModel @Inject constructor(
     private fun updatePreferences(
         block: suspend DataStore<Preferences>.() -> Unit
     ) {
-        viewModelScope.launch { getApplication<Application>().dataStore.block() }
+        launchUserAction(R.string.settingSaveFailed) { getApplication<Application>().dataStore.block() }
     }
 
     /**
@@ -963,12 +977,12 @@ class MainViewModel @Inject constructor(
      * (uninstalled / not installed); the system shows its own uninstall confirmation.
      */
     fun deleteIconPack() {
-        viewModelScope.launch {
+        launchUserAction(R.string.iconPackUninstallFailed) {
             val context = getApplication<Application>()
             val packageName = appProvider.activePackPackageName()
             if (!isIconPackInstalled(packageName)) {
                 _toastEvents.trySend(R.string.iconPackNotInstalled)
-                return@launch
+                return@launchUserAction
             }
             if (ApkUninstaller(context).uninstall(packageName)) {
                 _toastEvents.trySend(R.string.iconPackUninstalled)
@@ -1231,10 +1245,18 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    // The edit dialog stays open (keeping the typed text) until this names its profile, so a failed
+    // write can be retried instead of being lost behind an already closed dialog.
+    var savedProfileDetailsId by mutableStateOf<Long?>(null)
+        private set
+
+    fun consumeSavedProfileDetails() { savedProfileDetailsId = null }
+
     /** Updates a profile's user-facing details (name, description, built-pack label). */
     fun updateProfileDetails(id: Long, name: String, description: String, packLabel: String) {
-        viewModelScope.launch {
+        launchUserAction(R.string.profileOperationFailed) {
             appProvider.updateProfileDetails(id, name, description, packLabel)
+            savedProfileDetailsId = id
             _toastEvents.trySend(R.string.profileUpdated)
         }
     }
