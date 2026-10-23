@@ -142,8 +142,10 @@ class WatchChecker(
         }
         val fired = mutableListOf<FiredSuggestion>()
         for (check in checks) {
-            StorageOperationGate.run {
-                if (StorageOperationGate.epoch != epoch || !unchanged(check.snapshot)) return@run
+            // Published only after the transaction returns: a rolled-back commit must not notify.
+            fired += repo.commitCheckedRule {
+                val committed = mutableListOf<FiredSuggestion>()
+                if (StorageOperationGate.epoch != epoch || !unchanged(check.snapshot)) return@commitCheckedRule committed
                 val rule = check.snapshot.details.rule
                 val states = check.apps.flatMap { it.states }
                 if (states.isNotEmpty()) repo.upsertStates(states)
@@ -154,7 +156,7 @@ class WatchChecker(
                     }
                     if (app.candidates.isNotEmpty()) {
                         val id = repo.completeWithSuggestion(rule.id, app.component, app.candidates)
-                        if (id > 0) fired += FiredSuggestion(
+                        if (id > 0) committed += FiredSuggestion(
                             suggestionId = id,
                             packageName = app.component.packageName,
                             activityName = app.component.activityName,
@@ -166,7 +168,7 @@ class WatchChecker(
                 for (completed in check.completed) {
                     val suggestion = check.snapshot.details.suggestions.first { it.id == completed.suggestionId }
                     if (repo.replaceCandidates(suggestion.id, completed.candidates)) {
-                        fired += FiredSuggestion(
+                        committed += FiredSuggestion(
                             suggestionId = suggestion.id,
                             packageName = suggestion.packageName,
                             activityName = suggestion.activityName,
@@ -175,6 +177,7 @@ class WatchChecker(
                         )
                     }
                 }
+                committed
             }
         }
         CheckResult(fired, epoch)
