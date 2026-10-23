@@ -28,6 +28,9 @@ interface WatchDao {
     @Query("SELECT id FROM watch_rule WHERE profileId = :profileId")
     suspend fun ruleIdsForProfile(profileId: Long): List<Long>
 
+    @Query("SELECT id FROM watch_rule WHERE profileId NOT IN (:profileIds)")
+    suspend fun ruleIdsOutsideProfiles(profileIds: Collection<Long>): List<Long>
+
     @Transaction
     @Query("SELECT * FROM watch_rule WHERE profileId = :profileId ORDER BY completed ASC, createdAt DESC")
     fun observeRules(profileId: Long): Flow<List<RuleWithDetails>>

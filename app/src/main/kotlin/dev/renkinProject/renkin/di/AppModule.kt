@@ -98,8 +98,9 @@ object AppModule {
     @Singleton
     fun provideProfileManager(
         @ApplicationContext context: Context,
-        repository: RenkinPackRepository
-    ): ProfileManager = ProfileManager(context, repository)
+        repository: RenkinPackRepository,
+        watchRepository: WatchRepository = WatchRepository(context)
+    ): ProfileManager = ProfileManager(context, repository, watchRepository)
 
     @Provides
     @Singleton

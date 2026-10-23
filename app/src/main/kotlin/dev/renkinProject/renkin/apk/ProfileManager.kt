@@ -16,6 +16,7 @@ import dev.renkinProject.renkin.data.switchProfilePrefs
 import dev.renkinProject.renkin.data.withBuiltPrimaryPrefs
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.dataStore
+import dev.renkinProject.renkin.service.deleteRulesAndNotifications
 
 /**
  * Owns persistent profile selection and stored profile metadata: CRUD, the per-profile
@@ -26,10 +27,11 @@ import dev.renkinProject.renkin.data.dataStore
 class ProfileManager internal constructor(
     private val context: Context,
     private val packRepo: RenkinPackRepository,
-    private val store: DataStore<Preferences>
+    private val store: DataStore<Preferences>,
+    private val watchRepo: WatchRepository = WatchRepository(context)
 ) {
-    constructor(context: Context, packRepo: RenkinPackRepository) :
-        this(context, packRepo, context.dataStore)
+    constructor(context: Context, packRepo: RenkinPackRepository, watchRepo: WatchRepository) :
+        this(context, packRepo, context.dataStore, watchRepo)
 
     /**
      * Persistence-operation selection; it can lead the published id during a gated switch.
@@ -78,9 +80,9 @@ class ProfileManager internal constructor(
      */
     suspend fun deleteProfile(id: Long) {
         packRepo.deleteProfile(id)
-        // Drop the profile's watch rules too, or the periodic worker keeps checking them and
-        // fires notifications that deep-link into a profile that no longer exists.
-        WatchRepository(context).deleteRulesForProfile(id)
+        // Drop the profile's watch rules and their notifications too, or the worker keeps
+        // checking them. An interruption here is repaired by removeWatchRulesOfDeletedProfiles.
+        watchRepo.deleteRulesAndNotifications(context, watchRepo.ruleIdsForProfile(id))
     }
 
     /** Records whether [profileId]'s save is still waiting for a build. */

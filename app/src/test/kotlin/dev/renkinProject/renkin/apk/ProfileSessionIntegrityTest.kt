@@ -25,6 +25,7 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import kotlinx.collections.immutable.toPersistentList
 import dev.renkinProject.renkin.data.transfer.BackupOsShadow
 import dev.renkinProject.renkin.data.watch.WatchDatabase
+import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.di.AppModule
 import kotlinx.coroutines.CompletableDeferred
@@ -75,6 +76,7 @@ class ProfileSessionIntegrityTest {
 
     private lateinit var context: DiscoveryContext
     private lateinit var database: RenkinPackDatabase
+    private lateinit var watchDatabase: WatchDatabase
     private lateinit var repository: RenkinPackRepository
     private lateinit var provider: ApplicationProvider
 
@@ -84,18 +86,23 @@ class ProfileSessionIntegrityTest {
         context.dataStore.edit { it.clear() }
         database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java)
             .allowMainThreadQueries().build()
+        watchDatabase = Room.inMemoryDatabaseBuilder(context, WatchDatabase::class.java)
+            .allowMainThreadQueries().build()
         repository = RenkinPackRepository(database)
         provider = newProvider()
     }
 
     @After
-    fun tearDown() { database.close() }
+    fun tearDown() {
+        database.close()
+        watchDatabase.close()
+    }
 
     private fun newProvider(): ApplicationProvider {
         val catalog = AppModule.provideIconPackCatalog(context)
         val icons = AppModule.provideIconPackRepository(context, catalog)
         val locks = AppModule.provideIconLockManager(context, repository)
-        val profiles = AppModule.provideProfileManager(context, repository)
+        val profiles = AppModule.provideProfileManager(context, repository, WatchRepository(watchDatabase))
         val installedIcons = dev.renkinProject.renkin.packages.InstalledIconLoader(context)
         return AppModule.provideApplicationProvider(
             context,
@@ -246,15 +253,7 @@ class ProfileSessionIntegrityTest {
         provider.switchProfile(other)
         val deleted = provider.sessionToken
 
-        // Robolectric resets SQLite pointers between tests, but the production singleton survives.
-        val watchInstance = WatchDatabase::class.java.getDeclaredField("instance").apply { isAccessible = true }
-        watchInstance.set(null, null)
-        try {
-            provider.deleteProfile(other)
-        } finally {
-            (watchInstance.get(null) as? WatchDatabase)?.close()
-            watchInstance.set(null, null)
-        }
+        provider.deleteProfile(other)
 
         val restored = provider.runtimeState.value
         assertTrue(restored.ready)

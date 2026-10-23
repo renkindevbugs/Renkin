@@ -48,6 +48,9 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
                 !inputData.getBoolean(KEY_PERIODIC, false) || enoughTimeElapsed()
             }
             val checked = if (shouldCheck) {
+                removeWatchRulesOfDeletedProfiles(
+                    applicationContext, WatchRepository(applicationContext), RenkinPackRepository(applicationContext)
+                )
                 val result = WatchChecker(applicationContext).runCheckResult()
                 Log.debug("Renkin", "WatchChecker fired ${result.suggestions.size} suggestion(s)")
                 StorageOperationGate.run {
@@ -60,9 +63,10 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
                         val rule = watchRepo.getRule(stored.ruleId) ?: continue
                         if (stored.packageName != suggestion.packageName || stored.activityName != suggestion.activityName ||
                             rule.rule.profileId != suggestion.profileId) continue
-                        val profileName = profileRepo.profile(suggestion.profileId)?.name ?: "Renkin"
+                        // A profile deleted during the scan: the next run removes its rules.
+                        val profile = profileRepo.profile(suggestion.profileId) ?: continue
                         notifier.postIconAvailable(applicationContext, suggestion.suggestionId,
-                            suggestion.packageName, suggestion.packPackages, profileName)
+                            suggestion.packageName, suggestion.packPackages, profile.name)
                     }
                     applicationContext.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())
                     true
