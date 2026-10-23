@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
+import dev.renkinProject.renkin.icon.creator.plateFill
 import dev.renkinProject.renkin.icon.creator.SegmentLayer
 import dev.renkinProject.renkin.icon.creator.SHADOW_ANGLE_DEFAULT
 import dev.renkinProject.renkin.icon.creator.SHADOW_BLUR_DEFAULT
@@ -92,7 +93,7 @@ internal fun AdjustmentState.applyToModifierStack(
         segments = colorizeLayers.takeIf { imageEdit == ImageEdit.COLORIZE_SEGMENTS } ?: emptyList()
     ),
     transform = TransformModifier(iconScale, iconOffsetX, iconOffsetY),
-    shape = ShapeModifier(iconShape, shapeCrop, shapeScale),
+    shape = ShapeModifier(iconShape, shapeCrop, shapeScale, plateFill(iconShape, shapeCrop, shapeStyle)),
     outline = OutlineModifier(outlineMode, outlineWidth, ColorFill(outlineStyle.firstColor, outlineStyle), outlineEraseMask),
     shadow = shadowModifier()
 )
