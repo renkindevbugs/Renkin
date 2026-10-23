@@ -70,11 +70,13 @@ class ProfileStyleStore internal constructor(
         val stored = preferences.data.first()
         val profiles = repository.profiles()
         val activeId = stored[ActiveProfileIdKey]?.takeIf { id -> profiles.any { it.id == id } } ?: DEFAULT_PROFILE_ID
+        // A settings file replaced after corruption holds defaults, not the active profile's state.
+        val replacedAfterCorruption = stored[SettingsReplacedAfterCorruptionKey] == true
         // Validate every candidate before committing any conversion. The active legacy row
         // can be stale: only its live preference projection represents the pre-cutover state.
         val candidates = profiles.map { profile ->
             val style = if (profile.profileStyle.isNotEmpty()) decode(profile)
-            else if (profile.id == activeId) ProfileStylePreferences.capture(stored)
+            else if (profile.id == activeId && !replacedAfterCorruption) ProfileStylePreferences.capture(stored)
             else legacyStyle(profile.prefsSnapshot)
             update(profile.id, style, profile.profileStyle.takeIf(String::isNotEmpty))
         }
@@ -84,7 +86,10 @@ class ProfileStyleStore internal constructor(
                 candidate.document != profile.profileStyle || candidate.legacySnapshot != profile.prefsSnapshot
             }.map { it.first }
             if (changed.isNotEmpty()) repository.writeProfileStyles(changed)
-            persistApplicationPreferences(activeId, blockOnFailure = false)
+            persistApplicationPreferences(
+                activeId, stored.toMutablePreferences().apply { remove(SettingsReplacedAfterCorruptionKey) },
+                blockOnFailure = false
+            )
             initializedEpoch = StorageOperationGate.epoch
         }
     }
