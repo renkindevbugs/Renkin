@@ -19,6 +19,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Renkin"
 include(":app")
-include(":macrobenchmark")
 include(":ackpine-core-compat")
 project(":ackpine-core-compat").projectDir = file("compat/ackpine-core")

@@ -91,16 +91,6 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
         }
-        // Release code and R8 for on-device measurement (the :macrobenchmark module). Its own
-        // application id and the debug key keep it from ever replacing an installed release build.
-        create("benchmark") {
-            initWith(getByName("release"))
-            applicationIdSuffix = ".benchmark"
-            versionNameSuffix = "-benchmark"
-            signingConfig = signingConfigs.getByName("debug")
-            matchingFallbacks += listOf("release")
-            isDebuggable = false
-        }
     }
 
     compileOptions {
