@@ -252,8 +252,6 @@ fun OutlineSwitch(enabled: Boolean, onChange: (newValue: Boolean) -> Unit) {
 
 @Composable
 fun DefaultSwitchLayout(isChecked: Boolean, @StringRes label: Int, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(isChecked) }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -265,19 +263,12 @@ fun DefaultSwitchLayout(isChecked: Boolean, @StringRes label: Int, onChange: (ne
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f)
         )
-        Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
-            }
-        )
+        Switch(checked = isChecked, onCheckedChange = onChange)
     }
 }
 
 @Composable
 fun DefaultSwitchLayoutWithInfo(isChecked: Boolean, @StringRes label: Int, @StringRes infoDesc: Int, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(isChecked) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
 
     Row(
@@ -301,11 +292,8 @@ fun DefaultSwitchLayoutWithInfo(isChecked: Boolean, @StringRes label: Int, @Stri
             )
         }
         Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
-            },
+            checked = isChecked,
+            onCheckedChange = onChange,
             modifier = Modifier.padding(start = 12.dp)
         )
     }
