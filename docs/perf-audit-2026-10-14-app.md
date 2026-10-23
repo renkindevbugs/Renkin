@@ -1,5 +1,9 @@
 # Compose Performance Audit — 2026-10-14 — app
 
+Historical report: the `macrobenchmark` module and app's `benchmark` build type were removed on
+2026-10-17. The measurement commands below describe the original audit setup and no longer run
+in the current project.
+
 Run with the `auditing-compose-performance` skill: Measure → Diagnose → Fix → Verify.
 
 ## Environment
@@ -50,6 +54,5 @@ compiler-report counts.
 - CI stability gate: not added; it needs an extra Gradle plugin and nothing regressed.
 
 ## Open items
-- Re-run the two benchmarks before releases that touch the main list or startup.
 - Revisit Baseline Profiles only if F-Droid confirms that current AGP produces a deterministic
   `baseline.prof`.

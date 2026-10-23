@@ -12,6 +12,7 @@ app/release
 .kotlin
 # Local reference clone of Mihon (https://github.com/mihonapp/mihon), for UI inspiration only - never committed
 mihon-reference/
+morphe-reference/
 # Local-only AI notes (release process, credential location) — never committed to the public repo
 CLAUDE.local.md
 # Local AI workflow and tool state — never committed to the public repo
