@@ -23,6 +23,13 @@ class WatchRepository(private val db: WatchDatabase) {
         db.withTransaction { block() }
     }
 
+    /**
+     * Commits one checked rule — its validation, baselines, component moves, splits and
+     * suggestions — as a single transaction. A baseline that lands without its suggestion would
+     * make the next check skip the same pack version and lose the suggestion.
+     */
+    internal suspend fun <T> commitCheckedRule(block: suspend () -> T): T = transaction(block)
+
     internal suspend fun writeRecoverySnapshot(file: File) = transaction {
         BackupDatabaseSnapshot.write(db.openHelper.writableDatabase, file)
     }
