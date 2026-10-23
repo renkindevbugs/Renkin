@@ -104,6 +104,23 @@ class ModifierReplayTest {
         assertEquals(saved.source, result.source)
     }
 
+    @Test fun untouchedPlateKeepsTheRecipesInheritedFill() = runBlocking {
+        val saved = options().withModifiers { copy(shape = ShapeModifier(IconShape.CIRCLE, false, 1f, null)) }
+        val session = session(verified(saved))
+        val result = session.modifierReplay!!.optionsFor(ui(session, saved))
+        assertEquals(saved.modifiers.shape, result.modifiers.shape)
+    }
+
+    @Test fun changedPlateWritesItsCompleteFill() = runBlocking {
+        val saved = options().withModifiers { copy(shape = ShapeModifier(IconShape.CIRCLE, false, 1f, null)) }
+        val session = session(verified(saved))
+        val plate = ColorizerStyle(firstColor = Color.WHITE)
+        session.adjustments.shapeStyle = plate
+        val result = session.modifierReplay!!.optionsFor(ui(session, saved))
+        assertEquals(ColorFill(Color.WHITE, plate), result.modifiers.shape!!.fill)
+        assertEquals(saved.export, result.export)
+    }
+
     private fun layer(color: Int) = Bitmap.createBitmap(
         AdaptiveIconPackDrawable.LAYER_SIZE, AdaptiveIconPackDrawable.LAYER_SIZE, Bitmap.Config.ARGB_8888
     ).apply { eraseColor(color) }.getBytes(Bitmap.CompressFormat.PNG, 100)

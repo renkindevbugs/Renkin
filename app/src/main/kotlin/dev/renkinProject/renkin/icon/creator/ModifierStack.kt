@@ -66,6 +66,11 @@ data class ShapeModifier(
     val isEnabled: Boolean get() = shape != IconShape.NONE
 }
 
+// The plate owns its complete fill. Inheriting the presentation background let a solid plate on a
+// Material You source paint in the wallpaper colour, which stays the source's own background.
+internal fun plateFill(shape: IconShape, crop: Boolean, style: ColorizerStyle): ColorFill? =
+    style.takeIf { shape != IconShape.NONE && !crop }?.let { ColorFill(it.firstColor, it) }
+
 data class OutlineModifier(
     val mode: OutlineMode,
     val width: Float,

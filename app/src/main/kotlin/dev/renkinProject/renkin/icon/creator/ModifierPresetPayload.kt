@@ -118,7 +118,7 @@ internal fun ModifierStack.withModifierPreset(payload: ModifierPresetPayload): M
     return copy(
         effect = newEffect,
         transform = payload.iconScale?.let { transform.copy(scale = it) } ?: transform,
-        shape = payload.shape?.let { ShapeModifier(it.shape, it.crop, it.scale) } ?: shape,
+        shape = payload.shape?.let { ShapeModifier(it.shape, it.crop, it.scale, plateFill(it.shape, it.crop, it.style)) } ?: shape,
         outline = payload.outline?.let {
             OutlineModifier(it.mode, it.width, ColorFill(it.style.firstColor, it.style), outline?.eraseMask)
         } ?: outline,
