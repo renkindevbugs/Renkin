@@ -124,20 +124,6 @@ class IconGenerator(
         generateIcons(listOf(application)) { app, icon, _, source -> onUpdate(app, icon, source) }
     }
 
-    fun generateIcon(application: PackageInfoStruct,
-                     customIcon: ResourceDrawable?,
-                     onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?) -> Unit)  {
-        if (source.primarySource == Source.NONE) {
-            return
-        }
-
-        if (applicationShouldBeSkipped(application)) {
-            return
-        }
-
-        onUpdate(application, generatePreview(application, customIcon, retainInput = false).icon)
-    }
-
     fun generatePreview(
         application: PackageInfoStruct,
         customIcon: ResourceDrawable?,
