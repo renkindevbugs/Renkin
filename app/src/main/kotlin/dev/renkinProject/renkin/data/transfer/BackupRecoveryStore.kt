@@ -13,6 +13,7 @@ import dev.renkinProject.renkin.data.StorageRecoveryState
 import dev.renkinProject.renkin.data.StorageRecoverySnapshotException
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.syncDirectory
+import dev.renkinProject.renkin.data.writeVerified
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.extension.toLowerHex
@@ -402,23 +403,7 @@ internal class BackupRecoveryStore(private val context: Context) {
 
     private fun hasPointer(file: AtomicFile): Boolean = file.baseFile.exists() || File(file.baseFile.path + ".bak").exists()
 
-    private fun writeAtomic(file: AtomicFile, data: JSONObject) {
-        val encoded = data.toString().toByteArray(Charsets.UTF_8)
-        val output = file.startWrite()
-        var finished = false
-        try {
-            output.write(encoded)
-            output.fd.sync()
-            file.finishWrite(output)
-            finished = true
-            // AtomicFile logs some rename failures instead of throwing. Never activate
-            // live writes unless the pointer/manifest was actually finalized.
-            if (!file.baseFile.isFile || !file.openRead().use { it.readBytes().contentEquals(encoded) }) {
-                throw IOException("Cannot finalize recovery metadata")
-            }
-        } catch (error: Throwable) {
-            if (!finished) file.failWrite(output)
-            throw error
-        }
-    }
+    // Live writes are never activated unless the pointer/manifest was actually finalized.
+    private fun writeAtomic(file: AtomicFile, data: JSONObject) =
+        file.writeVerified(data.toString().toByteArray(Charsets.UTF_8))
 }
