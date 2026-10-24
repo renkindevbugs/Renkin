@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.data.transfer
 import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
+import dev.renkinProject.renkin.data.syncDirectory
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -65,11 +66,7 @@ internal class BackupFileTransaction private constructor(
     }
 
     fun sync() {
-        (entries.mapNotNull { it.target.parentFile } + directory).distinct().forEach { parent ->
-            if (!parent.isDirectory) throw IOException("Cannot sync file transaction directory")
-            val descriptor = Os.open(parent.absolutePath, OsConstants.O_RDONLY, 0)
-            try { Os.fsync(descriptor) } finally { Os.close(descriptor) }
-        }
+        (entries.mapNotNull { it.target.parentFile } + directory).distinct().forEach(::syncDirectory)
     }
 
     override fun close() {
