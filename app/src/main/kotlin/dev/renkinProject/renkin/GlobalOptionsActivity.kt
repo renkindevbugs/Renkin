@@ -53,6 +53,7 @@ import java.util.concurrent.atomic.AtomicReference
 import dev.renkinProject.renkin.ui.GlobalModifierSnapshot
 import dev.renkinProject.renkin.ui.GlobalModifierState
 import dev.renkinProject.renkin.ui.GlobalOptionsScreen
+import dev.renkinProject.renkin.ui.CollectToasts
 import dev.renkinProject.renkin.ui.LocalToaster
 import dev.renkinProject.renkin.ui.ProvideAdaptiveLayoutInfo
 import dev.renkinProject.renkin.ui.ToastHost
@@ -151,15 +152,7 @@ class GlobalOptionsActivity : ComponentActivity() {
                 if (closeReady) finish()
             }
 
-            LaunchedEffect(Unit) {
-                viewModel.toastEvents.collect { resId -> toaster.show(getString(resId)) }
-            }
-            LaunchedEffect(optionsViewModel) {
-                optionsViewModel.toastEvents.collect { resId -> toaster.show(getString(resId)) }
-            }
-            LaunchedEffect(presetsViewModel) {
-                presetsViewModel.toastEvents.collect { resId -> toaster.show(getString(resId)) }
-            }
+            CollectToasts(toaster, viewModel.toastEvents, optionsViewModel.toastEvents, presetsViewModel.toastEvents)
 
             ProvideAdaptiveLayoutInfo(this@GlobalOptionsActivity) {
                 CompositionLocalProvider(LocalToaster provides toaster) {

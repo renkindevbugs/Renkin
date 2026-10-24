@@ -1,9 +1,7 @@
 package dev.renkinProject.renkin.feature.watch
 
 import android.app.Application
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -18,6 +16,8 @@ import dev.renkinProject.renkin.data.getPreferenceFlow
 import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.setLongValue
 import dev.renkinProject.renkin.data.dataStore
+import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.expiredSessionMessage
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.IconSuggestion
 import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
@@ -30,7 +30,10 @@ import dev.renkinProject.renkin.service.WatchChecker
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.service.RenkinNotifications
 import dev.renkinProject.renkin.service.WatchWorker
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -79,6 +82,14 @@ class WatchViewModel @Inject constructor(
             .map { normalizeWatchCheckInterval(it ?: WATCH_CHECK_INTERVAL_DEFAULT) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WATCH_CHECK_INTERVAL_DEFAULT)
 
+    // Strings are resolved here because "found N" carries a count the Int toast channels cannot.
+    private val mutableToastEvents = Channel<String>(Channel.BUFFERED)
+    val toastEvents = mutableToastEvents.receiveAsFlow()
+
+    private fun toast(@StringRes message: Int, vararg args: Any) {
+        mutableToastEvents.trySend(getApplication<Application>().getString(message, *args))
+    }
+
     /** Debug: change how often the periodic check runs and reschedule it immediately. */
     fun setCheckIntervalMinutes(minutes: Int) {
         viewModelScope.launch {
@@ -93,52 +104,71 @@ class WatchViewModel @Inject constructor(
                 throw error
             } catch (error: Exception) {
                 Log.error("WatchViewModel", "Could not update the check interval", error)
+                toast(R.string.watchIntervalNotSaved)
             }
         }
     }
 
-    /** True while a manual check is running; drives the pull-to-refresh spinner. */
-    var isChecking by mutableStateOf(false)
-        private set
+    private val requestIds = AtomicLong()
 
-    /** True while a rule and its baseline are being resolved and committed. */
-    var isSavingRule by mutableStateOf(false)
-        private set
+    /** A fresh identity for one editor opening or quick action; its save outcome is matched by it. */
+    fun newRequestId(): Long = requestIds.incrementAndGet()
+
+    private val ruleSaveOwner = WatchRuleSaveOwner(viewModelScope, ::commitRule) { state, request, error ->
+        when (state.status) {
+            WatchRuleSaveStatus.NOT_SAVED -> {
+                error?.let { Log.error("WatchViewModel", "Could not save the watch rule", it) }
+                toast(R.string.watchRuleNotSaved)
+            }
+            WatchRuleSaveStatus.SESSION_CHANGED -> toast(request.session.expiredSessionMessage(appProvider.sessionToken))
+            WatchRuleSaveStatus.SAVING, WatchRuleSaveStatus.SAVED -> Unit
+        }
+    }
+
+    /** The latest rule save, retained until [acknowledgeRuleSave] by the opener whose id it carries. */
+    internal val ruleSaveState: StateFlow<WatchRuleSaveState?> = ruleSaveOwner.state
 
     /** Atomically creates or updates a rule together with its current icon baseline. */
     fun saveRule(
+        requestId: Long,
         existing: RuleWithDetails?,
         apps: List<AppComponent>,
         watchAll: Boolean,
-        packs: List<String>,
-        onSaved: () -> Unit = {}
-    ) {
-        if (isSavingRule) return
-        isSavingRule = true
-        val profileId = appProvider.activeProfileId
-        val expected = appProvider.sessionToken
-        viewModelScope.launch {
-            // Saving reads every selected pack; a broken one must surface as "not saved",
-            // never as a crash out of viewModelScope.
-            val savedId = try {
-                if (!appProvider.isCurrentSession(expected)) return@launch
-                WatchChecker(getApplication()).saveRule(
-                    existingRuleId = existing?.rule?.id,
-                    apps = apps,
-                    watchAllPacks = watchAll,
-                    packPackages = packs,
-                    profileId = profileId,
-                    commit = { save -> if (appProvider.isCurrentSession(expected)) save() else 0L }
-                )
-            } catch (error: CancellationException) {
-                throw error
-            } catch (e: Exception) {
-                Log.error("WatchViewModel", "Could not save the watch rule", e)
-                0L
-            } finally {
-                isSavingRule = false
+        packs: List<String>
+    ): Boolean = ruleSaveOwner.submit(
+        WatchRuleSaveRequest(
+            id = requestId,
+            session = appProvider.sessionToken,
+            profileId = appProvider.activeProfileId,
+            existingRuleId = existing?.rule?.id,
+            apps = apps,
+            watchAllPacks = watchAll,
+            packs = packs
+        )
+    )
+
+    fun acknowledgeRuleSave(requestId: Long) {
+        ruleSaveOwner.acknowledge(requestId)
+    }
+
+    private suspend fun commitRule(request: WatchRuleSaveRequest): WatchRuleSaveStatus {
+        if (!appProvider.isCurrentSession(request.session)) return WatchRuleSaveStatus.SESSION_CHANGED
+        var sessionChanged = false
+        val savedId = WatchChecker(getApplication()).saveRule(
+            existingRuleId = request.existingRuleId,
+            apps = request.apps,
+            watchAllPacks = request.watchAllPacks,
+            packPackages = request.packs,
+            profileId = request.profileId,
+            commit = { save ->
+                if (appProvider.isCurrentSession(request.session)) save()
+                else 0L.also { sessionChanged = true }
             }
-            if (savedId > 0L) onSaved()
+        )
+        return when {
+            savedId > 0L -> WatchRuleSaveStatus.SAVED
+            sessionChanged -> WatchRuleSaveStatus.SESSION_CHANGED
+            else -> WatchRuleSaveStatus.NOT_SAVED
         }
     }
 
@@ -171,37 +201,43 @@ class WatchViewModel @Inject constructor(
             throw error
         } catch (error: Exception) {
             Log.error("WatchViewModel", "Could not delete watch rules", error)
+            toast(R.string.watchRuleNotDeleted)
         }
     }
 
-    /** Runs a manual check; [onResult] receives the number of new suggestions found. */
-    fun runCheck(onResult: (Int) -> Unit) {
-        if (isChecking) return
-        viewModelScope.launch {
-            isChecking = true
-            // finally keeps the spinner from sticking when the checker throws.
-            val count = try {
-                val app = getApplication<Application>()
-                val result = WatchChecker(app).runCheckResult(refreshCompletedSuggestions = true)
-                StorageOperationGate.run {
-                    if (!result.isCurrent()) return@run 0
-                    app.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())
-                    val prefs = app.dataStore.getPreferencesAfterPendingWrites()
-                    WatchWorker.schedulePeriodic(
-                        app, normalizeWatchCheckInterval(prefs.getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)),
-                        ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE
-                    )
-                    result.suggestions.size
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
+    private val checkOwner = WatchCheckOwner(viewModelScope, ::checkNow) { found, error ->
+        when {
+            error != null -> {
                 Log.error("WatchViewModel", "Manual watch check failed", error)
-                return@launch
-            } finally {
-                isChecking = false
+                toast(R.string.watchCheckFailed)
             }
-            onResult(count)
+            found == 0 -> toast(R.string.watchRefreshNone)
+            found != null -> toast(R.string.watchRefreshFound, found)
+            else -> Unit
+        }
+    }
+
+    /** True while a manual check is running; drives the pull-to-refresh spinner. */
+    val isChecking: StateFlow<Boolean> = checkOwner.running
+
+    /** Runs a manual check; its outcome arrives as a toast. */
+    fun runCheck() {
+        checkOwner.start()
+    }
+
+    // A restore replacing the storage mid-check makes the result stale: report nothing then.
+    private suspend fun checkNow(): Int? {
+        val app = getApplication<Application>()
+        val result = WatchChecker(app).runCheckResult(refreshCompletedSuggestions = true)
+        return StorageOperationGate.run {
+            if (!result.isCurrent()) return@run null
+            app.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())
+            val prefs = app.dataStore.getPreferencesAfterPendingWrites()
+            WatchWorker.schedulePeriodic(
+                app, normalizeWatchCheckInterval(prefs.getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)),
+                ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE
+            )
+            result.suggestions.size
         }
     }
 
@@ -221,6 +257,7 @@ class WatchViewModel @Inject constructor(
                 throw error
             } catch (error: Exception) {
                 Log.error("WatchViewModel", "Watch simulation failed", error)
+                toast(R.string.watchCheckFailed)
             }
         }
     }

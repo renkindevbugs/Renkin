@@ -45,6 +45,7 @@ import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.feature.apptargets.AddAppViewModel
 import dev.renkinProject.renkin.feature.apptargets.RemoveAppOutcome
+import dev.renkinProject.renkin.feature.watch.WatchRuleSaveStatus
 import dev.renkinProject.renkin.feature.watch.WatchScreen
 import dev.renkinProject.renkin.feature.watch.WatchViewModel
 import dev.renkinProject.renkin.apk.ProfileSessionToken
@@ -85,6 +86,21 @@ internal fun AppQuickActionsSheet(
     val rules by watchViewModel.rules.collectAsStateWithLifecycle()
     val existingRule = remember(rules, app.key) { watchRuleFor(rules, app) }
     var openWatchScreen by remember { mutableStateOf(false) }
+    val watchSaveState by watchViewModel.ruleSaveState.collectAsStateWithLifecycle()
+    var watchRequestId by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(watchSaveState, watchRequestId) {
+        val outcome = watchSaveState ?: return@LaunchedEffect
+        if (outcome.busy || outcome.requestId != watchRequestId) return@LaunchedEffect
+        watchViewModel.acknowledgeRuleSave(outcome.requestId)
+        when (outcome.status) {
+            WatchRuleSaveStatus.SAVED -> {
+                toaster.show(watchingMessage)
+                onDismiss()
+            }
+            WatchRuleSaveStatus.SESSION_CHANGED -> onDismiss()
+            WatchRuleSaveStatus.SAVING, WatchRuleSaveStatus.NOT_SAVED -> Unit
+        }
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.navigationBarsPadding().padding(bottom = 8.dp)) {
@@ -141,20 +157,20 @@ internal fun AppQuickActionsSheet(
                         R.string.quickActionWatchHint
                     }
                 ),
-                busy = watchViewModel.isSavingRule
+                busy = watchSaveState?.busy == true
             ) {
                 if (existingRule != null) {
                     openWatchScreen = true
                 } else {
-                    watchViewModel.saveRule(
+                    val requestId = watchViewModel.newRequestId()
+                    val submitted = watchViewModel.saveRule(
+                        requestId = requestId,
                         existing = null,
                         apps = listOf(AppComponent(app.packageName, app.activityName)),
                         watchAll = true,
                         packs = emptyList()
-                    ) {
-                        toaster.show(watchingMessage)
-                        onDismiss()
-                    }
+                    )
+                    if (submitted) watchRequestId = requestId
                 }
             }
 

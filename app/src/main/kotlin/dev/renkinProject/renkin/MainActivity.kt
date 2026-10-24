@@ -122,9 +122,7 @@ class MainActivity : ComponentActivity() {
 
             val colorPresets by presetsViewModel.colorPresets.collectAsStateWithLifecycle()
             val modifierPresets by presetsViewModel.modifierPresets.collectAsStateWithLifecycle()
-            LaunchedEffect(presetsViewModel) {
-                presetsViewModel.toastEvents.collect { resId -> toaster.show(getString(resId)) }
-            }
+            CollectToasts(toaster, presetsViewModel.toastEvents)
 
             ProvideAdaptiveLayoutInfo(this@MainActivity) {
                 CompositionLocalProvider(
