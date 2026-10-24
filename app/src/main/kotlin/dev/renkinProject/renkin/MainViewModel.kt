@@ -108,6 +108,11 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -946,8 +951,9 @@ class MainViewModel @Inject constructor(
         sourceUrl: String? = null,
         expected: ProfileSessionToken,
         modifierRecipe: String? = null,
-        modifierInput: IconModifierInput? = null
-    ) = applyPickedIcon(expected, app, icon, sourcePackName) { live, origin, rendered ->
+        modifierInput: IconModifierInput? = null,
+        requestId: Long? = null
+    ) = applyPickedIcon(expected, app, icon, sourcePackName, requestId) { live, origin, rendered ->
         live.changeExport(
             rendered, sourcePackName = origin, isRefreshMade = false, isCustom = true,
             isLegacy = false, baseIcon = icon, sourceUrl = sourceUrl,
@@ -964,17 +970,38 @@ class MainViewModel @Inject constructor(
         app: PackageInfoStruct,
         icon: IconPackDrawable?,
         sourcePackName: String?,
+        requestId: Long?,
         edit: (live: PackageInfoStruct, origin: String?, rendered: IconPackDrawable?) -> PackageInfoStruct
     ) {
         launchProfileOperation(expected, serialize = false) {
-            when (appProvider.applyPickedIcon(expected, app, icon, sourcePackName, edit = edit)) {
-                IconApplyOutcome.APPLIED -> markUpdated(expected, app, icon)
-                IconApplyOutcome.LOCKED -> _toastEvents.trySend(R.string.iconOriginLocked)
-                IconApplyOutcome.PROFILE_CHANGED -> _toastEvents.trySend(expected.expiredSessionMessage(sessionToken))
-                IconApplyOutcome.TARGET_GONE -> _toastEvents.trySend(R.string.iconEditTargetGone)
-                IconApplyOutcome.FAILED -> _toastEvents.trySend(R.string.profileOperationFailed)
+            var outcome = IconApplyOutcome.FAILED
+            try {
+                outcome = appProvider.applyPickedIcon(expected, app, icon, sourcePackName, edit = edit)
+                when (outcome) {
+                    IconApplyOutcome.APPLIED -> markUpdated(expected, app, icon)
+                    IconApplyOutcome.LOCKED -> _toastEvents.trySend(R.string.iconOriginLocked)
+                    IconApplyOutcome.PROFILE_CHANGED -> _toastEvents.trySend(expected.expiredSessionMessage(sessionToken))
+                    IconApplyOutcome.TARGET_GONE -> _toastEvents.trySend(R.string.iconEditTargetGone)
+                    IconApplyOutcome.FAILED -> _toastEvents.trySend(R.string.profileOperationFailed)
+                }
+            } finally {
+                requestId?.let { mutableIconApplyResults.update { results -> results.withIconApply(it, outcome) } }
             }
         }
+    }
+
+    private val iconApplyRequestIds = AtomicLong()
+
+    /** A fresh identity for one editor Apply; the row's icon flight matches its outcome by it. */
+    fun newIconApplyRequestId(): Long = iconApplyRequestIds.incrementAndGet()
+
+    private val mutableIconApplyResults = MutableStateFlow<Map<Long, IconApplyOutcome>>(emptyMap())
+
+    /** Finished editor Applies by request id, kept until the row that flew the icon acknowledges them. */
+    internal val iconApplyResults: StateFlow<Map<Long, IconApplyOutcome>> = mutableIconApplyResults.asStateFlow()
+
+    fun acknowledgeIconApply(requestId: Long) {
+        mutableIconApplyResults.update { it - requestId }
     }
 
     /**
@@ -1575,3 +1602,10 @@ class MainViewModel @Inject constructor(
 }
 
 private const val MAX_BASELINE_READ_ATTEMPTS = 3
+
+// A row that scrolled away never acknowledges its result, so only the latest few are kept.
+internal fun Map<Long, IconApplyOutcome>.withIconApply(
+    requestId: Long,
+    outcome: IconApplyOutcome,
+    keep: Int = 16
+): Map<Long, IconApplyOutcome> = (this + (requestId to outcome)).filterKeys { it > requestId - keep }

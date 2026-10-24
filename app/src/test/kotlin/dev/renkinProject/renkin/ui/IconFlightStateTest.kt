@@ -147,6 +147,45 @@ class IconFlightStateTest {
         assertSame(applied, delivery.icon)
     }
 
+    // The overlay stops drawing at HOME, so the slot must draw the landed icon instead of hiding.
+    @Test
+    fun aLandedAppliedIconStaysVisibleInTheSlotWithItsApplyIdentity() {
+        val flight = requireNotNull(placedAnchor(custom = customIcon).launch())
+        val applied = BitmapIconDrawable(
+            Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.WHITE) }
+        )
+        flight.target = slot
+        flight.newSlotBounds = slot
+        flight.newSlotIcon = applied
+        flight.phase = IconFlightPhase.LANDED
+        flight.applyRequestId = 7
+
+        flight.beginReturn(applied = true)
+
+        assertEquals(7L, flight.delivery?.applyRequestId)
+        assertTrue(flight.holdsResultSlot)
+        assertNull(flight.landedApplyIcon)
+
+        flight.phase = IconFlightPhase.HOME
+
+        assertFalse(flight.holdsResultSlot)
+        assertSame(applied, flight.landedApplyIcon)
+    }
+
+    @Test
+    fun aReturningOwnIconStaysHiddenUntilTheFlightIsCleared() {
+        val flight = requireNotNull(placedAnchor(custom = customIcon).launch())
+        flight.target = slot
+        flight.newSlotBounds = slot
+        flight.phase = IconFlightPhase.LANDED
+        flight.beginReturn()
+
+        flight.phase = IconFlightPhase.HOME
+
+        assertTrue(flight.holdsResultSlot)
+        assertNull(flight.landedApplyIcon)
+    }
+
     @Test
     fun applyWithAnEmptyNewSlotReturnsOnlyTheAppIcon() {
         val flight = requireNotNull(placedAnchor(custom = null).launch())

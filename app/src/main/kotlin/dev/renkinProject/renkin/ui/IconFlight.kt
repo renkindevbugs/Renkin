@@ -32,6 +32,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.toSize
+import dev.renkinProject.renkin.apk.IconApplyOutcome
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.ui.theme.iconTileShape
 
@@ -91,6 +92,9 @@ class IconFlightState internal constructor(
     internal var newSlotBounds: Rect? = null
     internal var newSlotIcon: IconPackDrawable? = null
 
+    /** The editor Apply whose outcome decides what the result slot keeps once the icon lands. */
+    var applyRequestId: Long? = null
+
     /** What flies into the row's result slot while the original goes home; see [beginReturn]. */
     var delivery by mutableStateOf<IconDelivery?>(null)
         private set
@@ -121,7 +125,7 @@ class IconFlightState internal constructor(
         val from = newSlotBounds
         if (from != null && resultSlotBounds() != null) {
             delivery = when {
-                applied -> newSlotIcon?.let { IconDelivery(it, null, from, applied = true) }
+                applied -> newSlotIcon?.let { IconDelivery(it, null, from, applied = true, applyRequestId) }
                 else -> resultBefore?.let { IconDelivery(null, it, from, applied = false) }
             }
         }
@@ -134,7 +138,8 @@ class IconDelivery internal constructor(
     val icon: IconPackDrawable?,
     val bitmap: ImageBitmap?,
     val from: Rect,
-    val applied: Boolean
+    val applied: Boolean,
+    val applyRequestId: Long? = null
 )
 
 /**
@@ -281,11 +286,29 @@ private fun lerp(start: Float, stop: Float, fraction: Float) = start + (stop - s
 
 /**
  * Whether the row's result slot should stay hidden for [this] flight: while its custom icon is
- * flying into the editor, while an icon flies back into it, and after an applied icon lands until
- * the row has drawn it, so neither the old icon nor the edit bubble flashes in between.
+ * flying into the editor and while an icon flies back into it. An applied icon that has landed is
+ * drawn by the slot itself until the handoff (see [landedApplyIcon]), so the slot never sits empty.
  */
 val IconFlightState?.holdsResultSlot: Boolean
     get() = this != null && (
         (phase == IconFlightPhase.OUTBOUND && arriving != null && target != null) ||
-            (delivery != null && (phase == IconFlightPhase.RETURNING || phase == IconFlightPhase.HOME))
+            (delivery != null && phase == IconFlightPhase.RETURNING) ||
+            (phase == IconFlightPhase.HOME && delivery?.applied == false)
         )
+
+/** The applied icon a landed flight leaves in the row's result slot until the row takes over. */
+val IconFlightState?.landedApplyIcon: IconPackDrawable?
+    get() = this?.takeIf { phase == IconFlightPhase.HOME }?.delivery?.takeIf { it.applied }?.icon
+
+/**
+ * Whether a landed delivery can hand the result slot back to the row. A returning own icon and a
+ * row that already draws the applied icon hand over at once. A failed Apply hands over at once too,
+ * so the row's authoritative icon replaces the optimistic one. A successful Apply waits for the
+ * row to draw it; the caller's reveal cap ends any wait, showing the row's own icon if none came.
+ */
+internal fun releasesDelivery(
+    applied: Boolean,
+    rowShowsAppliedIcon: Boolean,
+    outcome: IconApplyOutcome?
+): Boolean =
+    !applied || rowShowsAppliedIcon || (outcome != null && outcome != IconApplyOutcome.APPLIED)
