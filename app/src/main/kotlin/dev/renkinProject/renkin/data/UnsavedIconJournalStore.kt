@@ -11,7 +11,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -105,15 +104,9 @@ class UnsavedIconJournalStore @Inject constructor(@ApplicationContext private va
     }
 
     private fun write(file: AtomicFile, text: String) {
-        root.mkdirs()
-        val stream = file.startWrite()
-        try {
-            stream.write(text.toByteArray(Charsets.UTF_8))
-            file.finishWrite(stream)
-        } catch (error: IOException) {
-            file.failWrite(stream)
-            throw error
-        }
+        if (root.mkdirs()) syncDirectory(context.noBackupFilesDir)
+        file.writeVerified(text.toByteArray(Charsets.UTF_8))
+        syncDirectory(root)
     }
 
     private companion object {
