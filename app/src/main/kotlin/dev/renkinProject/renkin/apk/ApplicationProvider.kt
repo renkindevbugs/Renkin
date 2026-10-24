@@ -1174,6 +1174,8 @@ class ApplicationProvider internal constructor(
         // Rows for apps not installed here (imported sets) survive saves untouched and
         // load normally once the app appears.
         val appKeys = applicationList.map { it.key }.toSet()
+        val referenceOptions by lazy { GenerationOptions.fromPreferences(prefs, context) }
+        val globalModifier by lazy { modifierFor(prefs, prefs.getBooleanValue(GlobalApplyExistingKey)) }
         for ((key, entry) in saved) {
             // Rows for apps not installed here, and rows whose artwork will not decode: both are
             // invisible to the list, and both are written back verbatim by the next save.
@@ -1194,7 +1196,7 @@ class ApplicationProvider internal constructor(
             // rebuild the icon from the pack. Failure keeps the row held back for retry.
             val isReference = entry.icon == null && entry.row.drawable.isEmpty() && entry.sourcePackName != null
             val storedIcon = if (isReference) {
-                val rebuilt = materializeReference(app, entry, prefs)
+                val rebuilt = materializeReference(app, entry, referenceOptions)
                 if (rebuilt == null) {
                     lockManager.lock(app.key, entry.row)
                     continue
@@ -1207,11 +1209,7 @@ class ApplicationProvider internal constructor(
                 storedIcon != null -> {
                     val baseIcon = entry.baseIcon ?: storedIcon
                     val rendered = if (isReference && !entry.isCustom) {
-                        renderGlobal(
-                            storedIcon,
-                            prefs,
-                            prefs.getBooleanValue(GlobalApplyExistingKey)
-                        )
+                        renderGlobal(storedIcon, globalModifier)
                     } else storedIcon
                     app.changeExport(
                         rendered,
@@ -1234,10 +1232,9 @@ class ApplicationProvider internal constructor(
 
     private suspend fun renderGlobal(
         base: IconPackDrawable,
-        preferences: Preferences,
-        apply: Boolean
+        modifier: GenerationOptions?
     ): IconPackDrawable {
-        val options = modifierFor(preferences, apply) ?: return base
+        val options = modifier ?: return base
         return try {
             iconGenService.applyModifier(base, options)
         } catch (error: CancellationException) {
@@ -1254,13 +1251,12 @@ class ApplicationProvider internal constructor(
     private suspend fun materializeReference(
         app: PackageInfoStruct,
         entry: RenkinPackStore.SavedEntry,
-        preferences: Preferences
+        sourceOptions: GenerationOptions
     ): IconPackDrawable? {
         val sourcePack = entry.sourcePackName ?: return null
         val drawableName = entry.row.sourceDrawableName.ifEmpty {
             appFilterDrawableName(sourcePack, app) ?: return null
         }
-        val sourceOptions = GenerationOptions.fromPreferences(preferences, context)
         val options = sourceOptions.withSource {
             copy(primarySource = Source.ICON_PACK, primaryIconPack = sourcePack)
         }.withModifiers {
@@ -1309,20 +1305,18 @@ class ApplicationProvider internal constructor(
         val stillLocked = lockManager.lockedPacksAmong(lockManager.lockedSourcePacks().toSet())
         val prefs = context.dataStore.getPreferencesAfterPendingWrites()
         val defaultColor = prefs.getDefaultIconColor(context)
+        val referenceOptions by lazy { GenerationOptions.fromPreferences(prefs, context) }
+        val globalModifier by lazy { modifierFor(prefs, prefs.getBooleanValue(GlobalApplyExistingKey)) }
         for ((key, row) in lockManager.lockedRowsSnapshot()) {
             currentCoroutineContext().ensureActive()
             if (row.sourcePackName in stillLocked) continue
             val app = applicationList.firstOrNull { it.key == key } ?: continue
             val entry = renkinPackStore.decodeRow(row, defaultColor)
             val isReference = entry.icon == null && entry.row.drawable.isEmpty() && entry.sourcePackName != null
-            val storedIcon = entry.icon ?: materializeReference(app, entry, prefs) ?: continue
+            val storedIcon = entry.icon ?: materializeReference(app, entry, referenceOptions) ?: continue
             val baseIcon = entry.baseIcon ?: storedIcon
             val rendered = if (isReference && !entry.isCustom) {
-                renderGlobal(
-                    storedIcon,
-                    prefs,
-                    prefs.getBooleanValue(GlobalApplyExistingKey)
-                )
+                renderGlobal(storedIcon, globalModifier)
             } else storedIcon
             editApplication(
                 app,
