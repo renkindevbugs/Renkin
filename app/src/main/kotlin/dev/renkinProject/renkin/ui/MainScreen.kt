@@ -356,17 +356,12 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // app list refreshed) regardless of which dialog/button triggered it.
     val toaster = LocalToaster.current
     val optionsViewModel: OptionsViewModel = hiltViewModel()
-    LaunchedEffect(optionsViewModel) {
-        optionsViewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
-    }
-    LaunchedEffect(viewModel) {
-        launch {
-            viewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
-        }
-        launch {
-            viewModel.installToastEvents.collect { message -> toaster.show(message) }
-        }
-    }
+    // Watch saves and checks outlive the Watch screen and quick-action sheet, so their toasts land here.
+    val watchViewModel: WatchViewModel = hiltViewModel()
+    CollectToasts(
+        toaster, optionsViewModel.toastEvents, viewModel.toastEvents,
+        texts = listOf(viewModel.installToastEvents, watchViewModel.toastEvents)
+    )
 
     // Undoable changes get a snackbar instead of a toast: a toast cannot be acted on, and the
     // whole point is the action. Only the newest offer is on screen, matching the single step

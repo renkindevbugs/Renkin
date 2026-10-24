@@ -1895,7 +1895,11 @@ follow-ups; CRC verifies transport integrity only.
 - **Fullscreen content width**: single-column screens use `CenteredFullscreenContent` so rows
   stay at a readable 720 dp maximum on tablets and occupy the wider side of a separating fold.
 - **Feedback**: plain notices go through the shared `Toaster` (`LocalToaster` + `ToastHost`);
-  a `SnackbarHost` exists only where an action is attached (upload gallery's Undo).
+  a `SnackbarHost` exists only where an action is attached (upload gallery's Undo). ViewModel
+  toast channels reach it through one `CollectToasts` per host. An outcome that decides UI
+  (closing the Watch rule editor or quick-action sheet) is never a toast or a bare SharedFlow:
+  `WatchViewModel.ruleSaveState` retains it with the opener's request id until that opener
+  acknowledges it, so a detached UI loses nothing and a new editor never takes an older result.
 - **Shapes**: use the tokens in `ui/theme/Shapes.kt` (`DialogShape`/`CardShape`/`FieldShape`/
   `InnerShape`/`IconShape`/`SwatchShape`, plus `iconTileShape(size)` for tiles whose corner is a
   quarter of their size) — no raw `RoundedCornerShape(...)` at call sites.

@@ -88,7 +88,9 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 
 /**
  * The hosting [MainActivity], provided at the root by MainActivity itself.
@@ -465,6 +467,19 @@ fun ToastHost(toaster: Toaster) {
         }
     }
     DisposableEffect(Unit) { onDispose { shown?.cancel() } }
+}
+
+/**
+ * Forwards ViewModel toast channels to [toaster] for as long as this host is composed: string
+ * resource ids in [sources], already formatted messages in [texts]. Use once per host.
+ */
+@Composable
+fun CollectToasts(toaster: Toaster, vararg sources: Flow<Int>, texts: List<Flow<String>> = emptyList()) {
+    val context = LocalContext.current
+    LaunchedEffect(toaster, *sources, *texts.toTypedArray()) {
+        sources.forEach { source -> launch { source.collect { toaster.show(context.getString(it)) } } }
+        texts.forEach { source -> launch { source.collect { toaster.show(it) } } }
+    }
 }
 /**
  * Position provider for tooltips that CLAMPS the popup into the window horizontally — the

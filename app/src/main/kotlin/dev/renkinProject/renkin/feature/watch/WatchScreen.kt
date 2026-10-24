@@ -106,7 +106,6 @@ import dev.renkinProject.renkin.packages.PermissionManager
 import dev.renkinProject.renkin.packages.notificationSettingsIntent
 import dev.renkinProject.renkin.ui.AppIcon
 import dev.renkinProject.renkin.ui.ConfirmDialog
-import dev.renkinProject.renkin.ui.LocalToaster
 import dev.renkinProject.renkin.ui.PackIconImage
 import dev.renkinProject.renkin.ui.RenkinAlertDialog
 import dev.renkinProject.renkin.ui.drawVerticalScrollbar
@@ -122,12 +121,13 @@ fun WatchScreen(
     highlightRuleId: Long? = null,
     onDismiss: () -> Unit
 ) {
-    val context = getCurrentContext()
     val viewModel: MainViewModel = hiltViewModel()
     val watchViewModel: WatchViewModel = hiltViewModel()
-    val toaster = LocalToaster.current
 
     val rules by watchViewModel.rules.collectAsStateWithLifecycle()
+    val saveState by watchViewModel.ruleSaveState.collectAsStateWithLifecycle()
+    val isSavingRule = saveState?.busy == true
+    val isChecking by watchViewModel.isChecking.collectAsStateWithLifecycle()
     val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
     // The watch checker reads the launcher's app list; hand-added apps are not on it.
     val apps = remember(applicationState.revision) { applicationState.applications.filterNot { it.isAddedTarget } }
@@ -163,6 +163,23 @@ fun WatchScreen(
     // null = list; otherwise the editor is open (editing this rule, or a new rule when blank)
     var showEditor by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<RuleWithDetails?>(null) }
+    var editorRequestId by remember { mutableStateOf(0L) }
+    fun openEditor(rule: RuleWithDetails?) {
+        editing = rule
+        editorRequestId = watchViewModel.newRequestId()
+        showEditor = true
+    }
+    fun closeEditor() {
+        showEditor = false
+        editing = null
+    }
+    // Only this opening's own outcome closes it; a failed save keeps the filled-in editor for a retry.
+    LaunchedEffect(saveState, editorRequestId) {
+        val outcome = saveState ?: return@LaunchedEffect
+        if (outcome.busy || outcome.requestId != editorRequestId) return@LaunchedEffect
+        if (outcome.status != WatchRuleSaveStatus.NOT_SAVED) closeEditor()
+        watchViewModel.acknowledgeRuleSave(outcome.requestId)
+    }
     var pendingDelete by remember { mutableStateOf<Long?>(null) }
     var pendingDeleteAllCompleted by remember { mutableStateOf(false) }
     var applySuggestionId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -183,10 +200,7 @@ fun WatchScreen(
                 // Back from the editor returns to the rule list rather than closing
                 // the whole watch screen
                 BackHandler(enabled = showEditor) {
-                    if (!watchViewModel.isSavingRule) {
-                        showEditor = false
-                        editing = null
-                    }
+                    if (!isSavingRule) closeEditor()
                 }
 
                 // Slide the editor in from the right like a forward navigation,
@@ -209,18 +223,12 @@ fun WatchScreen(
                         existing = editing,
                         apps = apps,
                         packs = packs,
-                        isSaving = watchViewModel.isSavingRule,
+                        isSaving = isSavingRule,
                         onClose = {
-                            if (!watchViewModel.isSavingRule) {
-                                showEditor = false
-                                editing = null
-                            }
+                            if (!isSavingRule) closeEditor()
                         },
                         onSave = { selApps, watchAll, selPacks ->
-                            watchViewModel.saveRule(editing, selApps, watchAll, selPacks) {
-                                showEditor = false
-                                editing = null
-                            }
+                            watchViewModel.saveRule(editorRequestId, editing, selApps, watchAll, selPacks)
                         }
                     )
                 } else {
@@ -229,20 +237,11 @@ fun WatchScreen(
                         highlightRuleId = highlightRuleId,
                         apps = apps,
                         packs = packs,
-                        isRefreshing = watchViewModel.isChecking,
-                        onRefresh = {
-                            watchViewModel.runCheck { found ->
-                                val msg = if (found == 0) {
-                                    context.getString(R.string.watchRefreshNone)
-                                } else {
-                                    context.getString(R.string.watchRefreshFound, found)
-                                }
-                                toaster.show(msg)
-                            }
-                        },
+                        isRefreshing = isChecking,
+                        onRefresh = { watchViewModel.runCheck() },
                         onClose = onDismiss,
-                        onAdd = { editing = null; showEditor = true },
-                        onEdit = { editing = it; showEditor = true },
+                        onAdd = { openEditor(null) },
+                        onEdit = { openEditor(it) },
                         onApply = { rule -> rule.suggestions.firstOrNull()?.id?.let { applySuggestionId = it } },
                         onDelete = { ruleId -> pendingDelete = ruleId },
                         onDeleteAllCompleted = { pendingDeleteAllCompleted = true },
