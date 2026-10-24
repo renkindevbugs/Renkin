@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.ui
 
+import android.os.SystemClock
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -165,7 +166,8 @@ import dev.renkinProject.renkin.feature.watch.WatchViewModel
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 
 /**
@@ -1236,18 +1238,37 @@ fun ApplicationItem(
                 // frames, which read as the icon jumping after it appeared.
                 val createdBitmap = rememberCreatedIconBitmap(app, 56.dp)
                 SideEffect { iconAnchor.resultBitmap = createdBitmap }
-                // An icon has landed here: a returning one shows at once; an applied one once the
-                // row draws it (or after a short cap, if the raster takes longer).
+                // An icon has landed here: a returning one shows at once; an applied one stays in
+                // the slot until the row draws it, unless its Apply failed or the reveal cap passes.
                 val landedDelivery = iconFlight?.takeIf {
                     it.delivery != null && it.phase == IconFlightPhase.HOME
                 }
+                val landedAt = remember(landedDelivery) { SystemClock.uptimeMillis() }
                 LaunchedEffect(landedDelivery, createdBitmap) {
-                    if (landedDelivery == null) return@LaunchedEffect
-                    val applied = landedDelivery.delivery?.applied == true
-                    if (applied && (createdBitmap == null || createdBitmap === landedDelivery.resultBefore)) {
-                        delay(DELIVERY_REVEAL_CAP_MS)
+                    val delivery = landedDelivery?.delivery ?: return@LaunchedEffect
+                    val rowShowsAppliedIcon = createdBitmap != null && createdBitmap !== landedDelivery.resultBefore
+                    val remaining = DELIVERY_REVEAL_CAP_MS - (SystemClock.uptimeMillis() - landedAt)
+                    // Timing out is the reveal cap: the slot then shows whatever the row has.
+                    withTimeoutOrNull(remaining.coerceAtLeast(0)) {
+                        viewModel.iconApplyResults
+                            .map { results -> delivery.applyRequestId?.let(results::get) }
+                            .first { outcome -> releasesDelivery(delivery.applied, rowShowsAppliedIcon, outcome) }
                     }
+                    delivery.applyRequestId?.let(viewModel::acknowledgeIconApply)
                     iconFlight = null
+                }
+                // Rasterised while the icon is still flying, so the landed picture is ready at once.
+                val deliveredBitmap = rememberIconBitmap(app, iconFlight?.delivery?.takeIf { it.applied }?.icon, 56.dp)
+                val pendingApplyIcon = iconFlight.landedApplyIcon
+                if (pendingApplyIcon != null) {
+                    Image(
+                        painter = deliveredBitmap?.let { BitmapPainter(it) } ?: pendingApplyIcon.getPainter(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(IconShape)
+                            .background(bgColor)
+                    )
                 }
                 // Fixed frame for every state: the edit bubble is smaller than an icon, and
                 // letting Crossfade shrink the slot around it slid the bubble into place after
@@ -1255,7 +1276,9 @@ fun ApplicationItem(
                 Crossfade(
                     targetState = createdBitmap,
                     label = "iconPreview",
-                    modifier = Modifier.size(56.dp)
+                    modifier = Modifier
+                        .size(56.dp)
+                        .graphicsLayer { alpha = if (pendingApplyIcon != null) 0f else 1f }
                 ) { preview ->
                   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (preview != null) {
@@ -1445,7 +1468,11 @@ fun OpenAppOptions(
 
     OptionsDialog(iconPacks, session, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, modifierRecipe, modifierInput ->
         // Only stores the icon: the dialog closes itself through closeEditor, after any flight.
-        viewModel.applyIcon(session.application, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, expected, modifierRecipe, modifierInput)
+        val requestId = flight?.let { viewModel.newIconApplyRequestId().also { id -> it.applyRequestId = id } }
+        viewModel.applyIcon(
+            session.application, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName,
+            sourceUrl, expected, modifierRecipe, modifierInput, requestId
+        )
     }, closeEditor, onIconClear = {
         closeEditor()
         viewModel.resetIcon(session.application, expected)
