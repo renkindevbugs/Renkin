@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -47,6 +48,8 @@ import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconGenerationResult
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.ui.GlobalIconEditorDraft
+import java.util.concurrent.atomic.AtomicReference
 import dev.renkinProject.renkin.ui.GlobalModifierSnapshot
 import dev.renkinProject.renkin.ui.GlobalModifierState
 import dev.renkinProject.renkin.ui.GlobalOptionsScreen
@@ -87,6 +90,22 @@ import kotlinx.coroutines.withContext
 class GlobalOptionsActivity : ComponentActivity() {
 
     private val toaster = Toaster()
+    private val viewModel: GlobalOptionsViewModel by viewModels()
+
+    override fun finish() {
+        if (isFinishing) return
+        viewModel.requestClose()
+        if (viewModel.iconApplyRunning) return
+        setResult(
+            RESULT_OK,
+            Intent()
+                .withProfileSession(viewModel.screenSession)
+                .putExtra(EXTRA_SESSION_LOST, viewModel.sessionLost)
+                .putStringArrayListExtra(EXTRA_EDITED_KEYS, ArrayList(viewModel.editedKeys))
+                .putExtra(EXTRA_GLOBAL_APPLIED, viewModel.appliedGlobal)
+        )
+        super.finish()
+    }
 
     companion object {
         /** Keys hand-edited in the per-icon modifier dialog — MainViewModel marks them updated. */
@@ -113,7 +132,6 @@ class GlobalOptionsActivity : ComponentActivity() {
             val style = SystemBarStyle.auto(Color.Transparent.toArgb(), Color.Transparent.toArgb()) { darkMode }
             enableEdgeToEdge(style, style)
 
-            val viewModel: GlobalOptionsViewModel = hiltViewModel()
             val optionsViewModel: OptionsViewModel = hiltViewModel()
             val presetsViewModel: PresetLibraryViewModel = hiltViewModel()
             val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
@@ -125,17 +143,12 @@ class GlobalOptionsActivity : ComponentActivity() {
             // if that changes underneath, close and hand back what was already applied rather
             // than let a Save write one profile's staged recipe into another.
             LaunchedEffect(profileChanged) {
-                if (profileChanged) {
-                    setResult(
-                        RESULT_OK,
-                        Intent()
-                            .withProfileSession(viewModel.screenSession)
-                            .putExtra(EXTRA_SESSION_LOST, viewModel.sessionLost)
-                            .putStringArrayListExtra(EXTRA_EDITED_KEYS, ArrayList(viewModel.editedKeys))
-                            .putExtra(EXTRA_GLOBAL_APPLIED, viewModel.appliedGlobal)
-                    )
-                    finish()
-                }
+                if (profileChanged) finish()
+            }
+            val iconApplyState by viewModel.iconApplyState.collectAsStateWithLifecycle()
+            val closeReady = viewModel.closeRequested && iconApplyState !is GlobalIconApplyState.Running
+            LaunchedEffect(closeReady) {
+                if (closeReady) finish()
             }
 
             LaunchedEffect(Unit) {
@@ -164,17 +177,7 @@ class GlobalOptionsActivity : ComponentActivity() {
                             onDelete = presetsViewModel::deleteModifierPreset
                         ) {
                             RenkinTheme(darkMode) {
-                                GlobalOptionsScreen(onClose = { editedKeys, applied ->
-                                    setResult(
-                                        RESULT_OK,
-                                        Intent()
-                                            .withProfileSession(viewModel.screenSession)
-                                            .putExtra(EXTRA_SESSION_LOST, viewModel.sessionLost)
-                                            .putStringArrayListExtra(EXTRA_EDITED_KEYS, ArrayList(editedKeys))
-                                            .putExtra(EXTRA_GLOBAL_APPLIED, applied)
-                                    )
-                                    finish()
-                                })
+                                GlobalOptionsScreen(onClose = { finish() })
                                 ToastHost(toaster)
                             }
                         }
@@ -310,7 +313,72 @@ class GlobalOptionsViewModel @Inject constructor(
     }
 
     /** Keys hand-edited via the per-icon dialog in this screen session. */
-    val editedKeys = mutableSetOf<String>()
+    private val committedIconKeys = AtomicReference<Set<String>>(emptySet())
+    val editedKeys: Set<String> get() = committedIconKeys.get()
+
+    internal var iconEditor by mutableStateOf<GlobalIconEditorDraft?>(null)
+        private set
+    private var iconSourceJob: Job? = null
+    private var nextIconEditor = 0L
+    private var nextIconApply = 0L
+    private val iconApplyOwner = GlobalIconApplyOwner(viewModelScope, ::commitIconEdit, ::reportIconApplyFailure)
+    internal val iconApplyState = iconApplyOwner.state
+    val iconApplyRunning: Boolean get() = iconApplyOwner.running
+    var closeRequested by mutableStateOf(false)
+        private set
+
+    fun requestClose() { closeRequested = true }
+
+    internal fun openIconEditor(app: PackageInfoStruct) {
+        val expected = screenSession ?: return
+        if (iconEditor != null || iconApplyRunning || closeRequested || globalApplyProgress != null ||
+            !appProvider.isCurrentSession(expected)) return
+        val live = appProvider.applicationState.value.applications.firstOrNull { it.key == app.key } ?: return
+        val editor = GlobalIconEditorDraft(++nextIconEditor, expected, live)
+        iconEditor = editor
+        iconSourceJob = viewModelScope.launch {
+            try {
+                val bitmap = withContext(Dispatchers.Default) {
+                    installedIcons.load(live.iconSource)?.drawable?.toSafeBitmapOrNull()
+                }
+                if (iconEditor === editor) editor.installSource(bitmap)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.error("GlobalOptionsViewModel", "Loading an editor source failed", error)
+                _toastEvents.trySend(R.string.profileOperationFailed)
+            }
+        }
+    }
+
+    internal fun dismissIconEditor(editorId: Long) {
+        if (iconEditor?.id != editorId || iconApplyRunning) return
+        (iconApplyState.value as? GlobalIconApplyState.Finished)?.let { iconApplyOwner.consume(it.id) }
+        iconSourceJob?.cancel()
+        iconSourceJob = null
+        iconEditor = null
+    }
+
+    internal fun applyIconEditor(
+        editorId: Long,
+        options: GenerationOptions,
+        source: IconPackDrawable,
+        icon: IconPackDrawable
+    ): Boolean {
+        val editor = iconEditor?.takeIf { it.id == editorId } ?: return false
+        if (closeRequested || !appProvider.isCurrentSession(editor.session) || iconApplyRunning ||
+            icon === source || options == editor.openingOptions || !editor.ownsPreview(options, source)) return false
+        val id = GlobalIconApplyId(editor.id, ++nextIconApply, editor.session, editor.app.key,
+            editor.captureRevision(options))
+        return iconApplyOwner.submit(GlobalIconApplyRequest(id, editor.app, options, icon, editor.app.sourcePackName))
+    }
+
+    internal fun consumeIconApply(id: GlobalIconApplyId) {
+        val editor = iconEditor ?: return
+        if (editor.id != id.editorId || editor.session != id.session || editor.app.key != id.targetKey) return
+        val result = iconApplyOwner.consume(id) ?: return
+        if (result.applied) dismissIconEditor(editor.id)
+    }
 
     /** True once a Save baked and persisted the global layer. */
     var appliedGlobal = false
@@ -356,7 +424,7 @@ class GlobalOptionsViewModel @Inject constructor(
 
     /** Saves the staged draft; the outcome arrives as a toast and as the updated [baseline]. */
     fun saveGlobalStyle(): Job? {
-        if (saveJob?.isActive == true || globalApplyProgress != null || !draft.initialized) return null
+        if (saveJob?.isActive == true || globalApplyProgress != null || iconEditor != null || !draft.initialized) return null
         if (profileChanged) {
             _toastEvents.trySend(expiredSessionNotice)
             return null
@@ -498,56 +566,28 @@ class GlobalOptionsViewModel @Inject constructor(
         return deferred.await()
     }
 
-    /**
-     * Stores a hand-tuned icon from the per-icon modifier dialog: the same origin gate and
-     * reviewed-icon commit as MainViewModel.applyIcon, but the updated-keys bookkeeping stays local
-     * and travels back via the activity result. Returns false when the pick is locked.
-     */
-    suspend fun applyEditedIcon(
-        app: PackageInfoStruct,
-        icon: IconPackDrawable,
-        sourcePackName: String?
-    ): Boolean {
-        val expected = screenSession ?: return false
-        return try {
-            when (appProvider.applyPickedIcon(expected, app, icon, sourcePackName) { live, origin, rendered ->
-                live.changeExport(
-                    rendered, sourcePackName = origin, isRefreshMade = false,
-                    isCustom = true, isLegacy = false, baseIcon = icon,
-                    sourceUrl = live.sourceUrl
-                )
-            }) {
-                IconApplyOutcome.APPLIED ->
-                    appProvider.commitSessionState(expected) {
-                        if (appProvider.applicationList.any { it.key == app.key && it.baseIcon === icon }) {
-                            editedKeys += app.key
-                        }
-                    }.also { committed ->
-                        if (!committed) _toastEvents.trySend(expiredSessionNotice)
-                    }
-                IconApplyOutcome.LOCKED -> {
-                    _toastEvents.trySend(R.string.iconOriginLocked)
-                    false
-                }
-                IconApplyOutcome.PROFILE_CHANGED -> {
-                    _toastEvents.trySend(expiredSessionNotice)
-                    false
-                }
-                IconApplyOutcome.TARGET_GONE -> {
-                    _toastEvents.trySend(R.string.iconEditTargetGone)
-                    false
-                }
-                IconApplyOutcome.FAILED -> {
-                    _toastEvents.trySend(R.string.profileOperationFailed)
-                    false
-                }
+    private suspend fun commitIconEdit(request: GlobalIconApplyRequest, onCommitted: () -> Unit): IconApplyOutcome =
+        appProvider.applyPickedIcon(
+            request.id.session, request.app, request.icon, request.sourcePackName,
+            onCommitted = {
+                committedIconKeys.updateAndGet { it + request.id.targetKey }
+                onCommitted()
             }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            Log.error("GlobalOptionsViewModel", "Editing an icon failed", error)
-            _toastEvents.trySend(R.string.profileOperationFailed)
-            false
+        ) { live, origin, rendered ->
+            live.changeExport(
+                rendered, sourcePackName = origin, isRefreshMade = false,
+                isCustom = true, isLegacy = false, baseIcon = request.icon,
+                sourceUrl = live.sourceUrl
+            )
         }
+
+    private fun reportIconApplyFailure(outcome: IconApplyOutcome, error: Exception?) {
+        if (error != null) Log.error("GlobalOptionsViewModel", "Editing an icon failed", error)
+        _toastEvents.trySend(when (outcome) {
+            IconApplyOutcome.LOCKED -> R.string.iconOriginLocked
+            IconApplyOutcome.PROFILE_CHANGED -> expiredSessionNotice
+            IconApplyOutcome.TARGET_GONE -> R.string.iconEditTargetGone
+            else -> R.string.profileOperationFailed
+        })
     }
 }

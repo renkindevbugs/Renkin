@@ -9,6 +9,9 @@ import androidx.activity.ComponentActivity
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
 import dev.renkinProject.renkin.GlobalOptionsViewModel
+import dev.renkinProject.renkin.GlobalIconApplyState
+import dev.renkinProject.renkin.drawable.BitmapIconDrawable
+import android.graphics.Bitmap
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.GlobalApplyExistingKey
 import androidx.datastore.preferences.core.edit
@@ -601,6 +604,129 @@ class ProfileSessionIntegrityTest {
             release.complete(Unit)
             blocker.join()
             controller.pause().stop().destroy()
+        }
+    }
+
+    private fun globalEditorIcon() = BitmapIconDrawable(Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888))
+
+    private suspend fun openGlobalEditor(vm: GlobalOptionsViewModel): dev.renkinProject.renkin.ui.GlobalIconEditorDraft {
+        awaitMain { vm.baseline != null }
+        val app = stageEditorApplication()
+        provider.commitSessionState(provider.sessionToken) { }
+        vm.openIconEditor(app)
+        return requireNotNull(vm.iconEditor).also { it.installSource(globalEditorIcon().toBitmap()) }
+    }
+
+    @Test fun globalIconApplyCapturesTheDraftAndBlocksDismissAndDuplicateSubmit() = runBlocking {
+        withTimeout(20_000) {
+            provider.ensureInitialized()
+            val vm = globalOptionsViewModel()
+            val editor = openGlobalEditor(vm)
+            editor.adjustments.iconScale = 0.8f
+            val options = editor.options
+            val source = requireNotNull(editor.source)
+            val icon = globalEditorIcon()
+            val started = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val blocker = launch(Dispatchers.Default) {
+                StorageOperationGate.run { started.complete(Unit); release.await() }
+            }
+            try {
+                withTimeout(5_000) { started.await() }
+                assertTrue(vm.applyIconEditor(editor.id, options, source, icon))
+                val running = vm.iconApplyState.value as GlobalIconApplyState.Running
+                assertEquals(options, running.request.options)
+                assertEquals(editor.session, running.request.id.session)
+                assertEquals(editor.app.key, running.request.id.targetKey)
+                assertEquals(1L, running.request.id.draftRevision)
+                assertFalse(vm.applyIconEditor(editor.id, options, source, icon))
+                vm.dismissIconEditor(editor.id)
+                assertSame(editor, vm.iconEditor)
+                vm.requestClose()
+                assertTrue(vm.closeRequested && vm.iconApplyRunning)
+                editor.adjustments.iconScale = 0.6f
+                release.complete(Unit)
+                awaitMain { vm.iconApplyState.value is GlobalIconApplyState.Finished }
+                assertEquals(setOf(editor.app.key), vm.editedKeys)
+                assertSame(icon, provider.applicationState.value.applications.single().baseIcon)
+                val result = vm.iconApplyState.value as GlobalIconApplyState.Finished
+                assertTrue(result.applied)
+                vm.consumeIconApply(result.id.copy(editorId = editor.id + 1))
+                assertSame(editor, vm.iconEditor)
+                vm.consumeIconApply(result.id)
+                assertEquals(null, vm.iconEditor)
+                assertEquals(GlobalIconApplyState.Idle, vm.iconApplyState.value)
+            } finally { release.complete(Unit); blocker.join() }
+        }
+    }
+
+    @Test fun globalIconDraftSurvivesActivityRecreationButIsNotInSavedState() = runBlocking {
+        withTimeout(20_000) {
+            provider.ensureInitialized()
+            val handle = SavedStateHandle()
+            val vm = globalOptionsViewModel(handle)
+            val editor = openGlobalEditor(vm)
+            editor.adjustments.iconScale = 0.7f
+            editor.useVector = true
+            val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup()
+            try {
+                controller.get().viewModelStore.put("global", vm)
+                controller.recreate()
+                assertSame(vm, controller.get().viewModelStore.get("global"))
+                assertSame(editor, vm.iconEditor)
+                assertEquals(0.7f, requireNotNull(vm.iconEditor).adjustments.iconScale)
+                assertTrue(requireNotNull(vm.iconEditor).useVector)
+                val restored = SavedStateHandle(handle.keys().associateWith { handle.get<Any?>(it) })
+                assertEquals(null, globalOptionsViewModel(restored).iconEditor)
+            } finally { controller.pause().stop().destroy() }
+        }
+    }
+
+    @Test fun globalIconApplyFailureRetainsTheEditedDraftForRetry() = runBlocking {
+        withTimeout(20_000) {
+            provider.ensureInitialized()
+            val vm = globalOptionsViewModel()
+            val editor = openGlobalEditor(vm)
+            editor.adjustments.iconScale = 0.8f
+            ApplicationProvider::class.java.getDeclaredField("stagedApplications").apply { isAccessible = true }
+                .set(provider, emptyList<PackageInfoStruct>().toPersistentList())
+            provider.commitSessionState(provider.sessionToken) { }
+            assertTrue(vm.applyIconEditor(editor.id, editor.options, requireNotNull(editor.source), globalEditorIcon()))
+            awaitMain { vm.iconApplyState.value is GlobalIconApplyState.Finished }
+            val failed = vm.iconApplyState.value as GlobalIconApplyState.Finished
+            assertFalse(failed.applied)
+            assertTrue(vm.editedKeys.isEmpty())
+            vm.consumeIconApply(failed.id)
+            assertSame(editor, vm.iconEditor)
+            assertEquals(0.8f, editor.adjustments.iconScale)
+            stageEditorApplication()
+            provider.commitSessionState(provider.sessionToken) { }
+            assertTrue(vm.applyIconEditor(editor.id, editor.options, requireNotNull(editor.source), globalEditorIcon()))
+            awaitMain { vm.iconApplyState.value is GlobalIconApplyState.Finished }
+            val retried = vm.iconApplyState.value as GlobalIconApplyState.Finished
+            assertTrue(retried.applied)
+            assertNotEquals(failed.id.operation, retried.id.operation)
+            assertEquals(failed.id.draftRevision, retried.id.draftRevision)
+            vm.consumeIconApply(failed.id)
+            assertSame(editor, vm.iconEditor)
+            vm.consumeIconApply(retried.id)
+            assertEquals(null, vm.iconEditor)
+        }
+    }
+
+    @Test fun globalIconApplyRejectsStaleControlsAndSourceBeforeClaiming() = runBlocking {
+        withTimeout(20_000) {
+            provider.ensureInitialized()
+            val vm = globalOptionsViewModel()
+            val editor = openGlobalEditor(vm)
+            editor.adjustments.iconScale = 0.8f
+            val staleOptions = editor.options
+            editor.adjustments.iconScale = 0.6f
+            assertFalse(vm.applyIconEditor(editor.id, staleOptions, requireNotNull(editor.source), globalEditorIcon()))
+            assertFalse(vm.applyIconEditor(editor.id, editor.options, globalEditorIcon(), globalEditorIcon()))
+            assertFalse(vm.applyIconEditor(editor.id + 1, editor.options, requireNotNull(editor.source), globalEditorIcon()))
+            assertEquals(GlobalIconApplyState.Idle, vm.iconApplyState.value)
+            assertTrue(vm.editedKeys.isEmpty())
         }
     }
 

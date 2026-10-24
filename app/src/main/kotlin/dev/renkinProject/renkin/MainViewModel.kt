@@ -932,7 +932,7 @@ class MainViewModel @Inject constructor(
         edit: (live: PackageInfoStruct, origin: String?, rendered: IconPackDrawable?) -> PackageInfoStruct
     ) {
         launchProfileOperation(expected, serialize = false) {
-            when (appProvider.applyPickedIcon(expected, app, icon, sourcePackName, edit)) {
+            when (appProvider.applyPickedIcon(expected, app, icon, sourcePackName, edit = edit)) {
                 IconApplyOutcome.APPLIED -> markUpdated(expected, app, icon)
                 IconApplyOutcome.LOCKED -> _toastEvents.trySend(R.string.iconOriginLocked)
                 IconApplyOutcome.PROFILE_CHANGED -> _toastEvents.trySend(expected.expiredSessionMessage(sessionToken))

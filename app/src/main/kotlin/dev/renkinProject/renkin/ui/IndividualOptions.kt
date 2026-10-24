@@ -730,15 +730,7 @@ internal fun OptionsDialog(
                                         toaster.show(selectIconMessage)
                                     } else {
                                         externalEditorScope.launch {
-                                            val bitmap = withContext(Dispatchers.Default) {
-                                                icon.toModifierBitmap()
-                                            }
-                                            val sharedIcon = viewModel.shareIconForEditing(bitmap)
-                                            val opened = when {
-                                                sharedIcon == null -> false
-                                                toolbox -> openInImageToolbox(context, sharedIcon)
-                                                else -> editInAnotherApp(context, sharedIcon)
-                                            }
+                                            val opened = openExternalIconEditor(context, icon, toolbox, viewModel::shareIconForEditing)
                                             if (!opened) toaster.show(externalEditorError)
                                         }
                                     }

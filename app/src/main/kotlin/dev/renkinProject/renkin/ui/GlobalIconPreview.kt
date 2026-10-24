@@ -37,17 +37,18 @@ internal fun rememberGlobalIconPreview(
     options: GenerationOptions,
     owner: ProfileSessionToken?,
     active: Boolean,
+    openingOptions: GenerationOptions? = null,
     render: suspend (IconPackDrawable, GenerationOptions) -> IconPackDrawable
 ): GlobalIconPreviewState {
     // Capture before the asynchronous source arrives, including edits made while it loads.
-    val openingOptions = remember(owner) { options }
+    val initialOptions = remember(owner) { openingOptions ?: options }
     val request = remember(source, options, owner, active) {
         GlobalIconPreviewRequest(source, options, owner, active)
     }
     val currentRender by rememberUpdatedState(render)
     val result by produceState<GlobalIconPreviewResult?>(null, request) {
         val input = request.source ?: return@produceState
-        if (!request.active || request.options == openingOptions) return@produceState
+        if (!request.active || request.options == initialOptions) return@produceState
         val rendered = try {
             val renderRequest = currentRender
             withContext(Dispatchers.Default) { renderRequest(input, request.options) }
@@ -62,7 +63,7 @@ internal fun rememberGlobalIconPreview(
     // produceState retains its last value until the next effect runs. An old result must not
     // enable Apply after a control, source or session changes, even for that first frame.
     val accepted = result?.takeIf { it.request === request }
-    val edited = options != openingOptions
+    val edited = options != initialOptions
     val ready = active && source != null && edited
     return GlobalIconPreviewState(
         icon = if (ready) accepted?.icon ?: source else source,

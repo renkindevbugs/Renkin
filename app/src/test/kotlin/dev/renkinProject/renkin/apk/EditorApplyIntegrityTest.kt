@@ -36,6 +36,9 @@ import dev.renkinProject.renkin.icon.creator.globalModifierOptions
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -135,6 +138,37 @@ class EditorApplyIntegrityTest {
                 baseIcon = icon, sourceUrl = "https://example.com/icon.svg"
             ).changeCalendar(true, "day_", context.packageName)
         }
+
+    @Test fun pickedCommitAcknowledgesBeforeItsCancelledReturn() = runBlocking {
+        val app = initializeApp()
+        val icon = draft()
+        val acknowledged = AtomicBoolean(false)
+        val applying = launch(Dispatchers.Default) {
+            val job = currentCoroutineContext().job
+            provider.applyPickedIcon(provider.sessionToken, app, icon, null, onCommitted = {
+                acknowledged.set(true)
+                job.cancel()
+            }) { live, origin, rendered ->
+                live.changeExport(rendered, sourcePackName = origin, baseIcon = icon, isCustom = true)
+            }
+        }
+        applying.join()
+        assertTrue(applying.isCancelled)
+        assertTrue(acknowledged.get())
+        assertSame(icon, provider.applicationState.value.applications.single().baseIcon)
+    }
+
+    @Test fun expiredPickNeverAcknowledgesACommit() = runBlocking {
+        val app = initializeApp()
+        val original = provider.sessionToken
+        provider.reloadActiveProfile()
+        var acknowledged = false
+        val result = provider.applyPickedIcon(original, app, draft(), null, onCommitted = {
+            acknowledged = true
+        }) { _, _, _ -> error("An expired session must not edit") }
+        assertEquals(IconApplyOutcome.PROFILE_CHANGED, result)
+        assertFalse(acknowledged)
+    }
 
     private fun reference(isCustom: Boolean = true) = DbApplication(
         packageName = context.packageName, activityName = "${context.packageName}.TestActivity",
