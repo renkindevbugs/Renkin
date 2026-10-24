@@ -57,6 +57,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -570,7 +571,9 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     }
 
     editApp?.let { app ->
-        GlobalIconEditDialog(app = app, onDismiss = { editApp = null })
+        key(app.key, viewModel.screenSession) {
+            GlobalIconEditDialog(app = app, onDismiss = { editApp = null })
+        }
     }
 }
 
@@ -887,9 +890,11 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
 
     // The icon the modifiers act on: the stored icon, or the app's own launcher icon for
     // apps that don't have one yet.
-    val heroBitmap by produceState<Bitmap?>(null, app.iconSource) {
-        value = withContext(Dispatchers.Default) {
-            viewModel.installedIcons.load(app.iconSource)?.drawable?.toSafeBitmapOrNull()
+    val heroBitmap by key(app.iconSource) {
+        produceState<Bitmap?>(null) {
+            value = withContext(Dispatchers.Default) {
+                viewModel.installedIcons.load(app.iconSource)?.drawable?.toSafeBitmapOrNull()
+            }
         }
     }
     val base = remember(app, heroBitmap) {
@@ -944,25 +949,18 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         render = renderWith
     )
 
-    var preview by remember { mutableStateOf(base) }
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
+    val owner = viewModel.screenSession
+    val previewState = rememberGlobalIconPreview(
+        source = base,
+        options = options,
+        owner = owner,
+        active = runtimeState.ready && owner != null && owner == runtimeState.sessionToken,
+        render = viewModel::applyModifier
+    )
+    val preview = previewState.icon
+    val generating = previewState.generating
     var enlarged by remember { mutableStateOf(false) }
-    var generating by remember { mutableStateOf(false) }
-    // Skip the very first pass: an untouched run through applyModifier would needlessly
-    // rasterise a stored vector icon, and Apply must stay disabled until an actual edit.
-    var touched by remember { mutableStateOf(false) }
-    LaunchedEffect(options) {
-        val source = base ?: return@LaunchedEffect
-        if (!touched) {
-            touched = true
-            preview = source
-            return@LaunchedEffect
-        }
-        generating = true
-        preview = withContext(Dispatchers.Default) {
-            runCatching { viewModel.applyModifier(source, options) }.getOrDefault(source)
-        }
-        generating = false
-    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -1010,7 +1008,7 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                                 onDismiss()
                             }
                         },
-                        enabled = preview != null && !generating && preview !== base,
+                        enabled = previewState.canApply,
                         shape = dev.renkinProject.renkin.ui.theme.FieldShape
                     ) {
                         Text(stringResource(R.string.apply))
