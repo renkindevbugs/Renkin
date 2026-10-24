@@ -10,6 +10,7 @@ import dev.renkinProject.renkin.data.UnsavedIconJournalEntry
 import dev.renkinProject.renkin.data.UnsavedIconJournalStore
 import dev.renkinProject.renkin.data.UnsavedSessionMarker
 import dev.renkinProject.renkin.data.UnsavedSessionMarkerStore
+import dev.renkinProject.renkin.data.transfer.BackupOsShadow
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import kotlinx.collections.immutable.persistentListOf
@@ -34,7 +35,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [33])
+@Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 class UnsavedSessionMonitorTest {
     private val context = RuntimeEnvironment.getApplication()
     private val store = UnsavedSessionMarkerStore(context)

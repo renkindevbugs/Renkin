@@ -1,12 +1,15 @@
 package dev.renkinProject.renkin.data
 
 import android.app.Application
+import dev.renkinProject.renkin.data.transfer.BackupOsShadow
 import kotlinx.coroutines.runBlocking
 import org.json.JSONException
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.After
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -14,10 +17,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.io.File
+import java.io.IOException
 import java.lang.reflect.Modifier
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [33])
+@Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 class UnsavedIconJournalStoreTest {
     private val context = RuntimeEnvironment.getApplication()
     private val store = UnsavedIconJournalStore(context)
@@ -36,6 +40,51 @@ class UnsavedIconJournalStoreTest {
 
     @Before fun clear() {
         File(context.noBackupFilesDir, "unsaved-journal").deleteRecursively()
+        File(context.noBackupFilesDir, "unsaved-session.json").delete()
+    }
+
+    @After fun resetSyncHook() { BackupOsShadow.beforeDirectorySync = null }
+
+    @Test fun journalDirectoryIsSyncedAfterTheJournalIsPublished() = runBlocking {
+        val root = File(context.noBackupFilesDir, "unsaved-journal")
+        val published = mutableListOf<Boolean>()
+        BackupOsShadow.beforeDirectorySync = { path ->
+            if (path == root.canonicalPath || path == root.path) published += File(root, "current.json").isFile
+        }
+
+        store.writeCurrent(journal("p", 7, "a"))
+
+        assertEquals(listOf(true), published)
+    }
+
+    @Test fun journalWhoseRenameSilentlyFailsIsReported() = runBlocking {
+        // A non-empty directory in the journal's place makes AtomicFile's rename fail; it only logs that.
+        File(context.noBackupFilesDir, "unsaved-journal/current.json").apply { mkdirs() }.resolve("child").writeText("x")
+
+        val error = runCatching { store.writeCurrent(journal("p", 7, "a")) }.exceptionOrNull()
+
+        assertTrue(error is IOException)
+    }
+
+    @Test fun sessionMarkerIsVerifiedAndItsDirectorySynced() = runBlocking {
+        val markers = UnsavedSessionMarkerStore(context)
+        val synced = mutableListOf<String>()
+        BackupOsShadow.beforeDirectorySync = { synced += it }
+        val marker = UnsavedSessionMarker("p", 7, editedCount = 2, refreshedCount = 1)
+
+        markers.write(marker)
+
+        assertEquals(marker, markers.read())
+        assertTrue(synced.any { File(it).canonicalPath == context.noBackupFilesDir.canonicalPath })
+    }
+
+    @Test fun sessionMarkerWhoseRenameSilentlyFailsIsReported() = runBlocking {
+        File(context.noBackupFilesDir, "unsaved-session.json").apply { mkdirs() }.resolve("child").writeText("x")
+
+        val error = runCatching { UnsavedSessionMarkerStore(context).write(UnsavedSessionMarker("p", 7, 1, 0)) }.exceptionOrNull()
+
+        File(context.noBackupFilesDir, "unsaved-session.json").deleteRecursively()
+        assertTrue(error is IOException)
     }
 
     @Test fun rowCodecCoversEveryColumn() {

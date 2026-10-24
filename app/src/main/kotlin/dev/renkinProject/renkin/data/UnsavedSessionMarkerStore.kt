@@ -10,7 +10,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
-import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -45,15 +44,8 @@ class UnsavedSessionMarkerStore @Inject constructor(@ApplicationContext private 
     } }
 
     suspend fun write(marker: UnsavedSessionMarker) = mutex.withLock { withContext(Dispatchers.IO) {
-        val bytes = encode(marker).toByteArray(Charsets.UTF_8)
-        val stream = file.startWrite()
-        try {
-            stream.write(bytes)
-            file.finishWrite(stream)
-        } catch (error: IOException) {
-            file.failWrite(stream)
-            throw error
-        }
+        file.writeVerified(encode(marker).toByteArray(Charsets.UTF_8))
+        syncDirectory(context.noBackupFilesDir)
     } }
 
     private fun encode(marker: UnsavedSessionMarker): String = JSONObject()
