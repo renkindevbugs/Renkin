@@ -160,10 +160,6 @@ class IconPackBuilder(
         return true
     }
 
-    fun getIconPackName(): String {
-        return iconPackName
-    }
-
     suspend fun buildAndSign(
         themed: Boolean,
         iconColor: String,

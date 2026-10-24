@@ -222,18 +222,6 @@ class IconPackRepository(
     fun matchedAppCounts(): Map<String, Int> =
         appDrawableNamesByPackage.mapValues { (_, drawables) -> drawables.size }
 
-    /** Drawables every installed app has in [iconPack], keyed by app. */
-    fun getAppDrawables(iconPack: String): Map<InstalledApplication, ResourceDrawable> {
-        if (iconPack == "") return emptyMap()
-        val elements = appFilterElementsByPackage[iconPack] ?: return emptyMap()
-
-        return appManager.getDrawableFromAppFilterElements(
-            iconPack,
-            installedApplications,
-            elements
-        )
-    }
-
     internal fun captureAppDrawables(iconPack: String): () -> Map<InstalledApplication, ResourceDrawable> {
         val elements = appFilterElementsByPackage[iconPack]?.toList() ?: emptyList()
         val applications = installedApplications.toList()
@@ -288,17 +276,6 @@ class IconPackRepository(
         val hasFirst = resourceResolver.hasDrawable(iconPackageName, prefix + "1") ||
             resourceResolver.hasDrawable(iconPackageName, prefix + "01")
         return hasFirst && resourceResolver.hasDrawable(iconPackageName, prefix + "28")
-    }
-
-    /**
-     * Returns the calendar prefix for [app] in [iconPackageName] (e.g. `"google_cal_"`),
-     * or null if the pack doesn't declare a calendar entry for that app.
-     * Reads from the already-loaded [appFilterElements] — no I/O.
-     */
-    fun calendarPrefixFor(app: InstalledApplication, iconPackageName: String): String? {
-        val elements = appFilterElementsByPackage[iconPackageName] ?: return null
-        val component = app.toComponentInfo()
-        return elements.filterIsInstance<RawCalendar>().find { it.component == component }?.prefix
     }
 
     /** Builds one collision-free export from both global and per-app calendar selections. */
