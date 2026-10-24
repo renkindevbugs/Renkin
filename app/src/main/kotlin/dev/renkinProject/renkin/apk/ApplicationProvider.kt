@@ -1088,19 +1088,12 @@ class ApplicationProvider internal constructor(
                         val decoded = renkinPackStore.decodeRow(row, defaultColor)
                         if (decoded.decodeFailed) continue
                         val icon = decoded.icon ?: decoded.baseIcon
-                        val withIcon = if (icon == null) app.changeExport(null) else app.changeExport(
-                            icon,
-                            isFallback = decoded.isFallback,
-                            sourcePackName = decoded.sourcePackName,
-                            isRefreshMade = false,
-                            isCustom = decoded.isCustom,
-                            isLegacy = decoded.isLegacy,
-                            baseIcon = decoded.baseIcon ?: icon,
-                            sourceUrl = decoded.sourceUrl,
-                            modifierRecipe = decoded.modifierRecipe,
-                            modifierInput = decoded.modifierInput
-                        )
-                        withIcon.changeCalendar(decoded.calendarEnabled, decoded.calendarPrefix, decoded.calendarPackName)
+                        if (icon == null) {
+                            app.changeExport(null)
+                                .changeCalendar(decoded.calendarEnabled, decoded.calendarPrefix, decoded.calendarPackName)
+                        } else {
+                            app.withSavedEntry(decoded, icon, baseIcon = decoded.baseIcon ?: icon, isRefreshMade = false)
+                        }
                     }
                     editApplication(index, updated)
                     restored += entry.key
@@ -1194,7 +1187,7 @@ class ApplicationProvider internal constructor(
             }
             // A reference row (no image data, source pack known) whose pack is usable:
             // rebuild the icon from the pack. Failure keeps the row held back for retry.
-            val isReference = entry.icon == null && entry.row.drawable.isEmpty() && entry.sourcePackName != null
+            val isReference = entry.isReference
             val storedIcon = if (isReference) {
                 val rebuilt = materializeReference(app, entry, referenceOptions)
                 if (rebuilt == null) {
@@ -1211,17 +1204,7 @@ class ApplicationProvider internal constructor(
                     val rendered = if (isReference && !entry.isCustom) {
                         renderGlobal(storedIcon, globalModifier)
                     } else storedIcon
-                    app.changeExport(
-                        rendered,
-                        isFallback = entry.isFallback,
-                        sourcePackName = entry.sourcePackName,
-                        isCustom = entry.isCustom,
-                        isLegacy = entry.isLegacy,
-                        baseIcon = baseIcon,
-                        sourceUrl = entry.sourceUrl,
-                        modifierRecipe = entry.modifierRecipe,
-                        modifierInput = entry.modifierInput
-                    ).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
+                    app.withSavedEntry(entry, rendered, baseIcon)
                 }
                 else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
             }
@@ -1312,28 +1295,12 @@ class ApplicationProvider internal constructor(
             if (row.sourcePackName in stillLocked) continue
             val app = applicationList.firstOrNull { it.key == key } ?: continue
             val entry = renkinPackStore.decodeRow(row, defaultColor)
-            val isReference = entry.icon == null && entry.row.drawable.isEmpty() && entry.sourcePackName != null
             val storedIcon = entry.icon ?: materializeReference(app, entry, referenceOptions) ?: continue
             val baseIcon = entry.baseIcon ?: storedIcon
-            val rendered = if (isReference && !entry.isCustom) {
+            val rendered = if (entry.isReference && !entry.isCustom) {
                 renderGlobal(storedIcon, globalModifier)
             } else storedIcon
-            editApplication(
-                app,
-                app.changeExport(
-                    rendered,
-                    isFallback = entry.isFallback,
-                    sourcePackName = entry.sourcePackName,
-                    isCustom = entry.isCustom,
-                    isLegacy = entry.isLegacy,
-                    baseIcon = baseIcon,
-                    sourceUrl = entry.sourceUrl,
-                    modifierRecipe = entry.modifierRecipe,
-                    modifierInput = entry.modifierInput
-                )
-                    .changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName),
-                trackUnsaved = false
-            )
+            editApplication(app, app.withSavedEntry(entry, rendered, baseIcon), trackUnsaved = false)
             lockManager.release(key)
         }
         lockManager.publish()
