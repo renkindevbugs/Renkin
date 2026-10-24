@@ -21,8 +21,10 @@ import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.vector.SvgRasterizer
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -106,10 +108,10 @@ class OnlineIconBrowserViewModel @Inject constructor(
         }
         searching = true
         searchFailed = false
-        searchJob = viewModelScope.launch {
+        searchJob = launchInSession { started ->
             delay(SEARCH_DEBOUNCE_MS)
             val results = repository.search(query)
-            if (!sessionActive || collectionQuery.trim() != query) return@launch
+            if (!isCurrent(started) || collectionQuery.trim() != query) return@launchInSession
             searchResults = results
             searchFailed = results == null
             searching = false
@@ -127,7 +129,20 @@ class OnlineIconBrowserViewModel @Inject constructor(
 
     val rateLimitUntil = repository.rateLimitUntil
 
-    private var sessionActive = false
+    // Each open session owns its loads: closing cancels them, and a late result never publishes
+    // into the next session, even when the browser reopens at once (the generation moves on).
+    private var sessionJob: Job? = null
+    private var generation = 0L
+    private var iconsJob: Job? = null
+
+    private fun launchInSession(block: suspend CoroutineScope.(started: Long) -> Unit): Job? {
+        val session = sessionJob ?: return null
+        val started = generation
+        return viewModelScope.launch(session) { block(started) }
+    }
+
+    private fun isCurrent(started: Long) = sessionJob?.isActive == true && generation == started
+
     private val parsedSvgCache = LruCache<String, SvgVectorImporter.ImportedSvg>(PARSED_SVG_COUNT)
 
     // Rasterised previews for icons the strict importer rejects (gradient/clip documents).
@@ -137,14 +152,16 @@ class OnlineIconBrowserViewModel @Inject constructor(
     }
 
     fun beginSession() {
-        if (sessionActive) return
-        sessionActive = true
+        if (sessionJob?.isActive == true) return
+        generation++
+        sessionJob = SupervisorJob(viewModelScope.coroutineContext[Job])
         resetSessionState()
         loadCollections()
     }
 
     fun endSession() {
-        sessionActive = false
+        sessionJob?.cancel()
+        sessionJob = null
         resetSessionState()
     }
 
@@ -165,6 +182,7 @@ class OnlineIconBrowserViewModel @Inject constructor(
     }
 
     fun backToCollections() {
+        iconsJob?.cancel()
         selectedCollection = null
         iconQuery = ""
         icons = null
@@ -270,9 +288,9 @@ class OnlineIconBrowserViewModel @Inject constructor(
     private fun loadCollections() {
         collections = null
         collectionsFailed = false
-        viewModelScope.launch {
+        launchInSession { started ->
             val loaded = repository.collections()
-            if (!sessionActive) return@launch
+            if (!isCurrent(started)) return@launchInSession
             collections = loaded
             collectionsFailed = loaded == null
         }
@@ -281,15 +299,18 @@ class OnlineIconBrowserViewModel @Inject constructor(
     private fun loadIcons(collection: IconifyCollection) {
         icons = null
         iconsFailed = false
-        viewModelScope.launch {
+        iconsJob?.cancel()
+        iconsJob = launchInSession { started ->
             val loaded = repository.icons(collection)
-            if (!sessionActive || selectedCollection?.prefix != collection.prefix) return@launch
+            if (!isCurrent(started) || selectedCollection?.prefix != collection.prefix) return@launchInSession
             icons = loaded
             iconsFailed = loaded == null
         }
     }
 
     private fun resetSessionState() {
+        iconsJob?.cancel()
+        iconsJob = null
         selectedCollection = null
         collections = null
         collectionsFailed = false
