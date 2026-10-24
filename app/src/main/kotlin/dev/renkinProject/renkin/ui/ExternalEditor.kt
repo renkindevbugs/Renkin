@@ -3,6 +3,14 @@ package dev.renkinProject.renkin.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.graphics.Bitmap
+import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.util.Log
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import dev.renkinProject.renkin.R
 
 // ImageToolbox keeps its original applicationId for update compatibility, even though its package
@@ -59,3 +67,24 @@ internal fun editInAnotherApp(context: Context, sharedIcon: Uri): Boolean {
     }.isSuccess
 }
 
+
+internal suspend fun openExternalIconEditor(
+    context: Context,
+    icon: IconPackDrawable,
+    toolbox: Boolean,
+    share: suspend (Bitmap) -> Uri?
+): Boolean = try {
+    val bitmap = withContext(Dispatchers.Default) { icon.toModifierBitmap() }
+    val sharedIcon = share(bitmap)
+    currentCoroutineContext().ensureActive()
+    when {
+        sharedIcon == null -> false
+        toolbox -> openInImageToolbox(context, sharedIcon)
+        else -> editInAnotherApp(context, sharedIcon)
+    }
+} catch (error: CancellationException) {
+    throw error
+} catch (error: Exception) {
+    Log.error("ExternalEditor", "Could not open the icon in an external editor", error)
+    false
+}

@@ -85,6 +85,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.GlobalOptionsViewModel
+import dev.renkinProject.renkin.GlobalIconApplyState
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
@@ -159,7 +160,7 @@ internal fun categorizeGlobalIcons(
  * MainViewModel can update its session bookkeeping.
  */
 @Composable
-fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> Unit) {
+fun GlobalOptionsScreen(onClose: () -> Unit) {
     val viewModel: GlobalOptionsViewModel = hiltViewModel()
     val prefsValue = getPreferences().getPreferencesValue()
     val context = LocalContext.current
@@ -181,7 +182,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     val close: () -> Unit = {
         if (applying) Unit
         else if (dirty) confirmDiscard = true
-        else onClose(viewModel.editedKeys, viewModel.appliedGlobal)
+        else onClose()
     }
     androidx.activity.compose.BackHandler(enabled = true) { close() }
 
@@ -240,7 +241,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
         }
     }
 
-    var editApp by remember { mutableStateOf<PackageInfoStruct?>(null) }
+    val iconEditor = viewModel.iconEditor
 
     if (showBetaDialog) {
         GlobalBetaDialog(
@@ -366,7 +367,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                                 if (!showBefore && state.applyGenerated) tileOptions else null,
                                 viewModel,
                                 modifier = Modifier.animateItem()
-                            ) { editApp = app }
+                            ) { viewModel.openIconEditor(app) }
                         }
                     }
 
@@ -384,7 +385,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                                 viewModel,
                                 showEditBadge = true,
                                 modifier = Modifier.animateItem()
-                            ) { editApp = app }
+                            ) { viewModel.openIconEditor(app) }
                         }
                     }
 
@@ -404,7 +405,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                                 if (!showBefore && state.applyExisting) tileOptions else null,
                                 viewModel,
                                 modifier = Modifier.animateItem()
-                            ) { editApp = app }
+                            ) { viewModel.openIconEditor(app) }
                         }
                     }
 
@@ -422,7 +423,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                                 if (showBefore) null else tileOptions,
                                 viewModel,
                                 modifier = Modifier.animateItem()
-                            ) { editApp = app }
+                            ) { viewModel.openIconEditor(app) }
                         }
                     }
                 }
@@ -564,15 +565,15 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
             icon = Icons.Filled.Delete,
             onConfirm = {
                 confirmDiscard = false
-                onClose(viewModel.editedKeys, viewModel.appliedGlobal)
+                onClose()
             },
             onDismiss = { confirmDiscard = false }
         )
     }
 
-    editApp?.let { app ->
-        key(app.key, viewModel.screenSession) {
-            GlobalIconEditDialog(app = app, onDismiss = { editApp = null })
+    iconEditor?.let { editor ->
+        key(editor.id) {
+            GlobalIconEditDialog(editor = editor, onDismiss = { viewModel.dismissIconEditor(editor.id) })
         }
     }
 }
@@ -875,7 +876,7 @@ private fun PreviewTileFrame(
  * (a refresh won't replace it), exactly like the main edit dialog's Apply.
  */
 @Composable
-private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) {
+private fun GlobalIconEditDialog(editor: GlobalIconEditorDraft, onDismiss: () -> Unit) {
     val viewModel: GlobalOptionsViewModel = hiltViewModel()
     val view = LocalView.current
     val context = LocalContext.current
@@ -883,55 +884,19 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
     val toaster = LocalToaster.current
     val externalEditorError = stringResource(R.string.noImageEditorAvailable)
 
-    var imageEdit by remember { mutableStateOf(ImageEdit.NONE) }
-    var iconColor by remember { mutableStateOf(Color.White) }
-    var useVector by remember { mutableStateOf(false) }
-    val adjustments = remember { AdjustmentState() }
-
-    // The icon the modifiers act on: the stored icon, or the app's own launcher icon for
-    // apps that don't have one yet.
-    val heroBitmap by key(app.iconSource) {
-        produceState<Bitmap?>(null) {
-            value = withContext(Dispatchers.Default) {
-                viewModel.installedIcons.load(app.iconSource)?.drawable?.toSafeBitmapOrNull()
-            }
-        }
+    val app = editor.app
+    val imageEdit = editor.imageEdit
+    val iconColor = editor.iconColor
+    val useVector = editor.useVector
+    val adjustments = editor.adjustments
+    val heroBitmap = editor.heroBitmap
+    val base = editor.source
+    val options = editor.options
+    val applyState by viewModel.iconApplyState.collectAsStateWithLifecycle()
+    val applying = applyState is GlobalIconApplyState.Running
+    LaunchedEffect(applyState, editor.id) {
+        (applyState as? GlobalIconApplyState.Finished)?.let { viewModel.consumeIconApply(it.id) }
     }
-    val base = remember(app, heroBitmap) {
-        app.baseIcon ?: app.createdIcon ?: heroBitmap?.let { BitmapIconDrawable(it, false) }
-    }
-
-    val outlineEraseMask = remember(adjustments.eraseStrokes) {
-        if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
-    }
-
-    val backgroundBrushOperations = remember(adjustments.backgroundBrushStrokes) {
-        buildBackgroundBrushOperations(adjustments.backgroundBrushStrokes)
-    }
-    val options = GenerationOptions(
-        source = IconSourceOptions(
-            primarySource = Source.APPLICATION_ICON,
-            primaryTextType = TEXT_TYPE_DEFAULT,
-            primaryIconPack = ""
-        ),
-        export = IconExportOptions(
-            vector = useVector,
-            materialYou = false,
-            themed = false,
-            background = ColorFill(
-                color = if (adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop) {
-                    adjustments.shapeStyle.firstColor
-                } else android.graphics.Color.TRANSPARENT
-            )
-        ),
-        modifiers = ModifierStack(EffectModifier(imageEdit, ColorizerStyle(firstColor = iconColor.toArgb()))),
-        override = true
-    ).withModifierAdjustments(
-        adjustments = adjustments,
-        imageEdit = imageEdit,
-        outlineEraseMask = outlineEraseMask,
-        backgroundBrushOperations = backgroundBrushOperations
-    )
 
     // The same pipeline the tile preview uses, so the colour sheets and segment pickers here
     // behave exactly like the edit dialog's.
@@ -956,7 +921,8 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         options = options,
         owner = owner,
         active = runtimeState.ready && owner != null && owner == runtimeState.sessionToken,
-        render = viewModel::applyModifier
+        render = viewModel::applyModifier,
+        openingOptions = editor.openingOptions
     )
     val preview = previewState.icon
     val generating = previewState.generating
@@ -983,7 +949,7 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = onDismiss, enabled = !applying) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.dismiss))
                     }
                     Text(
@@ -997,18 +963,11 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                         onClick = {
                             view.performConfirmHaptic()
                             val edited = preview
-                            if (edited != null) {
-                                scope.launch {
-                                    viewModel.applyEditedIcon(
-                                        app, edited, sourcePackName = app.sourcePackName
-                                    )
-                                    onDismiss()
-                                }
-                            } else {
-                                onDismiss()
+                            if (edited != null && base != null) {
+                                viewModel.applyIconEditor(editor.id, options, base, edited)
                             }
                         },
-                        enabled = previewState.canApply,
+                        enabled = previewState.canApply && !applying,
                         shape = dev.renkinProject.renkin.ui.theme.FieldShape
                     ) {
                         Text(stringResource(R.string.apply))
@@ -1079,23 +1038,15 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                     previewGenerating = generating,
                     sampleBitmap = heroBitmap,
                     previews = modifierPreviews,
-                    onImageEditChange = { imageEdit = it },
-                    onColorChange = { iconColor = it },
-                    onVectorChange = { useVector = it },
+                    onImageEditChange = { if (!applying) editor.imageEdit = it },
+                    onColorChange = { if (!applying) editor.iconColor = it },
+                    onVectorChange = { if (!applying) editor.useVector = it },
                     onMaterialYouChange = { },
                     onEditExternally = { toolbox ->
                         val icon = preview
                         if (icon != null) {
                             scope.launch {
-                                val bitmap = withContext(Dispatchers.Default) {
-                                    icon.toModifierBitmap()
-                                }
-                                val sharedIcon = viewModel.shareIconForEditing(bitmap)
-                                val opened = when {
-                                    sharedIcon == null -> false
-                                    toolbox -> openInImageToolbox(context, sharedIcon)
-                                    else -> editInAnotherApp(context, sharedIcon)
-                                }
+                                val opened = openExternalIconEditor(context, icon, toolbox, viewModel::shareIconForEditing)
                                 if (!opened) toaster.show(externalEditorError)
                             }
                         }

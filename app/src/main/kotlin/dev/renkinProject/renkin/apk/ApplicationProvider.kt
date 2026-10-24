@@ -649,6 +649,7 @@ class ApplicationProvider internal constructor(
         application: PackageInfoStruct,
         icon: IconPackDrawable?,
         sourcePackName: String?,
+        onCommitted: () -> Unit = {},
         edit: (PackageInfoStruct, String?, IconPackDrawable?) -> PackageInfoStruct
     ): IconApplyOutcome = withContext(Dispatchers.Default) {
         profileOperations.run {
@@ -662,7 +663,11 @@ class ApplicationProvider internal constructor(
             // layer explicitly; stored global preferences must not change a confirmed pick.
             val updated = edit(applicationList[index], origin, icon)
             require(updated.key == application.key)
-            editApplication(index, updated)
+            // Mutation and its receipt form one cancellation boundary under the session gate.
+            withContext(NonCancellable) {
+                editApplication(index, updated)
+                onCommitted()
+            }
             IconApplyOutcome.APPLIED
         }
     }

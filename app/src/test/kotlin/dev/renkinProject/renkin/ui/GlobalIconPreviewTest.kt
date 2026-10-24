@@ -61,9 +61,9 @@ class GlobalIconPreviewTest {
         modifiers = initial.modifiers.copy(transform = TransformModifier(scale = scale))
     )
 
-    private fun mount(render: suspend (IconPackDrawable, GenerationOptions) -> IconPackDrawable) {
+    private fun mount(openingOptions: GenerationOptions? = null, render: suspend (IconPackDrawable, GenerationOptions) -> IconPackDrawable) {
         compose.setContent {
-            val state = rememberGlobalIconPreview(source, options, owner, active) { input, settings ->
+            val state = rememberGlobalIconPreview(source, options, owner, active, openingOptions) { input, settings ->
                 calls.incrementAndGet()
                 render(input, settings)
             }
@@ -78,6 +78,16 @@ class GlobalIconPreviewTest {
             compose.waitForIdle()
             condition()
         }
+    }
+
+    @Test fun retainedEditedControlsRenderAgainstTheOriginalOpeningOptions() {
+        source = icon()
+        options = scaled(0.8f)
+        val rendered = icon()
+        mount(openingOptions = initial) { _, _ -> rendered }
+        await { observed.canApply }
+        assertSame(rendered, observed.icon)
+        assertEquals(1, calls.get())
     }
 
     @Test fun lateUntouchedVectorAppearsWithoutRenderingOrEnablingApply() {

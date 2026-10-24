@@ -2273,3 +2273,28 @@ Renkin cannot reproduce that launcher-only selection through the standard resour
   replace them with opaque images.
 - Composition locals (`LocalToaster`, `LocalMainActivity`) are provided per-activity — a new
   activity hosting shared composables must provide its own (see WallpaperPreviewActivity).
+
+
+### Global per-icon editor ownership
+
+`GlobalOptionsViewModel` retains the open per-icon draft, its controls and loaded source in
+memory. Activity recreation reuses this draft and its original opening options. The draft and
+live drawables are never written to SavedStateHandle; a new process cannot reopen an empty
+per-icon editor from a target key alone.
+
+Per-icon Apply claims an immutable request synchronously before launching in `viewModelScope`.
+Its identity includes the editor, operation, profile session, target and captured draft revision.
+The provider acknowledges the mutation under the same profile gate, in the same cancellation
+boundary as the icon change. That receipt records `editedKeys` before an asynchronous return
+can be cancelled. A retained completion belongs to that exact request and is consumed only by
+its editor. Failure retains controls for retry; an older completion cannot dismiss a new editor.
+
+Back/dismiss is ignored while a per-icon Apply runs. `GlobalOptionsActivity.finish()` defers
+its result until that request finishes, then reads the committed keys from the owner. An activity
+recreation retains the deferred close request. Process death does not fabricate success or
+restore live artwork. Global Save retains its existing separate owner.
+
+Both editors use `openExternalIconEditor` for bitmap preparation, the ViewModel's file handoff
+and external launch. Cancellation propagates; conversion/write/launch failures return the
+existing failure presentation. The handoff coroutine belongs to the open UI, so dismissing it
+can cancel preparation without retaining an Activity in the ViewModel.
