@@ -1404,6 +1404,9 @@ be assumed to open the upgraded database.
   displaying controls. Activity-only destruction and process death have no draft persistence in
   this phase. Keeping the draft across composition disposal does not extend the Activity's
   ViewModel lifetime after non-configuration destruction.
+  `getOrCreate` is deliberately called from composition (`OpenAppOptions` in `ui/MainScreen.kt`):
+  the dialog's first frame already renders the live session, and moving creation into an effect
+  would draw one frame without it.
   Source defaults are captured once, after the configured font preference has loaded.
   `ui/IconDraftState.kt` renders only the active source and remembers completed Create inputs,
   so reattaching an unchanged editor does not reinterpret the initial saved icon as a new edit.
@@ -1839,6 +1842,9 @@ restore or explicit recovery retry, `BackgroundWorkScheduler` reconciles periodi
 automatic-backup jobs with the restored preferences. Startup repeats that reconciliation to
 cover process death after the durable storage commit but before rescheduling. Interval
 setters also hold the storage gate through submitting their WorkManager update.
+A portable full-backup import, unlike this recovery restore, keeps the device's automatic-backup
+preferences but deliberately clears `LastWatchCheckAtKey`: the imported watch rules were never
+checked on this device, so the next check must not be skipped as recent.
 
 The import/undo dialog centers its indicator and labels the current operation. During capture
 it distinguishes icons/profiles, watch rules, preferences, files and verification.

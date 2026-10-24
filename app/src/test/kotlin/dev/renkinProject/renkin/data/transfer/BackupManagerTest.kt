@@ -4,12 +4,15 @@ import android.app.Application
 import dev.renkinProject.renkin.data.UnsavedIconJournalStore
 import android.content.Context
 import android.net.Uri
+import androidx.datastore.preferences.core.edit
 import androidx.room.Room
 import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
 import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.apk.PackKeystore
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.LastAutoBackupAtKey
+import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.ProfileStyleStore
@@ -30,11 +33,13 @@ import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
 import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.encodeModifierPreset
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -346,6 +351,26 @@ class BackupManagerTest {
         // The stale ownership is gone — the pack would lock again on load.
         val after = tgtPackRepo.verdicts(listOf("pack.free"))["pack.free"]
         assertTrue(after == null || !after.seenInstalled)
+    }
+
+    @Test
+    fun backupRestore_clearsLastWatchCheckButKeepsAutoBackupState() = runBlocking {
+        val srcPackRepo = RenkinPackRepository(srcPackDb)
+        srcPackRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
+        val out = ByteArrayOutputStream()
+        sourceManager(srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
+        context.dataStore.edit {
+            it[LastWatchCheckAtKey] = 1_000L
+            it[LastAutoBackupAtKey] = 2_000L
+        }
+
+        BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
+            .importBackup { ByteArrayInputStream(out.toByteArray()) }
+
+        // Restored watch rules were never checked on this device, so the next check must run.
+        val prefs = context.dataStore.data.first()
+        assertNull(prefs[LastWatchCheckAtKey])
+        assertEquals(2_000L, prefs[LastAutoBackupAtKey])
     }
 
     @Test
