@@ -129,7 +129,8 @@ fun WatchScreen(
 
     val rules by watchViewModel.rules.collectAsStateWithLifecycle()
     val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
-    val apps = applicationState.applications
+    // The watch checker reads the launcher's app list; hand-added apps are not on it.
+    val apps = remember(applicationState.revision) { applicationState.applications.filterNot { it.isAddedTarget } }
     // Renkin's own generated packs can't be watched (the checker ignores them), so don't
     // offer them in the rule editor's pack picker either.
     val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()

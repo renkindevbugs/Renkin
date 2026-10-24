@@ -1436,7 +1436,7 @@ be assumed to open the upgraded database.
   references. Refresh output is not journaled (Refresh again regenerates it). Size cap 48 MiB;
   rows beyond it are counted as not kept. Room, saves and install-confirmation persistence are
   unchanged.
-- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v21) — profiles + rendered and base icons
+- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v22) — profiles + rendered and base icons
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
   rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the
   Global options UI, only unsaved refresh output is Generated; saved/built non-custom rows are
@@ -2146,6 +2146,32 @@ remain outside its allocation sum. It has depth/node limits and retains no drawa
 after inspection. Release callers are guarded by `BuildConfig.DEBUG`; R8 removes the collector.
 The device attribution, transient APK-mapping costs and follow-up source-loading contract are
 recorded in [performance-installed-icons.md](performance-installed-icons.md).
+
+### Added apps (issue #24)
+
+The launcher list misses disabled apps, Private Space apps and apps that are not installed.
+A profile can therefore name extra launcher components in `Profile.appTargets` (Room v22, an
+`AppTargetCodec` JSON array of package, activity and label). Only `ProfileDao.updateAppTargets`
+writes the column; `RenkinPackRepository.updateProfile` carries the stored value over, so a stale
+metadata row cannot erase targets. The column rides full backups and shared profiles as the
+optional profile field `appTargets` within format 4; older readers ignore it and keep the icons
+as orphans. Recovery 21 → 22 is an audited omitted column.
+
+`ApplicationProvider.loadRenkinPack` adds the active profile's targets that the launcher list
+lacks before saved icons are matched, so their rows load, save and build like any other app.
+A target the device lists again shows as the real app instead. Entries carry
+`PackageInfoStruct.targetState` (disabled, not installed, not in launcher). Their icon source is
+`ApplicationIconSource.PackageActivity` when PackageManager still resolves the component with the
+disabled-component flags, otherwise `Unavailable`; their `iconID` is 0 to match the pack index.
+The appfilter index covers every profile's targets, so a profile switch does not reparse packs;
+adding a component the index has not seen reindexes it (`IconPackRepository.reindex`) before the
+add returns. Adding adopts a matching orphan row through the held-row path. Removing requires the
+row to have no icon, so a removal never hides artwork the next build would silently drop. Watch
+rules exclude added apps: the watch checker reads only the launcher list.
+
+The Add app sheet (`feature/apptargets`) reads candidates when it opens: this user's disabled
+launcher activities and every component the installed packs theme (an unfiltered appfilter
+parse that never runs at startup). Typing the exact component is the last resort.
 
 ### Adaptive icons imported from packs
 

@@ -65,6 +65,9 @@ class IconLockManager(
         orphanRows[key] = row
     }
 
+    /** Hands an orphan row back once its component is a list entry again (an added app). */
+    fun takeOrphan(key: String): DbApplication? = orphanRows.remove(key)
+
     fun clear() {
         lockedRows.clear()
         orphanRows.clear()

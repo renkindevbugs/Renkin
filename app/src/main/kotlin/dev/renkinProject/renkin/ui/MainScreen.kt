@@ -43,6 +43,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Apps
+import dev.renkinProject.renkin.data.AppTargetState
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import dev.renkinProject.renkin.feature.apptargets.AddAppSheet
+import dev.renkinProject.renkin.feature.apptargets.TargetBadge
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -886,6 +892,7 @@ fun ApplicationList(
         return
     }
     val sourceSession = applicationState.sessionToken ?: return
+    var addAppOpen by rememberSaveable { mutableStateOf(false) }
 
     // One column on a phone, more on a tablet or in landscape. The header cards describe the
     // whole profile, so each of them spans every column instead of sitting in one.
@@ -963,6 +970,12 @@ fun ApplicationList(
                     onAction = onShowAllApps.takeIf { filtered }
                 )
             }
+            // A search that finds nothing is the moment someone looks for an app the launcher hides.
+            if (filter.isNotBlank()) {
+                item(key = "missingApp", contentType = "missingApp", span = { GridItemSpan(maxLineSpan) }) {
+                    MissingAppCard(searchHint = true) { addAppOpen = true }
+                }
+            }
         } else {
             items(displayList, key = { it.value.key }, contentType = { "application" }) { indexedApp ->
                 // Only the top row is pointed at by the intro.
@@ -976,6 +989,88 @@ fun ApplicationList(
                     modifier = Modifier.animateItem().then(introModifier)
                 )
             }
+            item(key = "missingApp", contentType = "missingApp", span = { GridItemSpan(maxLineSpan) }) {
+                MissingAppCard(searchHint = false) { addAppOpen = true }
+            }
+        }
+    }
+
+    if (addAppOpen) {
+        AddAppSheet(
+            initialQuery = filter,
+            sourceSession = sourceSession,
+            listedKeys = remember(applicationState.revision) { applications.mapTo(hashSetOf()) { it.key } },
+            onDismiss = { addAppOpen = false },
+            onAdded = { key, openEditor ->
+                addAppOpen = false
+                viewModel.onAppTargetAdded(key, openEditor)
+            }
+        )
+    }
+
+    // The new row may sit anywhere in the sorted list; bring it into view once.
+    val revealedKey = viewModel.revealedAppKey
+    LaunchedEffect(revealedKey, displayList) {
+        if (revealedKey == null) return@LaunchedEffect
+        val position = displayList.indexOfFirst { it.value.key == revealedKey }
+        if (position >= 0) {
+            listState.animateScrollToItem(firstAppItemIndex + position)
+            viewModel.consumeRevealedApp()
+        }
+    }
+
+    viewModel.addedAppEditorKey?.let { key ->
+        val added = applications.firstOrNull { it.key == key }
+        if (added == null) {
+            LaunchedEffect(key) { viewModel.closeAddedAppEditor() }
+        } else {
+            OpenAppOptions(iconPacks, added, themed, sourceSession = sourceSession) {
+                viewModel.closeAddedAppEditor()
+            }
+        }
+    }
+}
+
+/**
+ * The way into the Add app sheet: at the end of the list, and under an empty search where
+ * a hidden or uninstalled app is the likely reason nothing matched.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun MissingAppCard(searchHint: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CardShape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(40.dp)) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.missingAppTitle),
+                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    stringResource(if (searchHint) R.string.missingAppSearchHint else R.string.missingAppHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -1091,17 +1186,37 @@ fun ApplicationItem(
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize()
                     )
+                } else if (app.targetState == AppTargetState.NOT_INSTALLED) {
+                    // Nothing installed to take an icon from; say so instead of an empty tile.
+                    Icon(
+                        imageVector = Icons.Filled.Apps,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.align(Alignment.Center).size(24.dp)
+                    )
                 }
             }
 
-            Text(
-                text = app.appName,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = app.appName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                app.targetState?.let { state ->
+                    TargetBadge(
+                        stringResource(
+                            when (state) {
+                                AppTargetState.DISABLED -> R.string.appTargetDisabled
+                                AppTargetState.NOT_INSTALLED -> R.string.appTargetNotInstalled
+                                AppTargetState.NOT_IN_LAUNCHER -> R.string.appTargetNotInLauncher
+                            }
+                        )
+                    )
+                }
+            }
 
             val bgColor = if (themed) {
                 if (dynamicColor) {

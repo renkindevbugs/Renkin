@@ -99,12 +99,15 @@ class BackupRecoveryTest {
             val table = tables.getJSONObject(index)
             if (table.getString("name") != "Profile") continue
             val columns = table.getJSONArray("columns")
-            assertEquals("profileStyle", columns.getString(columns.length() - 1))
-            columns.remove(columns.length() - 1)
-            val rows = table.getJSONArray("rows")
-            for (row in 0 until rows.length()) {
-                val values = rows.getJSONArray(row)
-                values.remove(values.length() - 1)
+            // Profile columns appended after v20, newest last.
+            for (added in listOf("appTargets", "profileStyle")) {
+                assertEquals(added, columns.getString(columns.length() - 1))
+                columns.remove(columns.length() - 1)
+                val rows = table.getJSONArray("rows")
+                for (row in 0 until rows.length()) {
+                    val values = rows.getJSONArray(row)
+                    values.remove(values.length() - 1)
+                }
             }
         }
         file.writeText(root.toString())

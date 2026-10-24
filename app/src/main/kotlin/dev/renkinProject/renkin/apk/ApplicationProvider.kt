@@ -8,6 +8,8 @@ import android.net.Uri
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.BuildConfig
+import dev.renkinProject.renkin.data.AppTarget
+import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
@@ -439,15 +441,47 @@ class ApplicationProvider internal constructor(
     }
 
     private suspend fun initializeIconPacks() {
-        iconPackRepo.load(installedApplicationRefs())
+        iconPackRepo.load(packIndexApplications())
         // Every pack seen installed is owned on this device forever — the paid-pack lock
         // never applies to it again, even after an uninstall.
         lockManager.recordInstalledPacks(iconPacks)
     }
 
-    /** The already-loaded app list as lightweight identity refs for appfilter matching. */
-    private fun installedApplicationRefs(): List<InstalledApplication> =
-        applicationList.map { InstalledApplication(it.packageName, it.activityName, it.iconID) }
+    @Volatile private var indexedApplicationKeys: Set<String> = emptySet()
+
+    /**
+     * The already-loaded app list as lightweight identity refs for appfilter matching, plus every
+     * profile's added targets, so switching profiles never needs another appfilter parse.
+     */
+    private suspend fun packIndexApplications(): List<InstalledApplication> {
+        val refs = linkedMapOf<String, InstalledApplication>()
+        applicationList.forEach { refs[it.key] = InstalledApplication(it.packageName, it.activityName, it.iconID) }
+        profileManager.allAppTargets().forEach { refs.putIfAbsent(it.key, InstalledApplication(it.packageName, it.activityName, 0)) }
+        indexedApplicationKeys = refs.keys.toSet()
+        return refs.values.toList()
+    }
+
+    /**
+     * Adds the active profile's targets the launcher list lacks; a target the device now lists
+     * is shown as the real app instead. Runs before saved icons load so their rows match.
+     */
+    private suspend fun applyProfileTargets(profileId: Long) {
+        val detected = applicationList.filter { !it.isAddedTarget }
+        val detectedKeys = detected.mapTo(hashSetOf()) { it.key }
+        val previous = applicationList.filter { it.isAddedTarget }.associateBy { it.key }
+        val added = profileManager.appTargets(profileId)
+            .filter { it.key !in detectedKeys }
+            .map { target ->
+                previous[target.key]?.takeIf { it.appName == target.label && it.createdIcon == null && !it.calendarEnabled }
+                    ?: installedAppCatalog.targetApplication(target)
+            }
+        if (added.isEmpty() && previous.isEmpty()) return
+        replaceApplications((detected + added).sorted())
+        // A shared-profile import can bring components the index has not seen yet.
+        if (iconPackRepo.iconPackLoaded && added.any { it.key !in indexedApplicationKeys }) {
+            iconPackRepo.reindex(packIndexApplications())
+        }
+    }
 
     private suspend fun initializeRenkinPack() {
         try { profileManager.initActiveId() } finally { publishActiveProfile() }
@@ -1120,6 +1154,7 @@ class ApplicationProvider internal constructor(
 
     private suspend fun loadRenkinPack(profileId: Long) {
         lockManager.clear()
+        applyProfileTargets(profileId)
         val prefs = context.dataStore.getPreferencesAfterPendingWrites()
         // Saved vectors may contain theme references. Resolve their fallback from the user's
         // explicit theme choice every time a profile is loaded, not from stale system state.
@@ -1247,7 +1282,7 @@ class ApplicationProvider internal constructor(
     suspend fun forceSync(expected: ProfileSessionToken) = withContext(Dispatchers.Default) {
         runProfileOperation(expected) {
             if (!iconPackRepo.iconPackLoaded) return@runProfileOperation
-            iconPackRepo.load(installedApplicationRefs())
+            iconPackRepo.load(packIndexApplications())
             lockManager.recordInstalledPacks(iconPacks)
             // Packs may have been updated/rebuilt — their provenance maps can be stale.
             lockManager.clearProvenanceCache()
@@ -1576,6 +1611,77 @@ class ApplicationProvider internal constructor(
             }
         }
     }
+
+    enum class AppTargetAddResult { ADDED, ALREADY_LISTED, LIMIT_REACHED }
+    enum class AppTargetRemoveResult { REMOVED, HAS_ICON, NOT_ADDED }
+
+    /**
+     * Adds a launcher component to the active profile. The target persists at once; its icon
+     * follows the usual Save/Build rules. A saved icon kept for it (imported, or from an earlier
+     * add) comes back into the list.
+     */
+    suspend fun addAppTarget(expected: ProfileSessionToken, target: AppTarget): AppTargetAddResult =
+        withContext(Dispatchers.Default) {
+            val result = runProfileOperation(expected) {
+                if (applicationList.any { it.key == target.key }) return@runProfileOperation AppTargetAddResult.ALREADY_LISTED
+                val targets = profileManager.appTargets(activeProfileId)
+                if (targets.size >= AppTargetCodec.MAX_TARGETS) return@runProfileOperation AppTargetAddResult.LIMIT_REACHED
+                profileManager.setAppTargets(activeProfileId, targets.filter { it.key != target.key } + target)
+                replaceApplications((applicationList + installedAppCatalog.targetApplication(target)).sorted())
+                adoptOrphanRow(target.key)
+                AppTargetAddResult.ADDED
+            }
+            if (result == AppTargetAddResult.ADDED) {
+                // The pack index lists only known components; pack matches need the new one.
+                profileOperations.run {
+                    if (iconPackRepo.iconPackLoaded && target.key !in indexedApplicationKeys) {
+                        iconPackRepo.reindex(packIndexApplications())
+                    }
+                }
+            }
+            result
+        }
+
+    private suspend fun adoptOrphanRow(key: String) {
+        val row = lockManager.takeOrphan(key) ?: return
+        val defaultColor = context.dataStore.getPreferencesAfterPendingWrites().getDefaultIconColor(context)
+        if (renkinPackStore.decodeRow(row, defaultColor).decodeFailed) {
+            lockManager.holdOrphan(key, row)
+            return
+        }
+        // The held-row path already knows packs, references and verdicts; reuse it.
+        lockManager.lock(key, row)
+        refreshLockedIcons()
+    }
+
+    /**
+     * Removes an added target from the active profile. One with an icon must be reset first,
+     * so removing never hides artwork the next build would silently drop.
+     */
+    suspend fun removeAppTarget(expected: ProfileSessionToken, key: String): AppTargetRemoveResult =
+        withContext(Dispatchers.Default) {
+            runProfileOperation(expected) {
+                val app = applicationList.firstOrNull { it.key == key }
+                if (app == null || !app.isAddedTarget) return@runProfileOperation AppTargetRemoveResult.NOT_ADDED
+                if (app.createdIcon != null || app.calendarEnabled || key in lockManager.lockedKeys) {
+                    return@runProfileOperation AppTargetRemoveResult.HAS_ICON
+                }
+                profileManager.setAppTargets(activeProfileId, profileManager.appTargets(activeProfileId).filter { it.key != key })
+                replaceApplications(applicationList.filter { it.key != key })
+                unsavedIconKeys = unsavedIconKeys - key
+                AppTargetRemoveResult.REMOVED
+            }
+        }
+
+    /** The active profile's own launcher-hidden apps, for the Add app sheet. */
+    suspend fun disabledAppCandidates(): List<AppTarget> = withContext(Dispatchers.IO) {
+        installedAppCatalog.disabledLauncherActivities()
+    }
+
+    suspend fun packAppCandidates(): List<PackAppCandidate> = iconPackRepo.appFilterCandidates()
+
+    fun packCandidateDrawable(candidate: PackAppCandidate): ResourceDrawable? =
+        iconPackRepo.candidateDrawable(candidate)
 
     /** True while [id] still names an existing profile — deleted-profile deep links check this. */
     suspend fun profileExists(id: Long): Boolean = profileManager.profileExists(id)

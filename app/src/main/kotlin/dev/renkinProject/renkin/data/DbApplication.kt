@@ -40,7 +40,9 @@ data class Profile(
     // "Don't show again" for the missing-icon-packs dialog, chosen per profile.
     @ColumnInfo(defaultValue = "0") val hideMissingPackWarning: Boolean = false,
     // Empty only for unconverted legacy rows; bootstrap fills it before storage becomes ready.
-    @ColumnInfo(defaultValue = "") val profileStyle: String = ""
+    @ColumnInfo(defaultValue = "") val profileStyle: String = "",
+    // Hand-added launcher components (AppTargetCodec JSON). Only updateAppTargets writes it.
+    @ColumnInfo(defaultValue = "") val appTargets: String = ""
 )
 
 @Entity(primaryKeys = ["packageName", "activityName", "profileId"])
@@ -315,6 +317,9 @@ interface ProfileDao {
     @Query("UPDATE Profile SET profileStyle = :document, prefsSnapshot = :legacySnapshot WHERE id = :id")
     fun updateStyle(id: Long, document: String, legacySnapshot: String): Int
 
+    @Query("UPDATE Profile SET appTargets = :targets WHERE id = :id")
+    fun updateAppTargets(id: Long, targets: String): Int
+
     @Query("SELECT * FROM Profile ORDER BY id")
     fun getAllFlow(): kotlinx.coroutines.flow.Flow<List<Profile>>
 
@@ -363,7 +368,8 @@ interface ProfileDao {
 // Version 19 adds optional per-icon modifier metadata without changing the baked artwork.
 // Version 20 adds a reference to the retained input for local modifier replay.
 // Version 21 reserves Profile.profileStyle; DataStore still owns active settings until cutover.
-// Recovery 20→21 is audited in BackupDatabaseSnapshot.supportedOmittedColumns; review it on every bump.
+// Version 22 adds Profile.appTargets (hand-added launcher components, issue #24).
+// Recovery 20→22 is audited in BackupDatabaseSnapshot.supportedOmittedColumns; review it on every bump.
 @Database(
     entities = [
         DbApplication::class,
@@ -373,7 +379,7 @@ interface ProfileDao {
         BuiltIcon::class,
         ModifierPreset::class
     ],
-    version = 21
+    version = 22
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -621,6 +627,12 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE Profile ADD COLUMN appTargets TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -641,7 +653,8 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_17_18,
             MIGRATION_18_19,
             MIGRATION_19_20,
-            MIGRATION_20_21
+            MIGRATION_20_21,
+            MIGRATION_21_22
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {

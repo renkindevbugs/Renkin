@@ -165,4 +165,14 @@ class RenkinPackRepositoryTest {
         assertEquals(listOf("Recent", "Older"), restored.map { it.name })
         assertEquals(listOf("new", "old"), restored.map { it.payload })
     }
+
+    @Test
+    fun staleProfileUpdateKeepsAddedAppsWrittenByTheirOwner() = runBlocking {
+        val stale = repo.ensureDefaultProfile()
+        repo.updateAppTargets(DEFAULT_PROFILE_ID, "added apps")
+        repo.updateProfile(stale.copy(name = "Renamed"))
+        val profile = repo.profile(DEFAULT_PROFILE_ID)!!
+        assertEquals("Renamed", profile.name)
+        assertEquals("added apps", profile.appTargets)
+    }
 }

@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.data.transfer
 
+import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.watch.AppComponent
@@ -145,6 +146,8 @@ object BackupCodec {
                 .put("prefsSnapshot", bp.profile.prefsSnapshot)
                 .put("hasUnbuiltChanges", bp.profile.hasUnbuiltChanges)
                 .put("hideMissingPackWarning", bp.profile.hideMissingPackWarning)
+                // Optional within format 4: older readers ignore it and keep the icons as orphans.
+                .put("appTargets", AppTargetCodec.normalize(bp.profile.appTargets))
             if (formatVersion > LEGACY_FORMAT_VERSION) {
                 ProfileStyleBackup.validatedStyle(bp.profile)
                 p.put("profileStyle", bp.profile.profileStyle)
@@ -340,7 +343,8 @@ object BackupCodec {
                 prefsSnapshot = p.optString("prefsSnapshot"),
                 hasUnbuiltChanges = p.optBoolean("hasUnbuiltChanges"),
                 hideMissingPackWarning = p.optBoolean("hideMissingPackWarning"),
-                profileStyle = ProfileStyleBackup.readDocument(p, formatVersion)
+                profileStyle = ProfileStyleBackup.readDocument(p, formatVersion),
+                appTargets = AppTargetCodec.normalize(p.optString("appTargets"))
             )
 
             val icons = mutableListOf<DbApplication>()

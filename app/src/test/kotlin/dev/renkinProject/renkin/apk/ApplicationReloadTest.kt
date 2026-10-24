@@ -102,6 +102,22 @@ class ApplicationReloadTest {
     }
 
     @Test
+    fun addedAppStateComesFromTheReloadNotTheSession() {
+        val icon = FakeIcon()
+        val current = PackageInfoStruct(
+            appName = "Added", packageName = "com.added", activityName = "com.added.Main",
+            iconSource = dev.renkinProject.renkin.packages.ApplicationIconSource.Unavailable, iconID = 0,
+            createdIcon = icon, targetState = dev.renkinProject.renkin.data.AppTargetState.NOT_INSTALLED
+        )
+        val enabledAgain = app("Added", "com.added", "com.added.Main")
+
+        val merged = mergeApplicationReload(listOf(current), listOf(enabledAgain), setOf(current.key)).single()
+
+        assertSame(icon, merged.createdIcon)
+        assertFalse(merged.isAddedTarget)
+    }
+
+    @Test
     fun unsavedModifierReplayInputSurvivesReloadWithFreshSource() {
         val artwork = FakeIcon()
         val input = IconModifierInput(

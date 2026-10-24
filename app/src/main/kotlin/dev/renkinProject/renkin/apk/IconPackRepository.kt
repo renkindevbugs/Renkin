@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.apk
 
 import android.content.Context
 import android.graphics.drawable.Drawable
+import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.IconPackFallback
 import dev.renkinProject.renkin.data.InstalledApplication
@@ -51,6 +52,29 @@ internal suspend fun loadIsolatedAppFilters(
         }
     }.awaitAll()
     buildMap { parsed.filterNotNull().forEach { (pack, elements) -> put(pack, elements) } }
+}
+
+/** A component one or more installed packs theme; the first pack supplies the preview. */
+data class PackAppCandidate(
+    val packageName: String,
+    val activityName: String,
+    val iconPack: String,
+    val drawableName: String,
+    val packCount: Int
+) {
+    val key: String get() = "$packageName/$activityName"
+}
+
+// Android's ICU regex rejects an unescaped closing brace, unlike the JVM.
+private val COMPONENT_INFO = Regex("""ComponentInfo\{([^/\{\}\s]+)/([^/\{\}\s]+)\}""")
+
+/** Splits an appfilter `ComponentInfo{package/activity}`; relative activities are expanded. */
+internal fun parseComponentInfo(component: String): Pair<String, String>? {
+    val match = COMPONENT_INFO.matchEntire(component.trim()) ?: return null
+    val packageName = match.groupValues[1]
+    val activity = AppTargetCodec.expandActivityName(packageName, match.groupValues[2])
+    if (!AppTargetCodec.isValidPackageName(packageName) || !AppTargetCodec.isValidClassName(activity)) return null
+    return packageName to activity
 }
 
 internal fun indexAppDrawableNames(elements: List<RawElement>): Map<String, String> = buildMap {
@@ -132,6 +156,43 @@ class IconPackRepository(
         }
         mutableState.update { it.copy(loaded = true) }
     }
+
+    /**
+     * Rebuilds only the appfilter indexes for a changed component set, e.g. after the user added
+     * an app. Pack discovery stays as it is.
+     */
+    suspend fun reindex(installedApps: List<InstalledApplication>) = withContext(Dispatchers.Default) {
+        mutableState.update { it.copy(loaded = false) }
+        loadAppFilterElements(installedApps) { pack, apps -> appManager.getAppFilterRawElements(pack.packageName, apps) }
+    }
+
+    /**
+     * Every component any installed pack themes, read on demand for the Add app sheet. This
+     * parses each appfilter again without the installed-app filter, so it is never run at startup.
+     */
+    suspend fun appFilterCandidates(): List<PackAppCandidate> = withContext(Dispatchers.Default) {
+        val parsed = loadIsolatedAppFilters(
+            iconPacks,
+            loader = { pack -> appManager.allAppFilterItems(pack.packageName) },
+            onFailure = { pack, error ->
+                Log.error("IconPackRepository", "Skipping malformed appfilter: ${pack.packageName}", error)
+            }
+        )
+        val byComponent = linkedMapOf<String, PackAppCandidate>()
+        for ((pack, elements) in parsed) {
+            for (item in elements.filterIsInstance<RawItem>()) {
+                val component = parseComponentInfo(item.component) ?: continue
+                val existing = byComponent[item.component]
+                byComponent[item.component] = existing?.copy(packCount = existing.packCount + 1)
+                    ?: PackAppCandidate(component.first, component.second, pack.packageName, item.drawableLink, 1)
+            }
+        }
+        byComponent.values.toList()
+    }
+
+    /** The artwork a pack candidate is shown with in the Add app sheet. */
+    fun candidateDrawable(candidate: PackAppCandidate): ResourceDrawable? =
+        appManager.getResourceDrawableByName(candidate.iconPack, candidate.drawableName)
 
     /** The pack's classic fallback styling (iconback/mask/upon/scale) for unthemed apps. */
     fun getIconPackFallback(iconPack: String): IconPackFallback {

@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.packages
 
 import android.graphics.drawable.Drawable
+import dev.renkinProject.renkin.data.AppTargetState
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.icon.creator.IconModifierInput
@@ -56,8 +57,12 @@ class PackageInfoStruct(
     /** Last local modifier stage for [baseIcon]. Informational; never applied onto that base. */
     val modifierRecipe: String? = null,
     val modifierInput: IconModifierInput? = null,
-    val iconSource: ApplicationIconSource = ApplicationIconSource.Inline(requireNotNull(icon), iconID)
+    val iconSource: ApplicationIconSource = ApplicationIconSource.Inline(requireNotNull(icon), iconID),
+    /** Non-null for an entry the user added to the profile; the launcher list does not have it. */
+    val targetState: AppTargetState? = null
 ) : Comparable<PackageInfoStruct> {
+    val isAddedTarget: Boolean get() = targetState != null
+
     private val normalizedSortName by lazy {
         Normalizer.normalize(appName, Normalizer.Form.NFD)
             .replace(DIACRITICS_REGEX, "")
@@ -98,7 +103,7 @@ class PackageInfoStruct(
         iconSource: ApplicationIconSource = this.iconSource,
         internalVersion: Int = this.internalVersion + 1
     ): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, null, iconID, createdIcon, internalVersion, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon, sourceUrl, modifierRecipe, modifierInput, iconSource)
+        PackageInfoStruct(appName, packageName, activityName, null, iconID, createdIcon, internalVersion, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon, sourceUrl, modifierRecipe, modifierInput, iconSource, targetState)
 
     internal fun withLoadedApplicationIcon(icon: LoadedApplicationIcon): PackageInfoStruct =
         copyWith(iconSource = ApplicationIconSource.Prepared(icon), internalVersion = internalVersion)

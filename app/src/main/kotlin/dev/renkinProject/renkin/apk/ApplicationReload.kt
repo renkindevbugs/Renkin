@@ -48,7 +48,8 @@ internal fun mergeApplicationReload(
             baseIcon = session.baseIcon,
             sourceUrl = session.sourceUrl,
             modifierRecipe = session.modifierRecipe,
-            modifierInput = session.modifierInput
+            modifierInput = session.modifierInput,
+            targetState = fresh.targetState
         )
     }
 }
