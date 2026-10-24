@@ -119,7 +119,8 @@ class IconGenerationService(
         val resource = appManager.getIconPackDrawableEntries(packPackage, listOf(drawableName))
             .firstOrNull()
             ?.resource
-        val currentHash = resource?.drawable?.toSafeBitmapOrNull()?.contentHash()
+        // Only a caller that verifies the artwork pays for the PNG encode + SHA-256.
+        val currentHash = expectedHash?.let { resource?.drawable?.toSafeBitmapOrNull()?.contentHash() }
         if (iconSourceChanged(expectedHash, currentHash)) {
             return ValidatedPackIcon(null, sourceChanged = true)
         }

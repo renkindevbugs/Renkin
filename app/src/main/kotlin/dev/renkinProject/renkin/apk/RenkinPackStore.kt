@@ -71,7 +71,10 @@ class RenkinPackStore(
         val decodeFailed: Boolean = false,
         val modifierRecipe: String? = null,
         val modifierInput: IconModifierInput? = null
-    )
+    ) {
+        /** No artwork of its own: the icon is rebuilt from the (present) source pack. */
+        val isReference: Boolean get() = icon == null && row.drawable.isEmpty() && sourcePackName != null
+    }
 
     /** Loads [profileId]'s saved icons + calendar flags, keyed by "package/activity". */
     suspend fun load(profileId: Long, defaultColor: Color): Map<String, SavedEntry> = withContext(Dispatchers.Default) {
@@ -338,3 +341,26 @@ internal fun iconFingerprint(
     val digest = java.security.MessageDigest.getInstance("SHA-1").digest(payload.toByteArray())
     return digest.toLowerHex()
 }
+
+/**
+ * Projects a saved row's metadata onto [this] app with an already resolved [icon]. Every field a
+ * save keeps must travel here; how the icon is resolved stays with each caller (restore, load and
+ * the locked-row refresh deliberately differ).
+ */
+internal fun PackageInfoStruct.withSavedEntry(
+    entry: RenkinPackStore.SavedEntry,
+    icon: IconPackDrawable,
+    baseIcon: IconPackDrawable?,
+    isRefreshMade: Boolean = this.isRefreshMade
+): PackageInfoStruct = changeExport(
+    icon,
+    isFallback = entry.isFallback,
+    sourcePackName = entry.sourcePackName,
+    isRefreshMade = isRefreshMade,
+    isCustom = entry.isCustom,
+    isLegacy = entry.isLegacy,
+    baseIcon = baseIcon,
+    sourceUrl = entry.sourceUrl,
+    modifierRecipe = entry.modifierRecipe,
+    modifierInput = entry.modifierInput
+).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
