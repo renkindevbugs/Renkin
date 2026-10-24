@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -69,11 +70,14 @@ import dev.renkinProject.renkin.ui.modifier.MaterialYouPackSection
 import dev.renkinProject.renkin.ui.modifier.ModifierDialogHost
 import dev.renkinProject.renkin.ui.modifier.OutlineSection
 import dev.renkinProject.renkin.ui.modifier.ShadowSection
+import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import kotlin.math.abs
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private class PresetScrollAnchor {
     var y: Float = Float.NaN
@@ -91,7 +95,7 @@ internal fun ModifierTab(
     useMaterialYou: Boolean,
     adjustments: AdjustmentState,
     // The current preview icon, shown in the position tool to visualise its margins.
-    centerPreview: Bitmap?,
+    centerPreviewIcon: IconPackDrawable?,
     // True while the preview regenerates — the eraser shows a spinner during its live update.
     previewGenerating: Boolean = false,
     // The app's original icon, offered as an eyedropper source in the colour picker.
@@ -121,6 +125,13 @@ internal fun ModifierTab(
     var backgroundBrushPreview by remember { mutableStateOf<Bitmap?>(null) }
     var backgroundBrushPreviewGenerating by remember { mutableStateOf(false) }
     var centerDialogOpen by remember { mutableStateOf(false) }
+    var shadowEditorOpen by remember { mutableStateOf(false) }
+    // Rasterising the edited icon is not free: only the dialogs below show it, so do it off Main
+    // and only while one of them is open.
+    val centerPreviewShown = centerDialogOpen || eraseDialogOpen || backgroundBrushDialogOpen || shadowEditorOpen
+    val centerPreview by produceState<Bitmap?>(null, centerPreviewIcon, centerPreviewShown) {
+        value = if (centerPreviewShown) withContext(Dispatchers.Default) { centerPreviewIcon?.toModifierBitmap() } else null
+    }
     val scrollState = rememberScrollState()
     val scrollScope = rememberCoroutineScope()
     val presetScrollAnchor = remember { PresetScrollAnchor() }
@@ -394,7 +405,8 @@ internal fun ModifierTab(
             adjustments = adjustments,
             preview = centerPreview,
             previewGenerating = previewGenerating,
-            renderPreview = previews?.shadow
+            renderPreview = previews?.shadow,
+            onEditorOpenChange = { shadowEditorOpen = it }
         )
         ExternalEditorSection(onEditExternally)
 

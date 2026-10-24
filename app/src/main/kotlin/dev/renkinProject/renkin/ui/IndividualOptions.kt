@@ -707,9 +707,7 @@ internal fun OptionsDialog(
                                 useMaterialYou = if (session.modifierReplay != null) session.replayMaterialYou
                                     else applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
                                 adjustments = adjustments,
-                                centerPreview = remember(draft.iconToConfirm) {
-                                    draft.iconToConfirm?.toModifierBitmap()
-                                },
+                                centerPreviewIcon = draft.iconToConfirm,
                                 previewGenerating = draft.generating,
                                 sampleBitmap = heroBitmap,
                                 previews = modifierPreviews,
@@ -945,7 +943,7 @@ private fun ModifierOptionsTab(
     useVector: Boolean,
     useMaterialYou: Boolean,
     adjustments: AdjustmentState,
-    centerPreview: Bitmap?,
+    centerPreviewIcon: IconPackDrawable?,
     previewGenerating: Boolean,
     sampleBitmap: Bitmap?,
     previews: ModifierPreviews,
@@ -969,7 +967,7 @@ private fun ModifierOptionsTab(
             useVector = useVector,
             useMaterialYou = useMaterialYou,
             adjustments = adjustments,
-            centerPreview = centerPreview,
+            centerPreviewIcon = centerPreviewIcon,
             previewGenerating = previewGenerating,
             sampleBitmap = sampleBitmap,
             previews = previews,
