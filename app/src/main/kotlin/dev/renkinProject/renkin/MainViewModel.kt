@@ -75,6 +75,14 @@ import dev.renkinProject.renkin.service.BackgroundWorkScheduler
 import dev.renkinProject.renkin.data.transfer.AutoBackupManager
 import dev.renkinProject.renkin.data.transfer.isIconPackStudioExport
 import dev.renkinProject.renkin.data.watch.WatchRepository
+import dev.renkinProject.renkin.data.watch.WatchApplySnapshot
+import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
+import dev.renkinProject.renkin.apk.IconPackBuilder
+import dev.renkinProject.renkin.feature.watch.WatchApplyOwner
+import dev.renkinProject.renkin.feature.watch.WatchApplyRequest
+import dev.renkinProject.renkin.feature.watch.WatchApplyState
+import dev.renkinProject.renkin.feature.watch.WatchApplyPhase
+import dev.renkinProject.renkin.service.RenkinNotifications
 import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
@@ -312,6 +320,11 @@ class MainViewModel @Inject constructor(
     var pendingWatchSuggestionId by mutableStateOf<Long?>(null)
         private set
 
+    private var nextWatchApply = 0L
+    private val watchApplyOwner = WatchApplyOwner(viewModelScope, ::commitWatchApply, ::cleanupWatchApply, ::watchApplyFinished)
+    internal val watchApplyStates = watchApplyOwner.states
+    internal val watchStorageEpoch: Long get() = StorageOperationGate.epoch
+
     // True when a watch notification pointed at a profile that has since been deleted — the
     // home screen explains why the suggestion can't be applied instead of silently ignoring it.
     var watchProfileMissing by mutableStateOf(false)
@@ -334,8 +347,12 @@ class MainViewModel @Inject constructor(
             runtimeState.first { it.startupComplete }
             // The database is authoritative. Intent extras can be stale (or supplied by another
             // app because MainActivity is exported), so never trust them for profile ownership.
-            val suggestion = watchRepo.getSuggestion(suggestionId) ?: return@launchProfileOperation
-            val profileId = watchRepo.getRule(suggestion.ruleId)?.rule?.profileId ?: return@launchProfileOperation
+            val receipt = watchApplyStates.value[suggestionId]?.takeIf {
+                it.phase == WatchApplyPhase.APPLIED_CLEANUP_FAILED && it.request.snapshot.storageEpoch == StorageOperationGate.epoch
+            }?.request?.snapshot
+            val suggestion = watchRepo.getSuggestion(suggestionId) ?: receipt?.suggestion ?: return@launchProfileOperation
+            val profileId = watchRepo.getRule(suggestion.ruleId)?.rule?.profileId
+                ?: receipt?.rule?.rule?.profileId ?: return@launchProfileOperation
             if (!appProvider.profileExists(profileId)) {
                 watchProfileMissing = true
                 return@launchProfileOperation
@@ -847,38 +864,56 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Same assignment as [applyIcon], but awaited and reporting its outcome. The icon-watch
-     * apply modal deletes the rule (which cascades the suggestion) once the icon is applied —
-     * fire-and-forget would drop the rule even when the target row was gone and nothing landed.
-     */
-    suspend fun applyWatchIcon(
+    internal fun applyWatchSuggestion(
+        snapshot: WatchApplySnapshot,
+        candidate: IconSuggestionCandidate,
         app: PackageInfoStruct,
         icon: IconPackDrawable,
-        sourcePackName: String?,
         expected: ProfileSessionToken
-    ): IconApplyOutcome {
-        return try {
-            profileSessionOperations.withLock {
-                val outcome = appProvider.applyWatchIcon(expected, app, icon, sourcePackName)
-                if (outcome == IconApplyOutcome.APPLIED) {
-                    // A later session change can skip UI bookkeeping, but cannot undo this result.
-                    try {
-                        markUpdated(expected, app, icon)
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (error: Exception) {
-                        Log.error("MainViewModel", "Could not update watched icon bookkeeping", error)
-                    }
+    ): Boolean {
+        val suggestion = snapshot.suggestion
+        if (snapshot.rule.rule.profileId != expected.profileId || !snapshot.rule.rule.completed ||
+            candidate !in snapshot.candidates || candidate.suggestionId != suggestion.id ||
+            app.key != suggestion.packageName + "/" + suggestion.activityName ||
+            IconPackBuilder.isOwnPack(candidate.iconPackPackage) || !appProvider.isCurrentSession(expected)) return false
+        return watchApplyOwner.submit(WatchApplyRequest(++nextWatchApply, expected, snapshot, candidate, app, icon))
+    }
+
+    internal fun retryWatchCleanup(requestId: Long, suggestionId: Long): Boolean =
+        watchApplyOwner.retryCleanup(requestId, suggestionId)
+
+    internal fun consumeWatchApply(requestId: Long, suggestionId: Long): Boolean =
+        watchApplyOwner.consume(requestId, suggestionId)
+
+    private suspend fun commitWatchApply(request: WatchApplyRequest, onCommitted: () -> Unit): IconApplyOutcome =
+        profileSessionOperations.withLock {
+            StorageOperationGate.run {
+                if (!watchRepo.isCurrentApplySnapshot(request.snapshot)) return@run IconApplyOutcome.FAILED
+                appProvider.applyWatchIcon(request.session, request.app, request.icon, request.candidate.iconPackPackage) {
+                    updatedKeys = updatedKeys + request.app.key
+                    onCommitted()
                 }
-                outcome
             }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            Log.error("MainViewModel", "Could not apply watched icon", error)
-            IconApplyOutcome.FAILED
         }
+
+    private suspend fun cleanupWatchApply(request: WatchApplyRequest) {
+        StorageOperationGate.run {
+            val suggestions = watchRepo.deleteAppliedRule(request.snapshot)
+            RenkinNotifications().cancelIconAvailable(
+                context = getApplication(), suggestionIds = suggestions,
+                cancelSummary = watchRepo.suggestionCount() == 0
+            )
+        }
+    }
+
+    private fun watchApplyFinished(state: WatchApplyState, error: Exception?) {
+        if (error != null) Log.error("MainViewModel", "Watch Apply did not finish cleanly", error)
+        _toastEvents.trySend(when (state.phase) {
+            WatchApplyPhase.APPLIED_CLEANED -> R.string.watchApplyToast
+            WatchApplyPhase.APPLIED_CLEANUP_FAILED -> R.string.watchApplyCleanupFailed
+            else -> if (state.outcome == IconApplyOutcome.LOCKED) R.string.iconOriginLocked else R.string.watchApplyFailed
+        })
+
     }
 
     /**
@@ -1091,12 +1126,16 @@ class MainViewModel @Inject constructor(
     /** Builds the icon a specific pack provides for [app] by drawable name (watch-apply modal). */
     suspend fun iconFromPack(
         app: PackageInfoStruct,
-        packPackage: String,
-        drawableName: String,
-        expectedHash: String,
-        options: GenerationOptions
-    ): IconGenerationService.ValidatedPackIcon =
-        appProvider.getValidatedIconFromPackDrawable(app, packPackage, drawableName, expectedHash, options)
+        candidate: IconSuggestionCandidate
+    ): IconGenerationService.ValidatedPackIcon = withContext(Dispatchers.Default) {
+        val context = getApplication<Application>()
+        val options = GenerationOptions.fromPreferences(
+            context.dataStore.getPreferencesAfterPendingWrites(), context, override = true
+        )
+        appProvider.getValidatedIconFromPackDrawable(
+            app, candidate.iconPackPackage, candidate.drawableName, candidate.iconHash, options
+        )
+    }
 
     /** The selectable drawables for the icon-pack dropdown, keyed by display name. */
     suspend fun iconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =

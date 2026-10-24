@@ -77,6 +77,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -163,7 +164,7 @@ fun WatchScreen(
     var editing by remember { mutableStateOf<RuleWithDetails?>(null) }
     var pendingDelete by remember { mutableStateOf<Long?>(null) }
     var pendingDeleteAllCompleted by remember { mutableStateOf(false) }
-    var applySuggestionId by remember { mutableStateOf<Long?>(null) }
+    var applySuggestionId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     Dialog(
         onDismissRequest = onDismiss,
