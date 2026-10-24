@@ -2,9 +2,11 @@ package dev.renkinProject.renkin.data
 
 import android.app.Application
 import kotlinx.coroutines.runBlocking
+import org.json.JSONException
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,6 +45,42 @@ class UnsavedIconJournalStoreTest {
 
         val original = row("a")
         assertEquals(original, UnsavedIconJournalCodec.decodeRow(UnsavedIconJournalCodec.encodeRow(original), 7))
+    }
+
+    @Test fun rowFromABuildWithoutNewerColumnsDecodesThemAsEntityDefaults() {
+        val older = UnsavedIconJournalCodec.encodeRow(row("a"))
+        val newerKeys = listOf("sourceUrl", "isFallbackIcon", "modifierRecipe", "modifierInput")
+        newerKeys.forEach(older::remove)
+
+        val decoded = UnsavedIconJournalCodec.decodeRow(older, 7)
+
+        val defaults = DbApplication("com.a", "com.a.Main", isAdaptiveIcon = true, isXml = false, drawable = "drawable-a")
+        assertEquals(
+            row("a").copy(
+                sourceUrl = defaults.sourceUrl, isFallbackIcon = defaults.isFallbackIcon,
+                modifierRecipe = defaults.modifierRecipe, modifierInput = defaults.modifierInput
+            ),
+            decoded
+        )
+    }
+
+    @Test fun journalFromABuildWithoutNewerColumnsIsStillOffered() = runBlocking {
+        val previous = journal("old", 7, "a")
+        val text = JSONObject(UnsavedIconJournalCodec.encode(previous, Int.MAX_VALUE))
+        text.getJSONArray("entries").getJSONObject(0).getJSONObject("row").remove("modifierInput")
+        File(context.noBackupFilesDir, "unsaved-journal").apply { mkdirs() }
+            .resolve("current.json").writeText(text.toString())
+
+        val offer = store.takeOverPrevious("new")
+
+        assertEquals(listOf("com.a/com.a.Main"), offer?.entries?.map { it.key })
+        assertEquals("", offer?.entries?.single()?.row?.modifierInput)
+    }
+
+    @Test fun rowWithoutARequiredFieldIsRejected() {
+        val broken = UnsavedIconJournalCodec.encodeRow(row("a")).apply { remove("drawable") }
+
+        assertThrows(JSONException::class.java) { UnsavedIconJournalCodec.decodeRow(broken, 7) }
     }
 
     @Test fun rowsBeyondTheCapAreCountedNotTruncated() {

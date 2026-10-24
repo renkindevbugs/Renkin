@@ -192,26 +192,32 @@ internal object UnsavedIconJournalCodec {
         .put("modifierRecipe", row.modifierRecipe)
         .put("modifierInput", row.modifierInput)
 
-    fun decodeRow(json: JSONObject, profileId: Long) = DbApplication(
-        packageName = json.getString("packageName"),
-        activityName = json.getString("activityName"),
-        isAdaptiveIcon = json.getBoolean("isAdaptiveIcon"),
-        isXml = json.getBoolean("isXml"),
-        drawable = json.getString("drawable"),
-        calendarEnabled = json.getBoolean("calendarEnabled"),
-        calendarPrefix = json.getString("calendarPrefix"),
-        calendarPackName = json.getString("calendarPackName"),
-        sourcePackName = json.getString("sourcePackName"),
-        profileId = profileId,
-        sourceDrawableName = json.getString("sourceDrawableName"),
-        isCustomIcon = json.getBoolean("isCustomIcon"),
-        isLegacyIcon = json.getBoolean("isLegacyIcon"),
-        baseDrawable = json.getString("baseDrawable"),
-        baseIsAdaptiveIcon = json.getBoolean("baseIsAdaptiveIcon"),
-        baseIsXml = json.getBoolean("baseIsXml"),
-        sourceUrl = json.getString("sourceUrl"),
-        isFallbackIcon = json.getBoolean("isFallbackIcon"),
-        modifierRecipe = json.getString("modifierRecipe"),
-        modifierInput = json.getString("modifierInput")
-    )
+    // A journal written before a column existed lacks its key; it reads as the entity default
+    // instead of failing, because read() deletes an undecodable journal with the work it holds.
+    fun decodeRow(json: JSONObject, profileId: Long): DbApplication {
+        val defaults = DbApplication(
+            packageName = json.getString("packageName"),
+            activityName = json.getString("activityName"),
+            isAdaptiveIcon = json.getBoolean("isAdaptiveIcon"),
+            isXml = json.getBoolean("isXml"),
+            drawable = json.getString("drawable"),
+            profileId = profileId
+        )
+        return defaults.copy(
+            calendarEnabled = json.optBoolean("calendarEnabled", defaults.calendarEnabled),
+            calendarPrefix = json.optString("calendarPrefix", defaults.calendarPrefix),
+            calendarPackName = json.optString("calendarPackName", defaults.calendarPackName),
+            sourcePackName = json.optString("sourcePackName", defaults.sourcePackName),
+            sourceDrawableName = json.optString("sourceDrawableName", defaults.sourceDrawableName),
+            isCustomIcon = json.optBoolean("isCustomIcon", defaults.isCustomIcon),
+            isLegacyIcon = json.optBoolean("isLegacyIcon", defaults.isLegacyIcon),
+            baseDrawable = json.optString("baseDrawable", defaults.baseDrawable),
+            baseIsAdaptiveIcon = json.optBoolean("baseIsAdaptiveIcon", defaults.baseIsAdaptiveIcon),
+            baseIsXml = json.optBoolean("baseIsXml", defaults.baseIsXml),
+            sourceUrl = json.optString("sourceUrl", defaults.sourceUrl),
+            isFallbackIcon = json.optBoolean("isFallbackIcon", defaults.isFallbackIcon),
+            modifierRecipe = json.optString("modifierRecipe", defaults.modifierRecipe),
+            modifierInput = json.optString("modifierInput", defaults.modifierInput)
+        )
+    }
 }
