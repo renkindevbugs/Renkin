@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AtomicFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.renkinProject.renkin.data.syncDirectory
+import dev.renkinProject.renkin.data.writeVerified
 import dev.renkinProject.renkin.extension.toLowerHex
 import dev.renkinProject.renkin.util.Log
 import java.io.ByteArrayOutputStream
@@ -273,34 +274,13 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
 
     private suspend fun commit(catalog: EditorDraftCatalog) = withContext(NonCancellable) {
         metadataPaths().forEach(::requireOwnedFile)
-        val encoded = EditorDraftCodec.encode(catalog).toByteArray(Charsets.UTF_8)
-        val output = catalogFile.startWrite()
-        var finished = false
-        try {
-            output.write(encoded)
-            output.fd.sync()
-            // Blob directory entries must be durable before a catalog can reference them.
+        // Blob directory entries must be durable before a catalog can reference them. A failure
+        // leaves new blobs intact: even a final fsync error can follow a successful rename.
+        catalogFile.writeVerified(EditorDraftCodec.encode(catalog).toByteArray(Charsets.UTF_8)) {
             syncDirectory(root)
-            catalogFile.finishWrite(output)
-            finished = true
-            val actual = catalogFile.openRead().use { input ->
-                val bytes = ByteArray(encoded.size)
-                var offset = 0
-                while (offset < bytes.size) {
-                    val count = input.read(bytes, offset, bytes.size - offset)
-                    if (count < 0) break
-                    offset += count
-                }
-                offset == bytes.size && input.read() == -1 && bytes.contentEquals(encoded)
-            }
-            if (!actual) throw IOException("Cannot publish editor draft metadata")
-            syncDirectory(root)
-            syncDirectory(base)
-        } catch (error: Throwable) {
-            if (!finished) catalogFile.failWrite(output)
-            // Leave new blobs intact: even a final fsync error can follow a successful rename.
-            throw error
         }
+        syncDirectory(root)
+        syncDirectory(base)
     }
 
     private suspend fun readArtifact(id: String, artifact: EditorDraftArtifact, retainBytes: Boolean): ByteArray? {

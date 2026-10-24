@@ -254,6 +254,19 @@ class EditorDraftStoreTest {
         assertEquals(saved.record.artifacts.size, root.listFiles()!!.count { it.name.endsWith(".blob") })
     }
 
+    @Test fun blobDirectoryIsSyncedBeforeTheCatalogCanReferenceTheNewDraft() = runBlocking {
+        val saved = save()
+        val catalog = File(root, "catalog.json")
+        val previousCatalog = catalog.readBytes()
+        val catalogAtRootSyncs = mutableListOf<ByteArray>()
+        BackupOsShadow.beforeDirectorySync = { path -> if (path == root.canonicalPath) catalogAtRootSyncs += catalog.readBytes() }
+        val published = store.save(saved.checkpoint, owner, mapOf("controls" to "replacement".toByteArray()))
+        BackupOsShadow.beforeDirectorySync = null
+        assertArrayEquals(previousCatalog, catalogAtRootSyncs.first())
+        assertTrue(published.record.artifacts.all { blob(published, it.name).isFile })
+        assertNotEquals(saved.checkpoint, published.checkpoint)
+    }
+
     @Test fun errorAfterRenameKeepsPublishedBlobsAndRequiresFreshCheckpoint() = runBlocking {
         val saved = save()
         var rootSyncs = 0
