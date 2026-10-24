@@ -1056,6 +1056,23 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /** An app the Add app sheet just added: the home list scrolls to it once. */
+    var revealedAppKey by mutableStateOf<String?>(null)
+        private set
+
+    /** The added app whose editor opens straight away ("Add and edit icon"). */
+    var addedAppEditorKey by mutableStateOf<String?>(null)
+        private set
+
+    fun onAppTargetAdded(key: String, openEditor: Boolean) {
+        revealedAppKey = key
+        if (openEditor) addedAppEditorKey = key
+    }
+
+    fun consumeRevealedApp() { revealedAppKey = null }
+
+    fun closeAddedAppEditor() { addedAppEditorKey = null }
+
     // True while the app list reload runs — drives the home list's pull-to-refresh spinner.
     var appsRefreshing by mutableStateOf(false)
         private set

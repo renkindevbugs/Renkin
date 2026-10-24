@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
+import dev.renkinProject.renkin.data.AppTarget
+import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.setPreferenceValue
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.Profile
@@ -109,6 +111,16 @@ class ProfileManager internal constructor(
         val profile = packRepo.profile(profileId) ?: return
         packRepo.updateProfile(profile.copy(prefsSnapshot = profile.prefsSnapshot.withBuiltPrimaryPrefs(source)))
     }
+
+    suspend fun appTargets(profileId: Long): List<AppTarget> =
+        AppTargetCodec.decode(packRepo.profile(profileId)?.appTargets.orEmpty())
+
+    /** Every profile's added components; the pack index covers them all so a switch needs no reparse. */
+    suspend fun allAppTargets(): List<AppTarget> =
+        packRepo.profiles().flatMap { AppTargetCodec.decode(it.appTargets) }.distinctBy { it.key }
+
+    suspend fun setAppTargets(profileId: Long, targets: List<AppTarget>) =
+        packRepo.updateAppTargets(profileId, AppTargetCodec.encode(targets))
 
     /** Persists the active profile's "don't show the missing-packs dialog again" choice. */
     suspend fun setHideMissingPackWarning(hide: Boolean) {

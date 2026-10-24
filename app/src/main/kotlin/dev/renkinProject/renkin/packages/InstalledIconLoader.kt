@@ -53,13 +53,40 @@ sealed class ApplicationIconSource {
         fun configuration() = Configuration(configuration)
         override val previewIdentity = Any()
     }
+
+    /**
+     * An added target this user's PackageManager still resolves although LauncherApps does not
+     * list it, typically a disabled app. Only PackageManager loads disabled components.
+     */
+    internal class PackageActivity(
+        val component: ComponentName,
+        configuration: Configuration
+    ) : ApplicationIconSource() {
+        private val configuration = Configuration(configuration)
+        fun configuration() = Configuration(configuration)
+        override val previewIdentity = Any()
+    }
+
+    /** An added target with nothing installed to read its own icon from. */
+    internal object Unavailable : ApplicationIconSource() {
+        override val previewIdentity = Any()
+    }
 }
 
 internal fun ApplicationIconSource.retainedDrawableOrNull(): Drawable? = when (this) {
     is ApplicationIconSource.Inline -> drawable
     is ApplicationIconSource.Prepared -> icon.drawable
     is ApplicationIconSource.Installed -> null
+    is ApplicationIconSource.PackageActivity -> null
+    ApplicationIconSource.Unavailable -> null
 }
+
+internal const val DISABLED_COMPONENT_FLAGS =
+    PackageManager.MATCH_DISABLED_COMPONENTS or PackageManager.MATCH_DISABLED_UNTIL_USED_COMPONENTS
+
+@Suppress("DEPRECATION")
+internal fun PackageManager.disabledAwareActivityInfo(component: ComponentName): android.content.pm.ActivityInfo? =
+    runCatching { getActivityInfo(component, DISABLED_COMPONENT_FLAGS) }.getOrNull()
 
 class LoadedApplicationIcon internal constructor(
     val drawable: Drawable,
@@ -93,7 +120,11 @@ class InstalledIconLoader @Inject constructor(@ApplicationContext private val co
     }
 
     private fun key(source: ApplicationIconSource, size: Int) = AppBitmapCacheKey(
-        (source as? ApplicationIconSource.Installed)?.component?.flattenToString().orEmpty(),
+        when (source) {
+            is ApplicationIconSource.Installed -> source.component.flattenToString()
+            is ApplicationIconSource.PackageActivity -> source.component.flattenToString()
+            else -> ""
+        },
         0, source.previewIdentity, size.coerceAtLeast(1))
 
     @WorkerThread
@@ -105,6 +136,25 @@ class InstalledIconLoader @Inject constructor(@ApplicationContext private val co
             sourcePermits.acquire()
             try { loadInstalled(source) } finally { sourcePermits.release() }
         }
+        is ApplicationIconSource.PackageActivity -> {
+            check(Looper.myLooper() != Looper.getMainLooper()) { "Installed icon loading must run off Main" }
+            sourcePermits.acquire()
+            try { loadPackageActivity(source) } finally { sourcePermits.release() }
+        }
+        ApplicationIconSource.Unavailable -> null
+    }
+
+    private fun loadPackageActivity(source: ApplicationIconSource.PackageActivity): LoadedApplicationIcon? {
+        val configured = context.createConfigurationContext(source.configuration())
+        val packageManager = configured.packageManager
+        val activity = packageManager.disabledAwareActivityInfo(source.component) ?: return null
+        val info = activity.applicationInfo
+        val icon = runCatching { activity.loadIcon(packageManager) }.getOrNull() ?: return null
+        val safe = if (icon.hasValidDimensions()) icon else {
+            Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).toDrawable(configured.resources)
+        }
+        return LoadedApplicationIcon(safe, launcherIconIdOrFallback(activity.iconResource, info.icon),
+            ApplicationInfo(info), source.configuration())
     }
 
     private fun loadInstalled(source: ApplicationIconSource.Installed): LoadedApplicationIcon? {

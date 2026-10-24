@@ -57,6 +57,7 @@ import dev.renkinProject.renkin.extension.toInt
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
+import dev.renkinProject.renkin.data.AppTargetState
 import dev.renkinProject.renkin.data.Source
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
@@ -452,6 +453,9 @@ internal fun OptionsDialog(
     val snackbarHostState = remember { SnackbarHostState() }
     val toaster = LocalToaster.current
     val selectIconMessage = stringResource(R.string.selectIconFirst)
+    // An added app that is not installed has no icon of its own to start from.
+    val appIconAvailable = app.targetState != AppTargetState.NOT_INSTALLED
+    val appIconUnavailableMessage = stringResource(R.string.appIconSourceUnavailable)
     val externalEditorError = stringResource(R.string.noImageEditorAvailable)
     val context = LocalContext.current
     val externalEditorScope = rememberCoroutineScope()
@@ -763,7 +767,14 @@ internal fun OptionsDialog(
                     AnimatedVisibility(visible = selectedTab == 0) {
                         SourcePills(
                             source = browserSource.takeIf { session.modifierReplay == null },
-                            onSourceChange = session::selectCreateSource
+                            appIconAvailable = appIconAvailable,
+                            onSourceChange = { picked ->
+                                if (picked == Source.APPLICATION_ICON && !appIconAvailable) {
+                                    toaster.show(appIconUnavailableMessage)
+                                } else {
+                                    session.selectCreateSource(picked)
+                                }
+                            }
                         )
                     }
                     HorizontalDivider()
@@ -1321,6 +1332,7 @@ private fun CalendarCard(
 @Composable
 private fun SourcePills(
     source: Source?,
+    appIconAvailable: Boolean,
     onSourceChange: (Source) -> Unit
 ) {
     SingleChoiceSegmentedButtonRow(
@@ -1337,7 +1349,13 @@ private fun SourcePills(
             selected = source == Source.APPLICATION_ICON,
             onClick = { onSourceChange(Source.APPLICATION_ICON) },
             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
-        ) { Text(stringResource(R.string.sourceAppIcon)) }
+        ) {
+            // Still tappable: the tap explains why the app's own icon is missing.
+            Text(
+                stringResource(R.string.sourceAppIcon),
+                color = if (appIconAvailable) Color.Unspecified else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            )
+        }
         SegmentedButton(
             selected = source == Source.APPLICATION_NAME,
             onClick = { onSourceChange(Source.APPLICATION_NAME) },

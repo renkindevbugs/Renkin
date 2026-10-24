@@ -1,6 +1,8 @@
 package dev.renkinProject.renkin.data.transfer
 
 import android.app.Application
+import dev.renkinProject.renkin.data.AppTarget
+import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.Profile
@@ -134,6 +136,24 @@ class BackupCodecTest {
         val decoded = BackupCodec.decode(BackupCodec.encode(original, BackupCodec.LEGACY_FORMAT_VERSION), BackupCodec.LEGACY_FORMAT_VERSION)
 
         assertEquals(original, decoded)
+    }
+
+    @Test
+    fun addedAppsRoundTripAndInvalidEntriesAreDroppedWithoutLosingTheProfile() {
+        val targets = AppTargetCodec.encode(listOf(AppTarget("org.fdroid.fdroid", "org.fdroid.fdroid.views.main.MainActivity", "F-Droid")))
+        val data = sampleData()
+        val withTargets = data.copy(profiles = data.profiles.map { it.copy(profile = it.profile.copy(appTargets = targets)) })
+        val decoded = BackupCodec.decode(BackupCodec.encode(withTargets, BackupCodec.LEGACY_FORMAT_VERSION), BackupCodec.LEGACY_FORMAT_VERSION)
+        assertEquals(withTargets, decoded)
+
+        val root = JSONObject(BackupCodec.encode(data, BackupCodec.LEGACY_FORMAT_VERSION))
+        val first = root.getJSONArray("profiles").getJSONObject(0)
+        first.put("appTargets", """[{"packageName":"bad","activityName":"x","label":"Broken"},""" +
+            """{"packageName":"com.ok","activityName":".Main","label":"Ok"}]""")
+        root.getJSONArray("profiles").getJSONObject(1).remove("appTargets")
+        val lenient = BackupCodec.decode(root.toString(), BackupCodec.LEGACY_FORMAT_VERSION)
+        assertEquals(listOf(AppTarget("com.ok", "com.ok.Main", "Ok")), AppTargetCodec.decode(lenient.profiles[0].profile.appTargets))
+        assertEquals("", lenient.profiles[1].profile.appTargets)
     }
 
     @Test

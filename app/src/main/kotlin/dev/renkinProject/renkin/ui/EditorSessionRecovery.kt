@@ -39,7 +39,7 @@ internal fun reconstructEditorSession(prepared: PreparedEditorRecovery): EditorS
         calendarEnabled = original.calendar.enabled, calendarPrefix = original.calendar.prefix,
         calendarPackName = original.calendar.packName, sourcePackName = original.sourcePack,
         sourceUrl = original.sourceUrl, isFallback = original.fallback, isRefreshMade = original.refreshMade,
-        isCustom = original.custom, isLegacy = original.legacy
+        isCustom = original.custom, isLegacy = original.legacy, targetState = live.targetState
     )
     return EditorSession(prepared.baseline.session, application, value.controls.create.iconPack,
         value.controls.create.fontReference, live).apply { restoreDraft(bound) }

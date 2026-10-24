@@ -97,6 +97,13 @@ internal class ApplicationManager(
         return emptyList()
     }
 
+    /** Every component [iconPackName] themes, installed or not — the Add app sheet's candidates. */
+    fun allAppFilterItems(iconPackName: String): List<RawItem> {
+        val res = resourceResolver.getResources(iconPackName) ?: return emptyList()
+        val xmlParser = getAppfilter(res, iconPackName) ?: return emptyList()
+        return getAppFilterRawElements(xmlParser, components = null).filterIsInstance<RawItem>()
+    }
+
     /** The drawable name [iconPackName]'s appfilter maps to [application]'s component, if any. */
     fun appFilterDrawableName(iconPackName: String, application: InstalledApplication): String? =
         runCatching { getAppFilterRawElements(iconPackName, listOf(application)) }
@@ -244,9 +251,11 @@ internal class ApplicationManager(
         return map
     }
 
-    private fun getAppFilterRawElements(xmlParser: XmlPullParser, components: List<String>): List<RawElement> {
+    // Null [components] keeps every declaration instead of only the listed ones.
+    private fun getAppFilterRawElements(xmlParser: XmlPullParser, components: List<String>?): List<RawElement> {
         val list = mutableListOf<RawElement>()
-        val componentSet = components.toHashSet()
+        val componentSet = components?.toHashSet()
+        fun wanted(component: String) = componentSet == null || component in componentSet
 
         var type = xmlParser.eventType
 
@@ -256,7 +265,7 @@ internal class ApplicationManager(
                     val xmlDrawable = xmlParser.getAttributeValue(null, "drawable")
                     val xmlComponent = xmlParser.getAttributeValue(null, "component")
 
-                    if (xmlComponent in componentSet && xmlDrawable != null) {
+                    if (xmlComponent != null && wanted(xmlComponent) && xmlDrawable != null) {
                         list.add(RawItem(xmlComponent, xmlDrawable))
                     }
                 }
@@ -265,7 +274,7 @@ internal class ApplicationManager(
                     val xmlPrefix = xmlParser.getAttributeValue(null, "prefix")
                     val xmlComponent = xmlParser.getAttributeValue(null, "component")
 
-                    if (xmlComponent in componentSet && xmlPrefix != null) {
+                    if (xmlComponent != null && wanted(xmlComponent) && xmlPrefix != null) {
                         list.add(RawCalendar(xmlComponent, xmlPrefix))
                     }
                 }

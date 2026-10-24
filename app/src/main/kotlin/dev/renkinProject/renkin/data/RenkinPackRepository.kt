@@ -302,9 +302,15 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         val current = profileDao.get(profile.id)
         // Metadata updates can carry a row captured before a style write. Only the style
         // owner may replace the document and its projection once that row is converted.
-        profileDao.update(if (current?.profileStyle?.isNotEmpty() == true) {
+        // Added app targets have their own writer for the same reason.
+        val styled = if (current?.profileStyle?.isNotEmpty() == true) {
             profile.copy(profileStyle = current.profileStyle, prefsSnapshot = current.prefsSnapshot)
-        } else profile)
+        } else profile
+        profileDao.update(styled.copy(appTargets = current?.appTargets ?: styled.appTargets))
+    }
+
+    suspend fun updateAppTargets(profileId: Long, document: String) = access {
+        check(profileDao.updateAppTargets(profileId, document) == 1) { "Profile disappeared while saving its apps" }
     }
 
     internal suspend fun writeProfileStyles(styles: List<ProfileStyleUpdate>) = transaction {

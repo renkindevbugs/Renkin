@@ -44,7 +44,7 @@ class RenkinPackMigrationTest {
 
     @Test
     fun everyReleasedSchemaMigratesToCurrent() {
-        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20).forEach { version ->
+        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21).forEach { version ->
             RenkinPackDatabase.open(context, historical(version, "from-$version")).useDatabase { database ->
                 database.openHelper.writableDatabase
             }
@@ -63,11 +63,11 @@ class RenkinPackMigrationTest {
         }
         RenkinPackDatabase.open(context, name).useDatabase { database ->
             val sql = database.openHelper.writableDatabase
-            assertEquals(21, sql.version)
+            assertEquals(22, sql.version)
             sql.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 expected.forEach { (column, value) -> assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column))) }
-                assertEquals("profileStyle", cursor.columnNames.last())
+                assertTrue("profileStyle" in cursor.columnNames)
                 assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("profileStyle")))
             }
             assertEquals("", database.profileDao().get(DEFAULT_PROFILE_ID)!!.profileStyle)
@@ -78,7 +78,31 @@ class RenkinPackMigrationTest {
         }
     }
 
-    @Test fun currentProfileColumnSurvivesDaoCopiesAndDatabaseReopen() = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Default) {
+    @Test fun version21AddsEmptyAppTargetsWithoutChangingAnyProfileValue() = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Default) {
+        var expected = emptyMap<String, String?>()
+        val name = historical(21, "v21-targets") { db ->
+            db.execSQL("INSERT INTO Profile (id, name, description, packLabel, prefsSnapshot, hasUnbuiltChanges, hideMissingPackWarning, profileStyle) " +
+                "VALUES (7, 'Dark', 'kept description', 'Dark Pack', 'prefs', 1, 1, 'typed document')")
+            db.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                expected = cursor.columnNames.associateWith { cursor.getString(cursor.getColumnIndexOrThrow(it)) }
+            }
+        }
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            val sql = database.openHelper.writableDatabase
+            assertEquals(22, sql.version)
+            sql.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                expected.forEach { (column, value) -> assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column))) }
+                assertEquals("appTargets", cursor.columnNames.last())
+                assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("appTargets")))
+            }
+            assertEquals(1, database.profileDao().updateAppTargets(7, "[]"))
+            assertEquals("[]", database.profileDao().get(7)!!.appTargets)
+        }
+    }
+
+    @Test fun currentProfileColumnSurvivesDaoCopiesAndDatabaseReopen() =kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Default) {
         val name = historical(21, "v21-style") { db ->
             db.execSQL("INSERT INTO Profile (id, name, profileStyle) VALUES (7, 'Original', 'retained typed document')")
         }
