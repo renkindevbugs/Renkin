@@ -309,6 +309,18 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         profileDao.update(styled.copy(appTargets = current?.appTargets ?: styled.appTargets))
     }
 
+    suspend fun updateProfileDetails(profileId: Long, name: String, description: String, packLabel: String) = access {
+        profileDao.updateDetails(profileId, name, description, packLabel)
+    }
+
+    suspend fun setProfileUnbuilt(profileId: Long, unbuilt: Boolean) = access {
+        profileDao.setUnbuilt(profileId, unbuilt)
+    }
+
+    suspend fun setHideMissingPackWarning(profileId: Long, hide: Boolean) = access {
+        profileDao.setHideMissingPackWarning(profileId, hide)
+    }
+
     suspend fun updateAppTargets(profileId: Long, document: String) = access {
         check(profileDao.updateAppTargets(profileId, document) == 1) { "Profile disappeared while saving its apps" }
     }

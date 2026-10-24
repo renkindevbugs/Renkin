@@ -9,6 +9,7 @@ import androidx.room.Room
 import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
 import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.apk.PackKeystore
+import dev.renkinProject.renkin.data.ActiveProfileIdKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
@@ -371,6 +372,34 @@ class BackupManagerTest {
         val prefs = context.dataStore.data.first()
         assertNull(prefs[LastWatchCheckAtKey])
         assertEquals(2_000L, prefs[LastAutoBackupAtKey])
+    }
+
+    @Test
+    fun exports_leaveEveryProfileRowUntouched() = runBlocking {
+        val queries = java.util.concurrent.ConcurrentLinkedQueue<String>()
+        val db = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java)
+            .allowMainThreadQueries()
+            .setQueryCallback({ sql, _ -> queries.add(sql) }, java.util.concurrent.Executor { it.run() })
+            .build()
+        try {
+            val pack = RenkinPackRepository(db)
+            pack.replaceEverything(listOf(
+                Profile(id = DEFAULT_PROFILE_ID, name = "Renkin", description = "Main", packLabel = "Pack"),
+                Profile(id = 3L, name = "Other", hasUnbuiltChanges = true)
+            ), emptyList())
+            context.dataStore.edit { it[ActiveProfileIdKey] = DEFAULT_PROFILE_ID }
+            val manager = sourceManager(pack, WatchRepository(srcWatchDb))
+            val before = pack.profiles()
+            queries.clear()
+
+            manager.exportBackup { ByteArrayOutputStream() }
+            manager.exportProfile(DEFAULT_PROFILE_ID) { ByteArrayOutputStream() }
+
+            assertTrue(queries.none { it.startsWith("UPDATE") && it.contains("Profile") })
+            assertEquals(before, pack.profiles())
+        } finally {
+            db.close()
+        }
     }
 
     @Test

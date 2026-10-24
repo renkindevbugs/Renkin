@@ -75,6 +75,70 @@ class ProfileManagerTest {
     )
 
     @Test
+    fun metadataUpdatesChangeOnlyTheirOwnColumns() = runBlocking {
+        val original = Profile(
+            id = DEFAULT_PROFILE_ID, name = "Renkin", description = "Main", packLabel = "Pack",
+            prefsSnapshot = "{\"legacy\":1}", hasUnbuiltChanges = false, hideMissingPackWarning = false,
+            profileStyle = "style-document", appTargets = "targets-document"
+        )
+        repo.replaceEverything(listOf(original), emptyList())
+        val profiles = manager()
+
+        profiles.updateProfileDetails(DEFAULT_PROFILE_ID, "Renamed", "Changed", "Label")
+        profiles.markUnbuilt(DEFAULT_PROFILE_ID, true)
+        profiles.setHideMissingPackWarning(true)
+
+        assertEquals(
+            original.copy(
+                name = "Renamed", description = "Changed", packLabel = "Label",
+                hasUnbuiltChanges = true, hideMissingPackWarning = true
+            ),
+            repo.profile(DEFAULT_PROFILE_ID)
+        )
+    }
+
+    @Test
+    fun metadataUpdatesOfAMissingProfileWriteNothing() = runBlocking {
+        repo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
+        val profiles = manager()
+
+        profiles.updateProfileDetails(42L, "Ghost", "", "")
+        profiles.markUnbuilt(42L, true)
+
+        assertEquals(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), repo.profiles())
+    }
+
+    @Test
+    fun markUnbuiltKeepsAColumnWrittenAfterTheProfileWasRead() = runBlocking {
+        val concurrentRename = java.util.concurrent.atomic.AtomicBoolean(false)
+        lateinit var racingDb: RenkinPackDatabase
+        racingDb = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java)
+            .allowMainThreadQueries()
+            .setQueryCallback({ sql, _ ->
+                // Runs right before the profile write executes, as a concurrent rename would.
+                if (sql.startsWith("UPDATE") && sql.contains("Profile") && concurrentRename.getAndSet(false)) {
+                    racingDb.openHelper.writableDatabase.execSQL("UPDATE Profile SET name = 'Renamed' WHERE id = 1")
+                }
+            }, java.util.concurrent.Executor { it.run() })
+            .build()
+        try {
+            val racingRepo = RenkinPackRepository(racingDb)
+            racingRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
+            concurrentRename.set(true)
+
+            ProfileManager(context, racingRepo, PreferenceDataStoreFactory.create(scope = scope) {
+                temporaryFolder.newFile("racing.preferences_pb")
+            }).markUnbuilt(DEFAULT_PROFILE_ID, true)
+
+            val stored = racingRepo.profile(DEFAULT_PROFILE_ID)
+            assertEquals("Renamed", stored?.name)
+            assertEquals(true, stored?.hasUnbuiltChanges)
+        } finally {
+            racingDb.close()
+        }
+    }
+
+    @Test
     fun initRepairsMissingDefaultProfileWithoutDeletingItsIcons() = runBlocking {
         repo.replaceAll(
             DEFAULT_PROFILE_ID,
