@@ -13,10 +13,8 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.apk.PackKeystore
-import dev.renkinProject.renkin.data.ActiveProfileIdKey
 import dev.renkinProject.renkin.data.AutoBackupIntervalKey
 import dev.renkinProject.renkin.data.AutoBackupTreeUriKey
-import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.data.InstalledApplication
@@ -32,7 +30,6 @@ import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
 import dev.renkinProject.renkin.data.ProfileStyleAccess
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import dev.renkinProject.renkin.data.snapshotProfilePrefs
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.BaselineInput
@@ -257,10 +254,6 @@ class BackupManager(
         // The storage gate freezes profile commits, watch, prefs, gallery and signing
         // writers until the complete archive has copied every live input.
         val prefs = context.dataStore.getPreferencesAfterPendingWrites()
-        val activeId = prefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
-        packRepo.profile(activeId)?.let {
-            packRepo.updateProfile(it.copy(prefsSnapshot = prefs.snapshotProfilePrefs()))
-        }
 
         val rulesByProfile = watchRepo.getAllRules()
             .groupBy { it.rule.profileId }
@@ -328,13 +321,6 @@ class BackupManager(
      * No uploads or keystore travel with a share.
      */
     suspend fun prepareProfileExport(profileId: Long): PreparedExport = prepareExport {
-        val prefs = context.dataStore.getPreferencesAfterPendingWrites()
-        val activeId = prefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
-        if (profileId == activeId) {
-            packRepo.profile(profileId)?.let {
-                packRepo.updateProfile(it.copy(prefsSnapshot = prefs.snapshotProfilePrefs()))
-            }
-        }
         val profile = packRepo.profile(profileId) ?: throw IOException("Profile $profileId does not exist")
         val rules = watchRepo.getAllRules()
             .filter { it.rule.profileId == profileId && !it.rule.completed }

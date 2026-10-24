@@ -320,6 +320,15 @@ interface ProfileDao {
     @Query("UPDATE Profile SET appTargets = :targets WHERE id = :id")
     fun updateAppTargets(id: Long, targets: String): Int
 
+    @Query("UPDATE Profile SET name = :name, description = :description, packLabel = :packLabel WHERE id = :id")
+    fun updateDetails(id: Long, name: String, description: String, packLabel: String): Int
+
+    @Query("UPDATE Profile SET hasUnbuiltChanges = :unbuilt WHERE id = :id")
+    fun setUnbuilt(id: Long, unbuilt: Boolean): Int
+
+    @Query("UPDATE Profile SET hideMissingPackWarning = :hide WHERE id = :id")
+    fun setHideMissingPackWarning(id: Long, hide: Boolean): Int
+
     @Query("SELECT * FROM Profile ORDER BY id")
     fun getAllFlow(): kotlinx.coroutines.flow.Flow<List<Profile>>
 

@@ -72,8 +72,7 @@ class ProfileManager internal constructor(
      * (it's the launcher-visible label baked into the pack APK's manifest).
      */
     suspend fun updateProfileDetails(id: Long, name: String, description: String, packLabel: String) {
-        val profile = packRepo.profile(id) ?: return
-        packRepo.updateProfile(profile.copy(name = name, description = description, packLabel = packLabel))
+        packRepo.updateProfileDetails(id, name, description, packLabel)
     }
 
     /**
@@ -89,9 +88,7 @@ class ProfileManager internal constructor(
 
     /** Records whether [profileId]'s save is still waiting for a build. */
     suspend fun markUnbuilt(profileId: Long, unbuilt: Boolean) {
-        packRepo.profile(profileId)?.let {
-            packRepo.updateProfile(it.copy(hasUnbuiltChanges = unbuilt))
-        }
+        packRepo.setProfileUnbuilt(profileId, unbuilt)
     }
 
     /**
@@ -124,9 +121,7 @@ class ProfileManager internal constructor(
 
     /** Persists the active profile's "don't show the missing-packs dialog again" choice. */
     suspend fun setHideMissingPackWarning(hide: Boolean) {
-        packRepo.profile(activeProfileId)?.let {
-            packRepo.updateProfile(it.copy(hideMissingPackWarning = hide))
-        }
+        packRepo.setHideMissingPackWarning(activeProfileId, hide)
     }
 
     /**
