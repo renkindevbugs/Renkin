@@ -45,6 +45,33 @@ class ApplicationManagerDrawableResolutionTest {
         assertEquals(setOf(other), bulk.keys)
     }
 
+    // Watch checks parse once for many apps and then look each app up; that must equal the old
+    // one-app parse + bulk lookup, also when two apps share one drawable.
+    @Test
+    fun targetedLookupInASharedParseMatchesAOneAppBulkLookup() {
+        val context = RuntimeEnvironment.getApplication()
+        val manager = ApplicationManager(context)
+        val pack = context.packageName
+        val first = InstalledApplication("com.app", "com.app.Main", 1)
+        val second = InstalledApplication("com.other", "com.other.Main", 2)
+        val unthemed = InstalledApplication("com.plain", "com.plain.Main", 3)
+        val shared = listOf(
+            RawItem(first.toComponentInfo(), "missing_drawable"),
+            RawItem(second.toComponentInfo(), "mdpi_ic_launcher"),
+            RawItem(first.toComponentInfo(), "mdpi_ic_launcher")
+        )
+
+        for (app in listOf(first, second, unthemed)) {
+            val ownElements = shared.filter { it.component == app.toComponentInfo() }
+            val expected = manager.getDrawableFromAppFilterElements(pack, listOf(app), ownElements)[app]
+            val actual = manager.getDrawableFromAppFilterElements(pack, app, shared)
+            assertEquals(expected?.resourceId, actual?.resourceId)
+            assertEquals(appFilterDrawableName(ownElements, app.toComponentInfo()),
+                appFilterDrawableName(shared, app.toComponentInfo()))
+        }
+        assertTrue(requireNotNull(manager.getDrawableFromAppFilterElements(pack, second, shared)).resourceId > 0)
+    }
+
     @Test
     fun missingLastDrawableIsAbsentInBothTargetedAndBulkLookup() {
         assertBrokenWinnerDoesNotReviveEarlierDrawable("missing_last_drawable")

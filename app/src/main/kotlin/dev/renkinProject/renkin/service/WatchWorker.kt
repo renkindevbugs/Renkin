@@ -87,7 +87,8 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.debug("Renkin", "WatchChecker failed: ${e.message}")
+            // A failure that keeps retrying must stay diagnosable: error level with its stack trace.
+            Log.error("WatchWorker", "Watch check failed", e)
             Result.retry()
         }
     }

@@ -4,6 +4,7 @@ import android.content.Context
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.BaselineInput
@@ -136,9 +137,10 @@ class WatchChecker(
         // Package parsing and bitmap hashes never own the global storage gate.
         val installedPacks = watchablePacks()
         val installedApps = installedAppCatalog.getAllInstalledApplications().groupBy { it.packageName }
+        val packIcons = packIconsFor(rules, installedApps)
         val checks = rules.map { before ->
-            if (before.details.rule.completed) planCompleted(before, installedPacks, installedApps)
-            else planActive(before, installedPacks, installedApps)
+            if (before.details.rule.completed) planCompleted(before, installedPacks, installedApps, packIcons)
+            else planActive(before, installedPacks, installedApps, packIcons)
         }
         val fired = mutableListOf<FiredSuggestion>()
         for (check in checks) {
@@ -186,7 +188,8 @@ class WatchChecker(
     private fun planActive(
         before: RuleSnapshot,
         installedPacks: Map<String, IconPack>,
-        installedApps: Map<String, List<InstalledApplication>>
+        installedApps: Map<String, List<InstalledApplication>>,
+        packIcons: WatchPackIcons
     ): RuleCheck {
         val rule = before.details
         val packs = if (rule.rule.watchAllPacks) installedPacks.keys.toList() else rule.packs.map { it.iconPackPackage }
@@ -208,7 +211,7 @@ class WatchChecker(
                 val pack = installedPacks[packPackage] ?: continue
                 val previous = statesByComponentPack[Triple(component.packageName, component.activityName, packPackage)]
                 if (previous?.lastPackVersionCode == pack.versionCode) continue
-                val (drawableName, hash) = resolveIcon(packPackage, installedApp) ?: continue
+                val (drawableName, hash) = packIcons.resolveIcon(packPackage, installedApp) ?: continue
                 states += WatchState(
                     ruleId = rule.rule.id,
                     packageName = component.packageName,
@@ -231,14 +234,15 @@ class WatchChecker(
     private fun planCompleted(
         before: RuleSnapshot,
         installedPacks: Map<String, IconPack>,
-        installedApps: Map<String, List<InstalledApplication>>
+        installedApps: Map<String, List<InstalledApplication>>,
+        packIcons: WatchPackIcons
     ): RuleCheck {
         val completed = before.details.suggestions.mapNotNull { suggestion ->
             val app = installedApps[suggestion.packageName].orEmpty().firstOrNull { it.activityName == suggestion.activityName }
                 ?: return@mapNotNull null
             val stored = before.candidates[suggestion.id].orEmpty()
             val candidates = stored.map { candidate ->
-                val resolved = if (candidate.iconPackPackage in installedPacks) resolveIcon(candidate.iconPackPackage, app) else null
+                val resolved = if (candidate.iconPackPackage in installedPacks) packIcons.resolveIcon(candidate.iconPackPackage, app) else null
                 val name = resolved?.first
                 val hash = resolved?.second
                 if (name != null && hash != null) CandidateInput(candidate.iconPackPackage, name, hash)
@@ -346,26 +350,34 @@ class WatchChecker(
         .filter { !IconPackBuilder.isOwnPack(it.packageName) }
         .associateBy { it.packageName }
 
+    // Every installed activity of a watched package, so a migrated launcher activity is covered too.
+    private fun packIconsFor(
+        rules: List<RuleSnapshot>,
+        installedApps: Map<String, List<InstalledApplication>>
+    ): WatchPackIcons {
+        val watchedPackages = rules.flatMapTo(HashSet()) { snapshot ->
+            snapshot.details.apps.map { it.packageName } + snapshot.details.suggestions.map { it.packageName }
+        }
+        return WatchPackIcons(
+            watchedApps = watchedPackages.flatMap { installedApps[it].orEmpty() },
+            parse = appMan::getAppFilterRawElements,
+            resolve = ::resolveIcon
+        )
+    }
+
     /**
-     * Resolves the (drawable name, content hash) a pack currently provides for an app.
-     * A pair of nulls means the pack was read successfully but has no icon; null means reading
-     * failed and the caller must leave the previous check state untouched for a later retry.
+     * The (drawable name, content hash) a pack's parsed appfilter gives one app. The hash must stay
+     * byte-identical to the stored baselines, or every pair would fire a false suggestion.
      */
     private fun resolveIcon(
         packPackage: String,
-        installedApp: InstalledApplication
-    ): Pair<String?, String?>? {
-        // Same isolation as the baseline pass: an unreadable pack is skipped, never thrown.
-        return readWatchPackOrNull(packPackage) {
-            val elements = appMan.getAppFilterRawElements(packPackage, listOf(installedApp))
-            val component = installedApp.toComponentInfo()
-            val drawableName = appFilterDrawableName(elements, component)
-            val resource = appMan.getDrawableFromAppFilterElements(
-                packPackage, listOf(installedApp), elements
-            )[installedApp]
-            val hash = resource?.drawable?.toSafeBitmapOrNull()?.contentHash()
-            drawableName to hash
-        }
+        installedApp: InstalledApplication,
+        elements: List<RawElement>
+    ): Pair<String?, String?> {
+        val drawableName = appFilterDrawableName(elements, installedApp.toComponentInfo())
+        val hash = appMan.getDrawableFromAppFilterElements(packPackage, installedApp, elements)
+            ?.drawable?.toSafeBitmapOrNull()?.contentHash()
+        return drawableName to hash
     }
 
 }
