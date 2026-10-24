@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ImageNotSupported
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
@@ -35,7 +36,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,27 +48,28 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.renkinProject.renkin.ui.theme.CardShape
-import dev.renkinProject.renkin.apk.IconApplyOutcome
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.data.IconPack
-import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
-import dev.renkinProject.renkin.data.watch.IconSuggestion
+import dev.renkinProject.renkin.data.watch.WatchApplySnapshot
+import dev.renkinProject.renkin.apk.ProfileSessionToken
+import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
 import dev.renkinProject.renkin.drawable.IconPackDrawable
-import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.ui.DisabledExplanation
-import dev.renkinProject.renkin.ui.LocalToaster
 import dev.renkinProject.renkin.ui.PackIconImage
 import dev.renkinProject.renkin.ui.RenkinAlertDialog
-import dev.renkinProject.renkin.ui.getCurrentContext
-import dev.renkinProject.renkin.ui.getPreferences
 import dev.renkinProject.renkin.ui.performConfirmHaptic
 import dev.renkinProject.renkin.ui.rememberAppBitmap
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+
+private data class WatchPreviewKey(
+    val snapshot: WatchApplySnapshot?,
+    val candidate: IconSuggestionCandidate?,
+    val app: PackageInfoStruct?,
+    val session: ProfileSessionToken
+)
+private data class WatchPreview(val key: WatchPreviewKey, val icon: IconPackDrawable?, val sourceChanged: Boolean)
 
 /**
  * Shown on the home screen when opened from an icon-watch notification (phase 6):
@@ -78,69 +79,61 @@ import kotlinx.coroutines.withContext
  */
 @Composable
 fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
-    val context = getCurrentContext()
     val viewModel: MainViewModel = hiltViewModel()
     val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()
     val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val watchViewModel: WatchViewModel = hiltViewModel()
-    val prefs = getPreferences()
     val view = LocalView.current
-    val toaster = LocalToaster.current
     val suggestionSession = remember(suggestionId) { runtimeState.sessionToken }
 
-    var suggestion by remember(suggestionId) { mutableStateOf<IconSuggestion?>(null) }
-    var candidates by remember(suggestionId) { mutableStateOf<List<IconSuggestionCandidate>>(emptyList()) }
+    var snapshot by remember(suggestionId) { mutableStateOf<WatchApplySnapshot?>(null) }
     var selectedPack by remember(suggestionId) { mutableStateOf<String?>(null) }
-    var newIcon by remember(suggestionId) { mutableStateOf<IconPackDrawable?>(null) }
-    var generating by remember(suggestionId) { mutableStateOf(false) }
-    var candidateChanged by remember(suggestionId) { mutableStateOf(false) }
     var loaded by remember(suggestionId) { mutableStateOf(false) }
-    // Guards the confirm button while the apply is awaited, so a double tap can't run it twice.
-    var applying by remember(suggestionId) { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-
+    val applyStates by viewModel.watchApplyStates.collectAsStateWithLifecycle()
+    val operation = applyStates[suggestionId]?.takeIf {
+        it.request.snapshot.storageEpoch == viewModel.watchStorageEpoch && it.request.session.profileId == suggestionSession.profileId
+    }
+    val applying = operation?.busy == true
+    val cleanupFailed = operation?.phase == WatchApplyPhase.APPLIED_CLEANUP_FAILED
+    val hasReceipt = operation != null && operation.phase != WatchApplyPhase.APPLYING && operation.phase != WatchApplyPhase.NOT_APPLIED
+    // Cleanup may already have removed Room rows before a notification failure. Keep its receipt visible.
+    val displayedSnapshot = if (hasReceipt) operation?.request?.snapshot else snapshot
+    val suggestion = displayedSnapshot?.suggestion
+    val candidates = displayedSnapshot?.candidates.orEmpty().filter { !IconPackBuilder.isOwnPack(it.iconPackPackage) }
+    val displayedPack = if (hasReceipt) operation?.request?.candidate?.iconPackPackage else selectedPack
+    LaunchedEffect(operation?.request?.id, operation?.phase) {
+        val result = operation ?: return@LaunchedEffect
+        if (result.phase == WatchApplyPhase.APPLIED_CLEANED || result.phase == WatchApplyPhase.NOT_APPLIED) {
+            if (viewModel.consumeWatchApply(result.request.id, suggestionId) &&
+                (result.phase == WatchApplyPhase.APPLIED_CLEANED || loaded && snapshot == null)) onDismiss()
+        }
+    }
+    LaunchedEffect(runtimeState.sessionToken, applying) {
+        if (runtimeState.ready && runtimeState.sessionToken != suggestionSession && !applying) onDismiss()
+    }
     LaunchedEffect(suggestionId) {
-        val (s, c) = watchViewModel.loadSuggestion(suggestionId)
-        // Drop our own generated pack: a suggestion stored before the WatchChecker filter
-        // could still list it, and it must never be offered as an icon source. Filtering
-        // here covers the chips, the default selection and the generated preview at once.
-        val packCandidates = c.filter { !IconPackBuilder.isOwnPack(it.iconPackPackage) }
-        suggestion = s
-        candidates = packCandidates
-        selectedPack = packCandidates.firstOrNull()?.iconPackPackage
+        val target = watchViewModel.loadSuggestion(suggestionId)
+        snapshot = target
+        selectedPack = target?.candidates?.firstOrNull { !IconPackBuilder.isOwnPack(it.iconPackPackage) }?.iconPackPackage
         loaded = true
-        if (s == null) onDismiss() // already handled/deleted → nothing to show
+        if (target == null && viewModel.watchApplyStates.value[suggestionId] == null) onDismiss()
     }
 
     val apps = applicationState.applications
     val app = suggestion?.let { s -> apps.find { it.packageName == s.packageName && it.activityName == s.activityName } }
-
-    // (Re)generate the new icon for the selected pack
-    LaunchedEffect(selectedPack, suggestion, app) {
-        val s = suggestion
-        val pack = selectedPack
-        val targetApp = app
-        val candidate = candidates.find { it.iconPackPackage == pack }
-        // App or pack uninstalled since the suggestion fired → nothing to generate
-        if (s == null || pack == null || targetApp == null || candidate == null) {
-            newIcon = null
-            candidateChanged = false
-            generating = false
-            return@LaunchedEffect
-        }
-        generating = true
-        newIcon = null
-        candidateChanged = false
-        val validated = withContext(Dispatchers.Default) {
-            val options = GenerationOptions.fromPreferences(
-                prefs.getPreferencesAfterPendingWrites(), context, override = true
-            )
-            viewModel.iconFromPack(targetApp, pack, candidate.drawableName, candidate.iconHash, options)
-        }
-        newIcon = validated.icon
-        candidateChanged = validated.sourceChanged
-        generating = false
+    val previewKey = WatchPreviewKey(displayedSnapshot, candidates.find { it.iconPackPackage == displayedPack }, app, suggestionSession)
+    var renderedPreview by remember(suggestionId) { mutableStateOf<WatchPreview?>(null) }
+    val preview = renderedPreview?.takeIf { it.key == previewKey }
+    val newIcon = if (hasReceipt) operation?.request?.icon else preview?.icon
+    val generating = !hasReceipt && previewKey.app != null && previewKey.candidate != null && preview == null
+    val candidateChanged = preview?.sourceChanged == true
+    LaunchedEffect(previewKey, hasReceipt) {
+        if (hasReceipt) return@LaunchedEffect
+        val candidate = previewKey.candidate ?: return@LaunchedEffect
+        val targetApp = previewKey.app ?: return@LaunchedEffect
+        val validated = viewModel.iconFromPack(targetApp, candidate)
+        renderedPreview = WatchPreview(previewKey, validated.icon, validated.sourceChanged)
     }
 
     if (!loaded || suggestion == null) return
@@ -186,14 +179,20 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                     candidates.forEach { candidate ->
                         val pack = packsName(iconPackState.packs, candidate.iconPackPackage)
                         FilterChip(
-                            selected = selectedPack == candidate.iconPackPackage,
+                            selected = displayedPack == candidate.iconPackPackage,
                             onClick = { selectedPack = candidate.iconPackPackage },
+                            enabled = !applying && !cleanupFailed,
                             label = { Text(pack, maxLines = 1) },
                             leadingIcon = { PackIconImage(candidate.iconPackPackage, 18.dp) }
                         )
                     }
                 }
-                if (candidateChanged) {
+                if (cleanupFailed) {
+                    Text(stringResource(R.string.watchApplyCleanupFailed),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 10.dp))
+                }
+                if (candidateChanged && !cleanupFailed) {
                     Text(
                         text = stringResource(R.string.watchCandidateChanged),
                         style = MaterialTheme.typography.bodySmall,
@@ -215,11 +214,8 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                 ) {
                     Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
                 }
-                val applyToast = stringResource(R.string.watchApplyToast)
-                val applyFailedToast = stringResource(R.string.watchApplyFailed)
-                val lockedToast = stringResource(R.string.iconOriginLocked)
                 DisabledExplanation(
-                    enabled = newIcon != null && app != null && !applying,
+                    enabled = (cleanupFailed || newIcon != null && app != null) && !applying,
                     message = stringResource(
                         if (candidateChanged) R.string.watchCandidateChanged else R.string.watchApplyDisabledHint
                     )
@@ -227,46 +223,23 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                     FilledIconButton(
                         onClick = {
                             view.performConfirmHaptic()
-                            val icon = newIcon
-                            val targetApp = app
-                            if (icon == null || targetApp == null) {
-                                onDismiss()
+                            if (cleanupFailed && operation != null) {
+                                viewModel.retryWatchCleanup(operation.request.id, suggestionId)
                             } else {
-                                val appliedRuleId = suggestion?.ruleId
-                                val appliedPack = selectedPack
-                                applying = true
-                                scope.launch {
-                                    // The rule (and with it the suggestion) may only go once the
-                                    // icon really landed — the target row can be gone by now, and
-                                    // dropping the rule then would lose the suggestion for nothing.
-                                    try {
-                                        when (
-                                            viewModel.applyWatchIcon(
-                                                targetApp,
-                                                icon,
-                                                appliedPack,
-                                                suggestionSession
-                                            )
-                                        ) {
-                                            IconApplyOutcome.APPLIED -> {
-                                                appliedRuleId?.let { watchViewModel.deleteRule(it) }
-                                                toaster.show(applyToast)
-                                                onDismiss()
-                                            }
-                                            IconApplyOutcome.LOCKED -> toaster.show(lockedToast)
-                                            IconApplyOutcome.TARGET_GONE,
-                                            IconApplyOutcome.PROFILE_CHANGED,
-                                            IconApplyOutcome.FAILED -> toaster.show(applyFailedToast)
-                                        }
-                                    } finally {
-                                        applying = false
-                                    }
+                                val reviewed = preview
+                                val target = reviewed?.key?.snapshot
+                                val candidate = reviewed?.key?.candidate
+                                val targetApp = reviewed?.key?.app
+                                val icon = reviewed?.icon
+                                if (target != null && candidate != null && targetApp != null && icon != null) {
+                                    viewModel.applyWatchSuggestion(target, candidate, targetApp, icon, suggestionSession)
                                 }
                             }
                         },
-                        enabled = newIcon != null && app != null && !applying
+                        enabled = (cleanupFailed || newIcon != null && app != null) && !applying
                     ) {
-                        Icon(Icons.Filled.Check, stringResource(R.string.confirm))
+                        Icon(if (cleanupFailed) Icons.Filled.Refresh else Icons.Filled.Check,
+                            stringResource(if (cleanupFailed) R.string.watchRetryCleanup else R.string.confirm))
                     }
                 }
             }

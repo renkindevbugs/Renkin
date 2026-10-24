@@ -112,18 +112,53 @@ class WatchRepository(private val db: WatchDatabase) {
     /** Deletes several rules atomically and returns their removed suggestion ids. */
     suspend fun deleteRules(ruleIds: List<Long>): List<Long> {
         if (ruleIds.isEmpty()) return emptyList()
-        return transaction {
-            val suggestionIds = dao.suggestionIdsForRules(ruleIds)
-            ruleIds.forEach { ruleId ->
-                dao.deleteCandidatesForRule(ruleId)
-                dao.deleteSuggestionsForRule(ruleId)
-                dao.deleteAppsForRule(ruleId)
-                dao.deletePacksForRule(ruleId)
-                dao.deleteRule(ruleId)
-            }
-            dao.pruneOrphanStates()
-            suggestionIds
+        return transaction { deleteRuleRows(ruleIds) }
+    }
+
+    private suspend fun deleteRuleRows(ruleIds: List<Long>): List<Long> {
+        val suggestionIds = dao.suggestionIdsForRules(ruleIds)
+        ruleIds.forEach { ruleId ->
+            dao.deleteCandidatesForRule(ruleId)
+            dao.deleteSuggestionsForRule(ruleId)
+            dao.deleteAppsForRule(ruleId)
+            dao.deletePacksForRule(ruleId)
+            dao.deleteRule(ruleId)
         }
+        dao.pruneOrphanStates()
+        return suggestionIds
+    }
+
+    internal suspend fun loadApplySnapshot(suggestionId: Long): WatchApplySnapshot? = transaction {
+        readApplySnapshot(suggestionId)
+    }
+
+    private suspend fun readApplySnapshot(suggestionId: Long): WatchApplySnapshot? {
+        val suggestion = dao.getSuggestion(suggestionId) ?: return null
+        val details = dao.getRuleWithDetails(suggestion.ruleId) ?: return null
+        val canonical = details.copy(
+            apps = details.apps.sortedBy { it.packageName + "/" + it.activityName },
+            packs = details.packs.sortedBy { it.iconPackPackage },
+            suggestions = details.suggestions.sortedBy { it.id }
+        )
+        return WatchApplySnapshot(canonical, suggestion,
+            dao.getCandidates(suggestionId).sortedBy { it.iconPackPackage }, StorageOperationGate.epoch,
+            canonical.suggestions.flatMap { dao.getCandidates(it.id) }
+                .sortedWith(compareBy<IconSuggestionCandidate> { it.suggestionId }.thenBy { it.iconPackPackage }))
+    }
+
+    internal suspend fun isCurrentApplySnapshot(snapshot: WatchApplySnapshot): Boolean = transaction {
+        StorageOperationGate.epoch == snapshot.storageEpoch && readApplySnapshot(snapshot.suggestion.id) == snapshot
+    }
+
+    // A retry may run after deletion committed but notification cancellation or the return failed.
+    internal suspend fun deleteAppliedRule(snapshot: WatchApplySnapshot): List<Long> = transaction {
+        if (StorageOperationGate.epoch != snapshot.storageEpoch) throw WatchApplyTargetChangedException()
+        val current = readApplySnapshot(snapshot.suggestion.id)
+        if (current == null && dao.getRule(snapshot.rule.rule.id) == null) {
+            return@transaction snapshot.rule.suggestions.map { it.id }
+        }
+        if (current != snapshot) throw WatchApplyTargetChangedException()
+        deleteRuleRows(listOf(snapshot.rule.rule.id))
     }
 
     // --- Backup ---------------------------------------------------------------

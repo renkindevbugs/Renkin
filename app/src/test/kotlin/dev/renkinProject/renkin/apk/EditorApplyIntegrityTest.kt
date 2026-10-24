@@ -41,6 +41,18 @@ import kotlinx.coroutines.job
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import dev.renkinProject.renkin.data.watch.WatchDatabase
+import dev.renkinProject.renkin.data.watch.WatchRepository
+import dev.renkinProject.renkin.data.watch.AppComponent
+import dev.renkinProject.renkin.data.watch.CandidateInput
+import dev.renkinProject.renkin.feature.watch.WatchApplyOwner
+import dev.renkinProject.renkin.feature.watch.WatchApplyRequest
+import dev.renkinProject.renkin.feature.watch.WatchApplyPhase
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -168,6 +180,50 @@ class EditorApplyIntegrityTest {
         }) { _, _, _ -> error("An expired session must not edit") }
         assertEquals(IconApplyOutcome.PROFILE_CHANGED, result)
         assertFalse(acknowledged)
+    }
+
+    @Test fun watchReceiptSurvivesCancelledReturnAndRetryOnlyRemovesItsCapturedRule() = runBlocking {
+        val app = initializeApp()
+        val reviewed = draft()
+        val watchDb = Room.inMemoryDatabaseBuilder(context, WatchDatabase::class.java).allowMainThreadQueries().build()
+        val watch = WatchRepository(watchDb)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        try {
+            val component = AppComponent(app.packageName, app.activityName)
+            val ruleId = watch.saveRule(null, listOf(component), false, listOf(context.packageName), provider.activeProfileId)
+            val suggestionId = watch.completeWithSuggestion(ruleId, component,
+                listOf(CandidateInput(context.packageName, "drawable", "hash")))
+            val snapshot = requireNotNull(watch.loadApplySnapshot(suggestionId))
+            val request = WatchApplyRequest(1, provider.sessionToken, snapshot, snapshot.candidates.single(), app, reviewed)
+            var writes = 0
+            val acknowledged = AtomicBoolean(false)
+            val owner = WatchApplyOwner(scope, { value, ack ->
+                writes++
+                provider.applyWatchIcon(value.session, value.app, value.icon, context.packageName) {
+                    acknowledged.set(true); ack()
+                }
+                throw CancellationException("Cancelled between mutation and cleanup")
+            }, { value -> watch.deleteAppliedRule(value.snapshot); Unit }, { _, _ -> })
+            owner.submit(request)
+            withTimeout(10_000) {
+                while (owner.states.value[suggestionId]?.busy == true) {
+                    shadowOf(android.os.Looper.getMainLooper()).idle(); delay(10)
+                }
+            }
+            assertTrue(acknowledged.get())
+            assertSame(reviewed, provider.applicationState.value.applications.single().baseIcon)
+            assertNotNull(watch.getRule(ruleId))
+            assertEquals(WatchApplyPhase.APPLIED_CLEANUP_FAILED, owner.states.value[suggestionId]?.phase)
+            assertTrue(owner.retryCleanup(request.id, suggestionId))
+            withTimeout(10_000) {
+                while (owner.states.value[suggestionId]?.busy == true) {
+                    shadowOf(android.os.Looper.getMainLooper()).idle(); delay(10)
+                }
+            }
+            assertEquals(1, writes)
+            assertNull(watch.getRule(ruleId))
+            assertEquals(WatchApplyPhase.APPLIED_CLEANED, owner.states.value[suggestionId]?.phase)
+        } finally { scope.cancel(); shadowOf(android.os.Looper.getMainLooper()).idle(); watchDb.close() }
     }
 
     private fun reference(isCustom: Boolean = true) = DbApplication(

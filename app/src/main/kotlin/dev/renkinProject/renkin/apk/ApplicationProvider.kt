@@ -636,8 +636,9 @@ class ApplicationProvider internal constructor(
         expected: ProfileSessionToken,
         application: PackageInfoStruct,
         icon: IconPackDrawable,
-        sourcePackName: String?
-    ): IconApplyOutcome = applyPickedIcon(expected, application, icon, sourcePackName) { live, origin, rendered ->
+        sourcePackName: String?,
+        onCommitted: () -> Unit = {}
+    ): IconApplyOutcome = applyPickedIcon(expected, application, icon, sourcePackName, onCommitted = onCommitted) { live, origin, rendered ->
         live.changeExport(
             rendered, sourcePackName = origin, isRefreshMade = false,
             isCustom = true, isLegacy = false, baseIcon = icon

@@ -2298,3 +2298,30 @@ Both editors use `openExternalIconEditor` for bitmap preparation, the ViewModel'
 and external launch. Cancellation propagates; conversion/write/launch failures return the
 existing failure presentation. The handoff coroutine belongs to the open UI, so dismissing it
 can cancel preparation without retaining an Activity in the ViewModel.
+
+
+### Watch Apply ownership and cleanup
+
+`MainViewModel` owns Watch Apply in its ViewModel scope. The UI submits an immutable reviewed
+request containing the opening profile session, exact suggestion/rule snapshot, candidate and
+icon. A synchronous per-suggestion claim prevents duplicate writes. Preview publication is
+identified by candidate, target and snapshot, so changing a pack immediately makes an older
+preview ineligible for confirmation. Both notification and Watch-list entry points consume
+retained completion state by operation id; success closes only that matching modal.
+
+The provider's commit acknowledgement records the edited key at the icon mutation. Once that
+receipt exists, errors or cancellation can produce only an applied/cleanup-pending result,
+never a false not-applied result. Cleanup is awaited and targets the captured completed rule,
+even if the active profile later changes. Room deletion checks the captured rule, suggestions,
+all their candidates and the storage epoch, protecting changed entries and reused ids after
+restore. Missing rule and suggestion rows make a repeated cleanup idempotent. Notification
+cancellation follows deletion under the storage gate, using the captured suggestion ids.
+
+Results distinguish not applied, applied and cleaned, and applied with cleanup failure. A
+cleanup retry uses the original receipt and never assigns the icon again. The receipt remains
+visible and can be reopened from its notification intent even if Room deletion already
+committed before notification cleanup failed. Dismissing a cleanup failure retains that receipt
+in memory; normal failure keeps the stored suggestion. Receipts survive composition changes
+and Activity recreation with the ViewModel, but are not a durable cross-process outbox.
+The application mutation and Watch database cleanup are separate commits, not a cross-database
+transaction. A force-kill between them is outside this in-memory retry guarantee.

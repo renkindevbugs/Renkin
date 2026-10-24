@@ -903,4 +903,6 @@
     <string name="savedModifiersPreviewFailed">The preview could not be updated. Change a modifier or select a smaller source before applying.</string>
     <string name="savedModifierSource">Saved source</string>
     <string name="savedModifierSourceDescription">This icon uses its saved artwork. Choose a source below to replace it. Browsing icon packs keeps the current source until you select an icon.</string>
+    <string name="watchApplyCleanupFailed">Icon set, but the watch entry could not be removed. Retry removes the entry without applying the icon again.</string>
+    <string name="watchRetryCleanup">Retry removing the watch entry</string>
 </resources>

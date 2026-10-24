@@ -225,7 +225,7 @@ class WatchViewModel @Inject constructor(
         }
     }
 
-    /** Loads a suggestion and its candidate icons for the apply modal. */
-    suspend fun loadSuggestion(id: Long): Pair<IconSuggestion?, List<IconSuggestionCandidate>> =
-        StorageOperationGate.run { repo.getSuggestion(id) to repo.getCandidates(id) }
+    /** Loads a transactionally consistent target for the apply modal. */
+    internal suspend fun loadSuggestion(id: Long): dev.renkinProject.renkin.data.watch.WatchApplySnapshot? =
+        repo.loadApplySnapshot(id)
 }
