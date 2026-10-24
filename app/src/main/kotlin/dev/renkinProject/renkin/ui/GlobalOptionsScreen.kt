@@ -1034,7 +1034,7 @@ private fun GlobalIconEditDialog(editor: GlobalIconEditorDraft, onDismiss: () ->
                     useVector = useVector,
                     useMaterialYou = false,
                     adjustments = adjustments,
-                    centerPreview = remember(preview) { preview?.toModifierBitmap() },
+                    centerPreviewIcon = preview,
                     previewGenerating = generating,
                     sampleBitmap = heroBitmap,
                     previews = modifierPreviews,

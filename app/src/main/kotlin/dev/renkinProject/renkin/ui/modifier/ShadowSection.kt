@@ -29,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -89,9 +90,12 @@ internal fun ShadowSection(
     adjustments: AdjustmentState,
     preview: Bitmap?,
     previewGenerating: Boolean,
-    renderPreview: (suspend (ColorizerStyle) -> Bitmap?)?
+    renderPreview: (suspend (ColorizerStyle) -> Bitmap?)?,
+    // The host rasterises [preview] only while the editor that shows it is open.
+    onEditorOpenChange: (Boolean) -> Unit = {}
 ) {
     var editorOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(editorOpen) { onEditorOpenChange(editorOpen) }
     // The Cancel snapshot is kept encoded so it survives process death alongside the open editor.
     var originalShadowEncoded by rememberSaveable { mutableStateOf<String?>(null) }
     val originalShadow = remember(originalShadowEncoded) {
@@ -317,7 +321,9 @@ private fun ShadowEditorSheet(
 private fun ShadowEditorControls(
     adjustments: AdjustmentState,
     presets: List<ShadowUiPreset>,
-    renderPreview: (suspend (ColorizerStyle) -> Bitmap?)?
+    renderPreview: (suspend (ColorizerStyle) -> Bitmap?)?,
+    // The host rasterises [preview] only while the editor that shows it is open.
+    onEditorOpenChange: (Boolean) -> Unit = {}
 ) {
     var selectedControlOrdinal by rememberSaveable { mutableIntStateOf(ShadowControl.BLUR.ordinal) }
     var colorSheetOpen by rememberSaveable { mutableStateOf(false) }
