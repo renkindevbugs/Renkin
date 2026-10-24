@@ -1075,6 +1075,20 @@ private fun MissingAppCard(searchHint: Boolean, onClick: () -> Unit) {
 private val EmptyStateMinHeight = 260.dp
 private const val DELIVERY_REVEAL_CAP_MS = 1000L
 
+/**
+ * A home field that keeps focus under the edit dialog gets it back, popping the keyboard, when the
+ * dialog goes. Dropping it as the editor opens leaves nothing to restore, and a field the user taps
+ * while the editor is still closing (its window already passes touches) keeps its focus. Only a real
+ * open runs this, never a keystroke that recomposes the filtered rows.
+ */
+@Composable
+internal fun DropFocusWhenEditorOpens(editorOpen: Boolean) {
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(editorOpen) {
+        if (editorOpen) focusManager.clearFocus(force = true)
+    }
+}
+
 private fun LazyGridState.isItemFullyVisible(index: Int): Boolean {
     val item = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return false
     return item.offset.y >= layoutInfo.viewportStartOffset &&
@@ -1120,16 +1134,7 @@ fun ApplicationItem(
     val iconAnchor = remember { IconAnchor() }
     var iconFlight by remember { mutableStateOf<IconFlightState?>(null) }
 
-    // Closing the edit dialog (whose icon-search field had keyboard focus) otherwise lets the
-    // system hand focus to the home search field, popping the keyboard. Clear focus only on the
-    // actual open→close transition — not on initial composition, or filtering the list (which
-    // recomposes rows) would clear the search field's focus after every keystroke.
-    val focusManager = LocalFocusManager.current
-    var wasOptionsOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(openAppOptions) {
-        if (wasOptionsOpen && !openAppOptions) focusManager.clearFocus(force = true)
-        wasOptionsOpen = openAppOptions
-    }
+    DropFocusWhenEditorOpens(openAppOptions)
 
     Surface(
         shape = CardShape,
