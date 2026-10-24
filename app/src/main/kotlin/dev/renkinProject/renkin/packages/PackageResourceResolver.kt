@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.Resources
+import android.content.res.XmlResourceParser
 import android.graphics.drawable.Drawable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,29 +46,41 @@ internal class PackageResourceResolver(private val context: Context) {
     fun getDrawable(packageName: String, resourceId: Int): Drawable? =
         getResources(packageName)?.let { resources -> getDrawable(resources, resourceId) }
 
-    fun getDrawableByName(packageName: String, name: String): Drawable? {
-        val resources = getResources(packageName) ?: return null
-        val resourceId = resources.getIdentifierByName(name, "drawable", packageName)
-        return getDrawable(resources, resourceId)
-    }
+    fun getDrawableByName(packageName: String, name: String): Drawable? =
+        getResources(packageName)?.let { getDrawableByName(it, packageName, name) }
+
+    // Callers looking up many names resolve Resources once (a night-mode override builds a new one).
+    fun getDrawableByName(resources: Resources, packageName: String, name: String): Drawable? =
+        getDrawable(resources, resources.getIdentifierByName(name, "drawable", packageName))
 
     /** Cheap existence check: resolves the resource id without decoding the drawable. */
-    fun hasDrawable(packageName: String, name: String): Boolean {
-        val resources = getResources(packageName) ?: return false
-        return resources.getIdentifierByName(name, "drawable", packageName) > 0
-    }
+    fun hasDrawable(packageName: String, name: String): Boolean =
+        getResources(packageName)?.let { hasDrawable(it, packageName, name) } ?: false
 
-    fun getXml(resources: Resources, packageName: String, name: String): XmlPullParser? {
+    fun hasDrawable(resources: Resources, packageName: String, name: String): Boolean =
+        resources.getIdentifierByName(name, "drawable", packageName) > 0
+
+    fun getXml(resources: Resources, packageName: String, name: String): XmlResourceParser? {
         val resourceId = resources.getIdentifierByName(name, "xml", packageName)
         return if (resourceId > 0) resources.getXml(resourceId) else null
     }
 
-    fun getAssetXml(resources: Resources, name: String): XmlPullParser? {
+    /**
+     * Parses [name] from the package's res/xml, otherwise from its `assets/[name].xml`, and closes
+     * the parser or stream it opened whether [read] returns or throws. Null when neither exists.
+     */
+    inline fun <T> withPackXml(resources: Resources, packageName: String, name: String, read: (XmlPullParser) -> T): T? {
+        getXml(resources, packageName, name)?.let { parser ->
+            return try {
+                read(parser)
+            } finally {
+                parser.close()
+            }
+        }
         val assets = resources.assets.list("")
-        if (assets == null || !assets.contains(name)) return null
-
-        return XmlPullParserFactory.newInstance().newPullParser().apply {
-            setInput(resources.assets.open(name), "utf-8")
+        if (assets == null || !assets.contains("$name.xml")) return null
+        return resources.assets.open("$name.xml").use { stream ->
+            read(XmlPullParserFactory.newInstance().newPullParser().apply { setInput(stream, "utf-8") })
         }
     }
 

@@ -285,9 +285,9 @@ class IconPackRepository(
     fun isCalendarPrefix(iconPackageName: String, prefix: String): Boolean {
         if (prefix.isEmpty()) return false
         if (prefix in calendarPrefixes(iconPackageName)) return true
-        val hasFirst = resourceResolver.hasDrawable(iconPackageName, prefix + "1") ||
-            resourceResolver.hasDrawable(iconPackageName, prefix + "01")
-        return hasFirst && resourceResolver.hasDrawable(iconPackageName, prefix + "28")
+        val res = resourceResolver.getResources(iconPackageName) ?: return false
+        fun has(name: String) = resourceResolver.hasDrawable(res, iconPackageName, name)
+        return (has(prefix + "1") || has(prefix + "01")) && has(prefix + "28")
     }
 
     /**
@@ -304,7 +304,8 @@ class IconPackRepository(
     /** Builds one collision-free export from both global and per-app calendar selections. */
     internal fun calendarBuildData(selections: List<CalendarSelection>): CalendarBuildData<Drawable> =
         buildCalendarData(selections) { pack, prefix ->
-            loadCalendarDays(prefix) { name -> resourceResolver.getDrawableByName(pack, name) }
+            val res = resourceResolver.getResources(pack)
+            loadCalendarDays(prefix) { name -> res?.let { resourceResolver.getDrawableByName(it, pack, name) } }
         }
 
     /**
@@ -314,9 +315,10 @@ class IconPackRepository(
      */
     fun missingCalendarDays(iconPackageName: String, prefix: String): List<Int> {
         if (prefix.isEmpty()) return emptyList()
+        val res = resourceResolver.getResources(iconPackageName) ?: return (1..31).toList()
         return (1..31).filter { day ->
-            !resourceResolver.hasDrawable(iconPackageName, prefix + day) &&
-                !resourceResolver.hasDrawable(iconPackageName, prefix + day.toString().padStart(2, '0'))
+            !resourceResolver.hasDrawable(res, iconPackageName, prefix + day) &&
+                !resourceResolver.hasDrawable(res, iconPackageName, prefix + day.toString().padStart(2, '0'))
         }
     }
 

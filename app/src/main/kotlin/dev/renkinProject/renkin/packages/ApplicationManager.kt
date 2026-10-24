@@ -1,7 +1,6 @@
 package dev.renkinProject.renkin.packages
 
 import android.content.Context
-import android.content.res.Resources
 import android.graphics.drawable.Drawable
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawCalendar
@@ -86,22 +85,17 @@ internal class ApplicationManager(
     }
     override fun getAppFilterRawElements(iconPackName: String, applications: List<InstalledApplication>): List<RawElement> {
         val res = resourceResolver.getResources(iconPackName) ?: return emptyList()
-        val xmlParser = getAppfilter(res, iconPackName)
-
         val components = applications.map { it.toComponentInfo() }
-
-        if (xmlParser != null) {
-            return getAppFilterRawElements(xmlParser, components)
-        }
-
-        return emptyList()
+        return resourceResolver.withPackXml(res, iconPackName, "appfilter") { getAppFilterRawElements(it, components) }
+            ?: emptyList()
     }
 
     /** Every component [iconPackName] themes, installed or not — the Add app sheet's candidates. */
     fun allAppFilterItems(iconPackName: String): List<RawItem> {
         val res = resourceResolver.getResources(iconPackName) ?: return emptyList()
-        val xmlParser = getAppfilter(res, iconPackName) ?: return emptyList()
-        return getAppFilterRawElements(xmlParser, components = null).filterIsInstance<RawItem>()
+        return resourceResolver.withPackXml(res, iconPackName, "appfilter") {
+            getAppFilterRawElements(it, components = null).filterIsInstance<RawItem>()
+        } ?: emptyList()
     }
 
     /** The drawable name [iconPackName]'s appfilter maps to [application]'s component, if any. */
@@ -117,8 +111,11 @@ internal class ApplicationManager(
      */
     fun getIconPackFallback(iconPackName: String): IconPackFallback {
         val res = resourceResolver.getResources(iconPackName) ?: return IconPackFallback()
-        val xmlParser = getAppfilter(res, iconPackName) ?: return IconPackFallback()
+        return resourceResolver.withPackXml(res, iconPackName, "appfilter", ::parseIconPackFallback)
+            ?: IconPackFallback()
+    }
 
+    private fun parseIconPackFallback(xmlParser: XmlPullParser): IconPackFallback {
         val backs = mutableListOf<String>()
         var mask: String? = null
         var upon: String? = null
@@ -202,8 +199,10 @@ internal class ApplicationManager(
 
     override fun getIconPackDrawableNames(iconPackName: String): List<String> {
         val res = resourceResolver.getResources(iconPackName) ?: return emptyList()
-        val xmlParser = getDrawable(res, iconPackName) ?: return emptyList()
+        return resourceResolver.withPackXml(res, iconPackName, "drawable", ::parseDrawableNames) ?: emptyList()
+    }
 
+    private fun parseDrawableNames(xmlParser: XmlPullParser): List<String> {
         val list = mutableListOf<String>()
         var type = xmlParser.eventType
 
@@ -307,34 +306,4 @@ internal class ApplicationManager(
         return list
     }
 
-    private fun getAppfilter(res: Resources, packageName: String): XmlPullParser? {
-        val xmlParser = getResAppfilter(res, packageName)
-
-        if (xmlParser != null) return xmlParser
-        return getAssetAppfilter(res)
-    }
-
-    private fun getResAppfilter(res: Resources, packageName: String): XmlPullParser? {
-        return resourceResolver.getXml(res, packageName, "appfilter")
-    }
-
-    private fun getAssetAppfilter(res: Resources): XmlPullParser? {
-        return resourceResolver.getAssetXml(res, "appfilter.xml")
-    }
-
-    private fun getDrawable(res: Resources, packageName: String): XmlPullParser? {
-        val xmlParser = getResDrawable(res, packageName)
-
-        if (xmlParser != null) return xmlParser
-        return getAssetDrawable(res)
-    }
-
-    private fun getResDrawable(res: Resources, packageName: String): XmlPullParser? {
-        return resourceResolver.getXml(res, packageName, "drawable")
-    }
-
-    private fun getAssetDrawable(res: Resources): XmlPullParser? {
-        return resourceResolver.getAssetXml(res, "drawable.xml")
-    }
-    
 }
