@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- AGP 8.13 merges the unit-test manifest without the main manifest's uses-sdk override;
+         mirror it so Robolectric tests build with the same Shizuku exception as the app. -->
+    <uses-sdk tools:overrideLibrary="ru.solrudev.ackpine.shizuku,rikka.shizuku.api" />
+</manifest>
