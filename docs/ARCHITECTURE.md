@@ -69,6 +69,11 @@ one without Hilt: `UploadedImageLibrary` (upload gallery list/import/trash/decod
 including images shared back from external editors), `FontLibrary` (system font scan and
 typefaces), `MainViewModel.importSvg` (picked SVG files, via `data/ImportedContent.kt`) and
 `shareIconForEditing` (`SharedIconHandoff`, the FileProvider handoff to external editors).
+Images shared back (`SEND image/*`) enter through `ShareImportActivity`, a translucent no-history
+trampoline: `SharedImageImporter` copies the image into the upload gallery on a process scope,
+the trampoline finishes only after the copy (the URI grant may end with it) and starts the launcher
+intent, so Renkin's existing task returns as it was. The sender's task never hosts a second
+MainActivity; the result toast is queued for MainActivity's toast host.
 The shared app/pack image loaders call `packages/InstalledIconLoader` and `PackIconLoader` directly:
 their process-wide, thread-safe bounded caches serve unrelated screens. Shared low-level helpers live
 once: `ByteArray.toLowerHex()` for every stored digest, `data/syncDirectory` for directory
@@ -1375,7 +1380,8 @@ be assumed to open the upgraded database.
   unrelated sessions can proceed after a switch. Global options opening/Save is refused during
   an active long operation rather than competing for render tickets. Switching profiles cancels
   refresh with a notice; already committed batches participate in save-before-switch. Watch
-  applies remain serialized with notification-driven switches by MainViewModel's mutex.
+  applies remain serialized with notification-driven switches by MainViewModel's mutex; there is
+  one MainActivity task, because shared images arrive through `ShareImportActivity`.
 - Option writes wait at most 300 ms to acquire the provider gate, allowing short bookkeeping
   operations to finish. The timeout covers acquisition only, never a preference write already
   in progress. Busy, loading and expired-session rejections produce a notice. The outline slider
