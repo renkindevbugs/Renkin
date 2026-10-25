@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.apk
 
 import android.content.Context
 import android.graphics.drawable.Drawable
+import androidx.compose.runtime.Immutable
 import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.IconPackFallback
@@ -25,10 +26,23 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicLong
 
+/** The appfilter elements one load parsed, narrowed to [applications]; compared by identity. */
+@Immutable
+class AppFilterIndex internal constructor(
+    internal val elementsByPackage: Map<String, List<RawElement>> = emptyMap(),
+    internal val applications: List<InstalledApplication> = emptyList()
+) {
+    internal val drawableNamesByPackage: Map<String, Map<String, String>> =
+        elementsByPackage.mapValues { (_, elements) -> indexAppDrawableNames(elements) }
+}
+
+/** Packs and the index built from them are published together, so no reader can pair them across loads. */
 data class IconPackState(
     val packs: List<IconPack> = emptyList(),
-    val loaded: Boolean = false
+    val loaded: Boolean = false,
+    internal val index: AppFilterIndex = AppFilterIndex()
 )
 
 internal suspend fun loadIsolatedAppFilters(
@@ -102,10 +116,7 @@ class IconPackRepository(
     /** Action-time snapshot only; UI collects [state] to observe loading and pack changes. */
     val iconPackLoaded: Boolean get() = state.value.loaded
 
-    private var appFilterElements: Map<IconPack, List<RawElement>> = emptyMap()
-    private var appFilterElementsByPackage: Map<String, List<RawElement>> = emptyMap()
-    private var appDrawableNamesByPackage: Map<String, Map<String, String>> = emptyMap()
-    private var installedApplications: List<InstalledApplication> = listOf()
+    private val loadGeneration = AtomicLong()
     private val fallbackCache = mutableMapOf<String, IconPackFallback>()
 
     private val resourceResolver by lazy { PackageResourceResolver(context) }
@@ -126,44 +137,61 @@ class IconPackRepository(
         discover: () -> List<IconPack>,
         loadElements: (IconPack, List<InstalledApplication>) -> List<RawElement>
     ) = withContext(Dispatchers.Default) {
-        mutableState.update { it.copy(loaded = false) }
-        synchronized(fallbackCache) { fallbackCache.clear() }
+        val generation = startLoad()
         // Drop our own generated pack — it only ever holds icons we just built, so offering
         // it as an icon source (or a watch target) is pointless and just clutters the lists.
         val discovered = discover()
             .filter { !IconPackBuilder.isOwnPack(it.packageName) }
-        mutableState.update { it.copy(packs = discovered) }
-        loadAppFilterElements(installedApps, loadElements)
+        publish(generation, discovered, buildIndex(discovered, installedApps, loadElements))
     }
 
-    private suspend fun loadAppFilterElements(
+    private fun startLoad(): Long {
+        val generation = loadGeneration.incrementAndGet()
+        mutableState.update { it.copy(loaded = false) }
+        synchronized(fallbackCache) { fallbackCache.clear() }
+        return generation
+    }
+
+    private suspend fun buildIndex(
+        packs: List<IconPack>,
         installedApps: List<InstalledApplication>,
         loadElements: (IconPack, List<InstalledApplication>) -> List<RawElement>
-    ) {
-        installedApplications = installedApps
-        appFilterElements = loadIsolatedAppFilters(
-            iconPacks,
-            loader = { pack -> loadElements(pack, installedApplications) },
+    ): AppFilterIndex {
+        val elements = loadIsolatedAppFilters(
+            packs,
+            loader = { pack -> loadElements(pack, installedApps) },
             onFailure = { pack, error ->
                 Log.error("IconPackRepository", "Skipping malformed appfilter: ${pack.packageName}", error)
             }
         )
-        appFilterElementsByPackage = appFilterElements.entries.associate { (pack, elements) ->
-            pack.packageName to elements
+        return AppFilterIndex(elements.entries.associate { (pack, parsed) -> pack.packageName to parsed }, installedApps)
+    }
+
+    // A load that finishes after a newer one started must not overwrite the newer result.
+    private fun publish(generation: Long, packs: List<IconPack>, index: AppFilterIndex) {
+        var published = false
+        mutableState.update { current ->
+            published = generation == loadGeneration.get()
+            if (published) IconPackState(packs, loaded = true, index = index) else current
         }
-        appDrawableNamesByPackage = appFilterElementsByPackage.mapValues { (_, elements) ->
-            indexAppDrawableNames(elements)
-        }
-        mutableState.update { it.copy(loaded = true) }
+        if (published) synchronized(fallbackCache) { fallbackCache.clear() }
     }
 
     /**
      * Rebuilds only the appfilter indexes for a changed component set, e.g. after the user added
      * an app. Pack discovery stays as it is.
      */
-    suspend fun reindex(installedApps: List<InstalledApplication>) = withContext(Dispatchers.Default) {
-        mutableState.update { it.copy(loaded = false) }
-        loadAppFilterElements(installedApps) { pack, apps -> appManager.getAppFilterRawElements(pack.packageName, apps) }
+    suspend fun reindex(installedApps: List<InstalledApplication>) = reindex(installedApps) { pack, apps ->
+        appManager.getAppFilterRawElements(pack.packageName, apps)
+    }
+
+    internal suspend fun reindex(
+        installedApps: List<InstalledApplication>,
+        loadElements: (IconPack, List<InstalledApplication>) -> List<RawElement>
+    ) = withContext(Dispatchers.Default) {
+        val generation = startLoad()
+        val packs = state.value.packs
+        publish(generation, packs, buildIndex(packs, installedApps, loadElements))
     }
 
     /**
@@ -220,11 +248,12 @@ class IconPackRepository(
      * a resource that isn't there, and verifying every drawable would mean decoding the whole pack.
      */
     fun matchedAppCounts(): Map<String, Int> =
-        appDrawableNamesByPackage.mapValues { (_, drawables) -> drawables.size }
+        state.value.index.drawableNamesByPackage.mapValues { (_, drawables) -> drawables.size }
 
     internal fun captureAppDrawables(iconPack: String): () -> Map<InstalledApplication, ResourceDrawable> {
-        val elements = appFilterElementsByPackage[iconPack]?.toList() ?: emptyList()
-        val applications = installedApplications.toList()
+        val index = state.value.index
+        val elements = index.elementsByPackage[iconPack].orEmpty()
+        val applications = index.applications
         return {
             if (iconPack.isEmpty() || elements.isEmpty()) emptyMap()
             else appManager.getDrawableFromAppFilterElements(iconPack, applications, elements)
@@ -236,9 +265,12 @@ class IconPackRepository(
      * rebuilt with the appfilter, and duplicate component declarations keep the last value just
      * like the full-map path.
      */
-    fun getAppDrawable(app: InstalledApplication, iconPack: String): ResourceDrawable? {
+    fun getAppDrawable(app: InstalledApplication, iconPack: String): ResourceDrawable? =
+        getAppDrawable(app, iconPack, state.value.index)
+
+    private fun getAppDrawable(app: InstalledApplication, iconPack: String, index: AppFilterIndex): ResourceDrawable? {
         if (iconPack == "") return null
-        val drawableName = appDrawableNamesByPackage[iconPack]?.get(app.toComponentInfo())
+        val drawableName = index.drawableNamesByPackage[iconPack]?.get(app.toComponentInfo())
             ?: return null
         return appManager.getResourceDrawableByName(iconPack, drawableName)
     }
@@ -246,8 +278,9 @@ class IconPackRepository(
     /** Calendar mappings declared by the currently installed version of [iconPackageName]. */
     internal fun declaredCalendarSelections(iconPackageName: String): List<CalendarSelection> {
         if (iconPackageName.isEmpty()) return emptyList()
-        val elements = appFilterElementsByPackage[iconPackageName] ?: return emptyList()
-        return appManager.getCalendarApplications(installedApplications, elements).map { (app, prefix) ->
+        val index = state.value.index
+        val elements = index.elementsByPackage[iconPackageName] ?: return emptyList()
+        return appManager.getCalendarApplications(index.applications, elements).map { (app, prefix) ->
             CalendarSelection(app, iconPackageName, prefix)
         }
     }
@@ -256,10 +289,10 @@ class IconPackRepository(
      * Distinct calendar-day prefixes [iconPackageName] declares in its appfilter (`<calendar>`
      * entries), e.g. `{"google_cal_", "samsung_cal_"}`. Used to badge only genuine calendar
      * icons in the browser instead of anything whose name happens to end in a number. Reads
-     * the already-parsed [appFilterElements] — no I/O.
+     * the already-parsed appfilter index — no I/O.
      */
     fun calendarPrefixes(iconPackageName: String): Set<String> {
-        val elements = appFilterElementsByPackage[iconPackageName] ?: return emptySet()
+        val elements = state.value.index.elementsByPackage[iconPackageName] ?: return emptySet()
         return elements.filterIsInstance<RawCalendar>().map { it.prefix }.toSet()
     }
 
@@ -303,8 +336,9 @@ class IconPackRepository(
     suspend fun getDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
         withContext(Dispatchers.Default) {
             val map = mutableMapOf<String, ResourceDrawable>()
+            val snapshot = state.value
 
-            for (pack in iconPacks) {
+            for (pack in snapshot.packs) {
                 if (application == null) {
                     val icon = runCatching {
                         resourceResolver.getDrawable(pack.packageName, pack.iconID)
@@ -315,7 +349,7 @@ class IconPackRepository(
                     }
                 } else {
                     val icon = runCatching {
-                        getAppDrawable(application, pack.packageName)
+                        getAppDrawable(application, pack.packageName, snapshot.index)
                     }.getOrNull()
 
                     if (icon != null) {
