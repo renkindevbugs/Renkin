@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 8.13.2" type="baseline" client="gradle" dependencies="false" name="AGP (8.13.2)" variant="all" version="8.13.2">
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="This folder configuration (`v19`) is unnecessary; `minSdkVersion` is 23. Merge all the resources in this folder into `values`.">
+        <location
+            file="${:ackpine-core-compat*debug*MAIN*sourceProvider*0*resDir*0}/values-v19"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="This folder configuration (`v21`) is unnecessary; `minSdkVersion` is 23. Merge all the resources in this folder into `values`.">
+        <location
+            file="${:ackpine-core-compat*debug*MAIN*sourceProvider*0*resDir*0}/values-v21"/>
+    </issue>
+
+</issues>
