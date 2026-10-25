@@ -555,6 +555,7 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
         GenerationSourcesSheet(
             state = state,
             iconPacks = iconPacks,
+            loadPackIcons = viewModel::iconPackDropdownIcons,
             onDismiss = { showSources = false }
         )
     }

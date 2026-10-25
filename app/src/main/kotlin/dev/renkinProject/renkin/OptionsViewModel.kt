@@ -56,6 +56,7 @@ import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.FontLibrary
@@ -96,6 +97,9 @@ class OptionsViewModel @Inject constructor(
 
     fun sessionFor(runtime: ApplicationRuntimeState): ProfileSessionToken =
         savedStateHandle.profileSession() ?: runtime.sessionToken
+
+    /** Each pack's own icon for the secondary icon-pack dropdown, keyed by package. */
+    suspend fun iconPackDropdownIcons(): Map<String, ResourceDrawable> = appProvider.getIconPackDropdownIcons()
 
     private val _toastEvents = Channel<Int>(Channel.BUFFERED)
     val toastEvents = _toastEvents.receiveAsFlow()

@@ -1338,8 +1338,7 @@ class ApplicationProvider internal constructor(
     internal fun packBrowserPreviews(): PackBrowserPreviews =
         PackBrowserPreviews(appManager, ::getIconPackIcons)
 
-    suspend fun getIconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
-        iconPackRepo.getDropdownIcons(application)
+    suspend fun getIconPackDropdownIcons(): Map<String, ResourceDrawable> = iconPackRepo.getDropdownIcons()
 
     // Only the last change is undoable; a second one replaces it, exactly like the snackbar it
     // is offered through.

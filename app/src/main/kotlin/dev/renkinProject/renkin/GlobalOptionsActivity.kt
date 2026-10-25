@@ -241,6 +241,9 @@ class GlobalOptionsViewModel @Inject constructor(
     /** A content URI an external editor can read [bitmap] from, or null when it cannot be written. */
     suspend fun shareIconForEditing(bitmap: Bitmap): Uri? = SharedIconHandoff.write(getApplication(), bitmap)
 
+    /** Each pack's own icon for the source sheet's icon-pack dropdowns, keyed by package. */
+    suspend fun iconPackDropdownIcons(): Map<String, ResourceDrawable> = appProvider.getIconPackDropdownIcons()
+
     private val previewCache = GlobalPreviewBitmapCache()
     private val previewLock = Any()
     private val previewPermits = Semaphore(previewParallelism(Runtime.getRuntime().availableProcessors()))
