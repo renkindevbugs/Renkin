@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color

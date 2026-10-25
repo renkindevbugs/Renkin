@@ -66,6 +66,15 @@ class RulerPickerTest {
     }
 
     @Test
+    fun formatPercentRoundsToTheNearestWholePercent() {
+        assertEquals("0%", formatPercent(0f))
+        assertEquals("50%", formatPercent(0.5f))
+        assertEquals("100%", formatPercent(0.995f))
+        assertEquals("126%", formatPercent(1.26f))
+        assertEquals(percentRuler().format(0.334f), formatPercent(0.334f))
+    }
+
+    @Test
     fun pixelAndCountRulersStepByWholeUnits() {
         assertEquals(1f, pixelRuler().step)
         assertEquals("6 px", pixelRuler().format(6f))

@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Backup
@@ -42,16 +41,11 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
@@ -69,8 +63,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -164,227 +156,204 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
         if (!showCrashLogs) value = withContext(Dispatchers.Default) { CrashReporter.list(context).size }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                topBar = {
-                    TopAppBar(
-                        title = { Text(stringResource(R.string.settings)) },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.close))
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background,
-                            titleContentColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-                }
-            ) { innerPadding ->
-                CenteredFullscreenContent(Modifier.padding(innerPadding)) {
-                    Column(
-                        Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp)
-                    ) {
-                    SettingsSectionHeader(stringResource(R.string.settingsAppearance))
-                    ThemeRow(prefs, viewModel::setDarkMode)
+    FullscreenDialogScaffold(title = stringResource(R.string.settings), onDismiss = onDismiss) { innerPadding ->
+        CenteredFullscreenContent(Modifier.padding(innerPadding)) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+            ) {
+            SettingsSectionHeader(stringResource(R.string.settingsAppearance))
+            ThemeRow(prefs, viewModel::setDarkMode)
 
-                    SettingsSectionHeader(stringResource(R.string.settingsIconPacks))
-                    SettingsRow(
-                        Icons.Filled.Sync,
-                        stringResource(R.string.syncPacks),
-                        busy = viewModel.syncing
-                    ) {
-                        viewModel.sync()
-                    }
-                    SettingsRow(
-                        Icons.Filled.Apps,
-                        stringResource(R.string.refreshApplicationList),
-                        busy = viewModel.appsRefreshing
-                    ) {
-                        viewModel.refreshApps()
-                    }
-                    SettingsRow(Icons.Filled.BarChart, stringResource(R.string.statsButton)) {
-                        showStats = true
-                    }
+            SettingsSectionHeader(stringResource(R.string.settingsIconPacks))
+            SettingsRow(
+                Icons.Filled.Sync,
+                stringResource(R.string.syncPacks),
+                busy = viewModel.syncing
+            ) {
+                viewModel.sync()
+            }
+            SettingsRow(
+                Icons.Filled.Apps,
+                stringResource(R.string.refreshApplicationList),
+                busy = viewModel.appsRefreshing
+            ) {
+                viewModel.refreshApps()
+            }
+            SettingsRow(Icons.Filled.BarChart, stringResource(R.string.statsButton)) {
+                showStats = true
+            }
 
-                    SettingsSectionHeader(stringResource(R.string.settingsInstallation))
-                    InstallerMethodRow(
-                        selectedLabel = installerLabel
-                            ?: stringResource(R.string.installerUnavailable),
-                        askEveryTime = askInstallerEveryTime,
-                        onClick = { showInstallerPicker = true }
-                    )
+            SettingsSectionHeader(stringResource(R.string.settingsInstallation))
+            InstallerMethodRow(
+                selectedLabel = installerLabel
+                    ?: stringResource(R.string.installerUnavailable),
+                askEveryTime = askInstallerEveryTime,
+                onClick = { showInstallerPicker = true }
+            )
 
-                    SettingsSectionHeader(stringResource(R.string.settingsBackup))
-                    val autoBackupLabels = linkedMapOf(
-                        0 to stringResource(R.string.autoBackupOff),
-                        24 to stringResource(R.string.autoBackupDaily),
-                        72 to stringResource(R.string.autoBackupEveryThreeDays),
-                        168 to stringResource(R.string.autoBackupWeekly)
-                    )
-                    val lastBackupLabel = if (lastAutoBackupAt == 0L) {
-                        stringResource(R.string.autoBackupNever)
+            SettingsSectionHeader(stringResource(R.string.settingsBackup))
+            val autoBackupLabels = linkedMapOf(
+                0 to stringResource(R.string.autoBackupOff),
+                24 to stringResource(R.string.autoBackupDaily),
+                72 to stringResource(R.string.autoBackupEveryThreeDays),
+                168 to stringResource(R.string.autoBackupWeekly)
+            )
+            val lastBackupLabel = if (lastAutoBackupAt == 0L) {
+                stringResource(R.string.autoBackupNever)
+            } else {
+                DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
+                    .format(Date(lastAutoBackupAt))
+            }
+            AutoBackupRow(
+                selectedInterval = autoBackupInterval,
+                labels = autoBackupLabels,
+                lastBackupLabel = lastBackupLabel,
+                onSelect = { hours ->
+                    if (hours == AUTO_BACKUP_INTERVAL_OFF || autoBackupTreeUri != null) {
+                        viewModel.setAutoBackupInterval(hours)
                     } else {
-                        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
-                            .format(Date(lastAutoBackupAt))
+                        pendingAutoBackupInterval = hours
+                        autoBackupFolderLauncher.launch(null)
                     }
-                    AutoBackupRow(
-                        selectedInterval = autoBackupInterval,
-                        labels = autoBackupLabels,
-                        lastBackupLabel = lastBackupLabel,
-                        onSelect = { hours ->
-                            if (hours == AUTO_BACKUP_INTERVAL_OFF || autoBackupTreeUri != null) {
-                                viewModel.setAutoBackupInterval(hours)
-                            } else {
-                                pendingAutoBackupInterval = hours
-                                autoBackupFolderLauncher.launch(null)
-                            }
-                        }
-                    )
-                    if (autoBackupInterval != AUTO_BACKUP_INTERVAL_OFF) {
-                        SettingsRow(
-                            Icons.Filled.Folder,
-                            stringResource(R.string.autoBackupFolder),
-                            subtitle = autoBackupFolderName
-                                ?: stringResource(R.string.autoBackupChooseFolder)
-                        ) {
-                            pendingAutoBackupInterval = autoBackupInterval
-                            autoBackupFolderLauncher.launch(autoBackupTreeUri)
-                        }
-                    }
-                    SettingsRow(
-                        Icons.Filled.Save,
-                        stringResource(R.string.exportBackup),
-                        busy = viewModel.backupInProgress || backupCheckInProgress
-                    ) {
-                        scope.launch {
-                            backupCheckInProgress = true
-                            try {
-                                if (viewModel.backupUsesIconPackStudio()) {
-                                    showIpsBackupWarning = true
-                                } else {
-                                    exportBackupLauncher.launch(BackupManager.defaultFileName())
-                                }
-                            } finally {
-                                backupCheckInProgress = false
-                            }
-                        }
-                    }
-                    SettingsRow(
-                        Icons.Filled.Restore,
-                        stringResource(R.string.importBackup),
-                        busy = viewModel.backupInProgress
-                    ) {
-                        importBackupLauncher.launch(arrayOf("*/*"))
-                    }
-
-                    if (previousStateAvailable) {
-                        SettingsRow(
-                            Icons.Filled.Restore,
-                            stringResource(R.string.restorePreviousState),
-                            busy = viewModel.backupInProgress
-                        ) { confirmRestorePreviousState = true }
-                    }
-                    if (previousStateStored) {
-                        SettingsRow(
-                            Icons.Filled.Delete,
-                            stringResource(R.string.discardPreviousState),
-                            busy = viewModel.backupInProgress
-                        ) { confirmDiscardPreviousState = true }
-                    }
-                    if (abandonedRecoveryAvailable) {
-                        SettingsRow(
-                            Icons.Filled.Delete,
-                            stringResource(R.string.discardAbandonedRecovery),
-                            busy = viewModel.backupInProgress
-                        ) { confirmDiscardAbandonedRecovery = true }
-                    }
-
-                    SettingsSectionHeader(stringResource(R.string.settingsData), color = MaterialTheme.colorScheme.error)
-                    SettingsRow(
-                        Icons.Filled.DeleteSweep,
-                        stringResource(R.string.clearIcons),
-                        busy = viewModel.clearingIcons
-                    ) {
-                        confirmClearIcons = true
-                    }
-                    SettingsRow(
-                        Icons.Filled.Delete,
-                        stringResource(R.string.deleteIconPack),
-                        tint = MaterialTheme.colorScheme.error
-                    ) {
-                        view.performConfirmHaptic()
-                        viewModel.deleteIconPack()
-                    }
-
-                    SettingsSectionHeader(stringResource(R.string.settingsDiagnostics))
-                    SettingsRow(Icons.Filled.School, stringResource(R.string.showIntro)) {
-                        // Clearing the flag makes the home screen show the intro again; close
-                        // Settings so it isn't sitting underneath the overlay.
-                        viewModel.setOnboardingSeen(false)
-                        onDismiss()
-                    }
-                    SettingsRow(
-                        Icons.Filled.BugReport,
-                        stringResource(R.string.crashLogs),
-                        trailing = {
-                            if (crashCount > 0) {
-                                Badge { Text(crashCount.toString()) }
-                            }
-                        }
-                    ) {
-                        showCrashLogs = true
-                    }
-                    if (BuildConfig.DEBUG) {
-                        SettingsRow(
-                            Icons.Filled.NewReleases,
-                            stringResource(R.string.previewStartupWhatsNew)
-                        ) {
-                            showStartupWhatsNewPreview = true
-                        }
-                        SettingsRow(
-                            Icons.Filled.Dashboard,
-                            stringResource(R.string.dialogGallery)
-                        ) {
-                            showDialogGallery = true
-                        }
-                        SettingsRow(
-                            Icons.Filled.Warning,
-                            stringResource(R.string.forceCrash),
-                            tint = MaterialTheme.colorScheme.error
-                        ) {
-                            throw RuntimeException("Forced crash for testing")
-                        }
-                    }
-
-                    SettingsSectionHeader(stringResource(R.string.aboutTitle))
-                    SettingsRow(Icons.Filled.NewReleases, stringResource(R.string.whatsNewTitle)) {
-                        showWhatsNew = true
-                    }
-                    SettingsRow(Icons.Filled.Info, stringResource(R.string.aboutTitle)) {
-                        showAbout = true
-                    }
-
-                    // Footer: the app details live in the section above; keep the installed
-                    // version visible without turning it into another action.
-                    HorizontalDivider(Modifier.padding(top = 16.dp))
-                    Text(
-                        text = stringResource(R.string.version, dev.renkinProject.renkin.util.AppBuildInfo.displayVersion),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 16.dp)
-                    )
                 }
+            )
+            if (autoBackupInterval != AUTO_BACKUP_INTERVAL_OFF) {
+                SettingsRow(
+                    Icons.Filled.Folder,
+                    stringResource(R.string.autoBackupFolder),
+                    subtitle = autoBackupFolderName
+                        ?: stringResource(R.string.autoBackupChooseFolder)
+                ) {
+                    pendingAutoBackupInterval = autoBackupInterval
+                    autoBackupFolderLauncher.launch(autoBackupTreeUri)
                 }
             }
+            SettingsRow(
+                Icons.Filled.Save,
+                stringResource(R.string.exportBackup),
+                busy = viewModel.backupInProgress || backupCheckInProgress
+            ) {
+                scope.launch {
+                    backupCheckInProgress = true
+                    try {
+                        if (viewModel.backupUsesIconPackStudio()) {
+                            showIpsBackupWarning = true
+                        } else {
+                            exportBackupLauncher.launch(BackupManager.defaultFileName())
+                        }
+                    } finally {
+                        backupCheckInProgress = false
+                    }
+                }
+            }
+            SettingsRow(
+                Icons.Filled.Restore,
+                stringResource(R.string.importBackup),
+                busy = viewModel.backupInProgress
+            ) {
+                importBackupLauncher.launch(arrayOf("*/*"))
+            }
+
+            if (previousStateAvailable) {
+                SettingsRow(
+                    Icons.Filled.Restore,
+                    stringResource(R.string.restorePreviousState),
+                    busy = viewModel.backupInProgress
+                ) { confirmRestorePreviousState = true }
+            }
+            if (previousStateStored) {
+                SettingsRow(
+                    Icons.Filled.Delete,
+                    stringResource(R.string.discardPreviousState),
+                    busy = viewModel.backupInProgress
+                ) { confirmDiscardPreviousState = true }
+            }
+            if (abandonedRecoveryAvailable) {
+                SettingsRow(
+                    Icons.Filled.Delete,
+                    stringResource(R.string.discardAbandonedRecovery),
+                    busy = viewModel.backupInProgress
+                ) { confirmDiscardAbandonedRecovery = true }
+            }
+
+            SettingsSectionHeader(stringResource(R.string.settingsData), color = MaterialTheme.colorScheme.error)
+            SettingsRow(
+                Icons.Filled.DeleteSweep,
+                stringResource(R.string.clearIcons),
+                busy = viewModel.clearingIcons
+            ) {
+                confirmClearIcons = true
+            }
+            SettingsRow(
+                Icons.Filled.Delete,
+                stringResource(R.string.deleteIconPack),
+                tint = MaterialTheme.colorScheme.error
+            ) {
+                view.performConfirmHaptic()
+                viewModel.deleteIconPack()
+            }
+
+            SettingsSectionHeader(stringResource(R.string.settingsDiagnostics))
+            SettingsRow(Icons.Filled.School, stringResource(R.string.showIntro)) {
+                // Clearing the flag makes the home screen show the intro again; close
+                // Settings so it isn't sitting underneath the overlay.
+                viewModel.setOnboardingSeen(false)
+                onDismiss()
+            }
+            SettingsRow(
+                Icons.Filled.BugReport,
+                stringResource(R.string.crashLogs),
+                trailing = {
+                    if (crashCount > 0) {
+                        Badge { Text(crashCount.toString()) }
+                    }
+                }
+            ) {
+                showCrashLogs = true
+            }
+            if (BuildConfig.DEBUG) {
+                SettingsRow(
+                    Icons.Filled.NewReleases,
+                    stringResource(R.string.previewStartupWhatsNew)
+                ) {
+                    showStartupWhatsNewPreview = true
+                }
+                SettingsRow(
+                    Icons.Filled.Dashboard,
+                    stringResource(R.string.dialogGallery)
+                ) {
+                    showDialogGallery = true
+                }
+                SettingsRow(
+                    Icons.Filled.Warning,
+                    stringResource(R.string.forceCrash),
+                    tint = MaterialTheme.colorScheme.error
+                ) {
+                    throw RuntimeException("Forced crash for testing")
+                }
+            }
+
+            SettingsSectionHeader(stringResource(R.string.aboutTitle))
+            SettingsRow(Icons.Filled.NewReleases, stringResource(R.string.whatsNewTitle)) {
+                showWhatsNew = true
+            }
+            SettingsRow(Icons.Filled.Info, stringResource(R.string.aboutTitle)) {
+                showAbout = true
+            }
+
+            // Footer: the app details live in the section above; keep the installed
+            // version visible without turning it into another action.
+            HorizontalDivider(Modifier.padding(top = 16.dp))
+            Text(
+                text = stringResource(R.string.version, dev.renkinProject.renkin.util.AppBuildInfo.displayVersion),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 16.dp)
+            )
+        }
         }
     }
 

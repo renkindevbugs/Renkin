@@ -45,6 +45,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -93,6 +96,12 @@ private const val PreviewDebounceMs = 80L
  */
 internal const val WIDE_LAYOUT_DP = 600
 
+// Reuses the colour-preset codec, so a recreated sheet keeps the edit it was showing.
+private val ColorizerStyleStateSaver = Saver<MutableState<ColorizerStyle>, String>(
+    save = { encodeColorizerStyle(it.value) },
+    restore = { encoded -> decodeColorizerStyle(encoded)?.let { mutableStateOf(it) } }
+)
+
 /**
  * Colour/gradient editor hosted in a bottom sheet with a live preview docked above it. Used by
  * Colorize and by the outline colour, hence the caller-supplied [title]. The draft is local, so
@@ -110,9 +119,9 @@ internal fun ColorStyleSheet(
     // falls back to colourizing [sampleBitmap], which skips shape, scale and outline.
     renderPreview: (suspend (ColorizerStyle) -> Bitmap?)? = null
 ) {
-    var draft by remember { mutableStateOf(initialStyle) }
+    var draft by rememberSaveable(saver = ColorizerStyleStateSaver) { mutableStateOf(initialStyle) }
     var presetsOpen by remember { mutableStateOf(false) }
-    var saveOpen by remember { mutableStateOf(false) }
+    var saveOpen by rememberSaveable { mutableStateOf(false) }
     var galleryOpen by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 

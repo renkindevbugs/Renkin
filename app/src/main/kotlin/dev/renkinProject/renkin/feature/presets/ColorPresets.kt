@@ -351,7 +351,7 @@ internal fun SaveColorPresetDialog(
 ) {
     val store = LocalColorPresets.current
     val defaultName = stringResource(R.string.savedColorsDefaultName, store.presets.size + 1)
-    var name by remember { mutableStateOf(defaultName) }
+    var name by rememberSaveable { mutableStateOf(defaultName) }
 
     RenkinAlertDialog(
         onDismissRequest = onDismiss,

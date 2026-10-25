@@ -69,6 +69,7 @@ import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.decodeModifierPreset
 import dev.renkinProject.renkin.icon.creator.encodeModifierPreset
+import dev.renkinProject.renkin.ui.formatPercent
 import dev.renkinProject.renkin.ui.AdjustmentState
 import dev.renkinProject.renkin.ui.ConfirmDialog
 import dev.renkinProject.renkin.ui.ModifierPreviews
@@ -350,7 +351,7 @@ private fun SaveModifierPresetDialog(
             )
             IncludeGroupRow(
                 title = stringResource(R.string.iconScale),
-                summary = "${(adjustments.iconScale * 100).roundToInt()}%",
+                summary = formatPercent(adjustments.iconScale),
                 checked = ModifierPresetGroup.ICON_SCALE in groups,
                 onToggle = { toggle(ModifierPresetGroup.ICON_SCALE) }
             )

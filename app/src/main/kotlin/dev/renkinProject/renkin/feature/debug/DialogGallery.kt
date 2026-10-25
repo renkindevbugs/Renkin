@@ -13,21 +13,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,8 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.renkinProject.renkin.EditorDraftRecoveryState
@@ -70,6 +62,7 @@ import dev.renkinProject.renkin.feature.help.WhatsNewDialog
 import dev.renkinProject.renkin.feature.profiles.ProfileDetailsDialog
 import dev.renkinProject.renkin.feature.profiles.SaveBeforeSwitchDialog
 import dev.renkinProject.renkin.feature.watch.NotificationsDisabledDialog
+import dev.renkinProject.renkin.ui.FullscreenDialogScaffold
 import dev.renkinProject.renkin.ui.BuildOutcomeDialog
 import dev.renkinProject.renkin.ui.CenteredFullscreenContent
 import dev.renkinProject.renkin.ui.ColorDialog
@@ -123,46 +116,23 @@ internal fun DialogGalleryScreen(onDismiss: () -> Unit) {
     val redesigns = remember { dialogRedesigns() }
     var showRedesign by rememberSaveable { mutableStateOf(false) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                topBar = {
-                    TopAppBar(
-                        title = { Text(stringResource(R.string.dialogGallery)) },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.close))
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background,
-                            titleContentColor = MaterialTheme.colorScheme.primary
+    FullscreenDialogScaffold(title = stringResource(R.string.dialogGallery), onDismiss = onDismiss) { innerPadding ->
+        CenteredFullscreenContent(Modifier.padding(innerPadding)) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+            ) {
+                sections.forEach { section ->
+                    SettingsSectionHeader(section.title)
+                    section.entries.forEach { entry ->
+                        GalleryRow(
+                            entry,
+                            hasRedesign = entry.id in redesigns,
+                            onCurrent = { openId = entry.id; showRedesign = false },
+                            onRedesign = { openId = entry.id; showRedesign = true }
                         )
-                    )
-                }
-            ) { innerPadding ->
-                CenteredFullscreenContent(Modifier.padding(innerPadding)) {
-                    Column(
-                        Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp)
-                    ) {
-                        sections.forEach { section ->
-                            SettingsSectionHeader(section.title)
-                            section.entries.forEach { entry ->
-                                GalleryRow(
-                                    entry,
-                                    hasRedesign = entry.id in redesigns,
-                                    onCurrent = { openId = entry.id; showRedesign = false },
-                                    onRedesign = { openId = entry.id; showRedesign = true }
-                                )
-                            }
-                        }
                     }
                 }
             }

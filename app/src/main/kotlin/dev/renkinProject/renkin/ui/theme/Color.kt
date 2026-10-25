@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 
 val md_theme_light_primary = Color(0xFFA83912)
 val md_theme_light_onPrimary = Color(0xFFFFFFFF)
@@ -84,3 +85,5 @@ val RemovedRed = Color(0xFFFF3B30)
 // the lighter highlight that sweeps across it.
 val GoldBase = Color(0xFFDAA520)
 val GoldShimmer = Color(0xFFFFEFB0)
+// Keeps white labels readable on any wallpaper (launcher-style previews draw straight onto it).
+val OnWallpaperTextShadow = Shadow(color = Color.Black.copy(alpha = 0.85f), blurRadius = 6f)

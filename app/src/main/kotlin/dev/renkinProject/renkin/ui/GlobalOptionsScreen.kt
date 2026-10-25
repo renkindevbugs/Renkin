@@ -101,6 +101,7 @@ import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.isMissingIcon
+import dev.renkinProject.renkin.ui.theme.OnWallpaperTextShadow
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.ui.theme.IconShape as IconTileShape
@@ -638,9 +639,6 @@ private fun SectionHeader(
     val marker = if (applies) MaterialTheme.colorScheme.primary
         else Color.White.copy(alpha = 0.7f)
     // Sits directly on the wallpaper — white text with a shadow, like the tile labels.
-    val onWallpaperShadow = androidx.compose.ui.graphics.Shadow(
-        color = Color.Black.copy(alpha = 0.85f), blurRadius = 6f
-    )
     Column(Modifier.padding(top = 6.dp)) {
         HorizontalDivider(thickness = 2.dp, color = marker)
         Row(
@@ -655,7 +653,7 @@ private fun SectionHeader(
             )
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall.copy(shadow = onWallpaperShadow),
+                style = MaterialTheme.typography.titleSmall.copy(shadow = OnWallpaperTextShadow),
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White,
                 modifier = Modifier
@@ -666,14 +664,14 @@ private fun SectionHeader(
                 text = stringResource(
                     if (applies) R.string.globalSectionApplies else R.string.globalSectionSkipped
                 ),
-                style = MaterialTheme.typography.labelMedium.copy(shadow = onWallpaperShadow),
+                style = MaterialTheme.typography.labelMedium.copy(shadow = OnWallpaperTextShadow),
                 color = marker
             )
         }
         if (hint != null) {
             Text(
                 text = hint,
-                style = MaterialTheme.typography.bodySmall.copy(shadow = onWallpaperShadow),
+                style = MaterialTheme.typography.bodySmall.copy(shadow = OnWallpaperTextShadow),
                 color = Color.White.copy(alpha = 0.85f),
                 modifier = Modifier.padding(top = 2.dp)
             )
@@ -855,11 +853,7 @@ private fun PreviewTileFrame(
         // grid sits directly on the transparent, wallpaper-showing area).
         Text(
             text = app.appName,
-            style = MaterialTheme.typography.labelSmall.copy(
-                shadow = androidx.compose.ui.graphics.Shadow(
-                    color = Color.Black.copy(alpha = 0.85f), blurRadius = 6f
-                )
-            ),
+            style = MaterialTheme.typography.labelSmall.copy(shadow = OnWallpaperTextShadow),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,

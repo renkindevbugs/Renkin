@@ -482,7 +482,7 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
 
         GlobalEffectCard(
             title = stringResource(R.string.iconScale),
-            summary = "${(state.modifiers.transform.scale * 100).roundToInt()}%",
+            summary = formatPercent(state.modifiers.transform.scale),
             active = state.modifiers.transform.scale != 1f,
             expanded = expanded == GlobalStyleEffect.SCALE,
             onExpand = {

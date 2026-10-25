@@ -1903,7 +1903,10 @@ follow-ups; CRC verifies transport integrity only.
 ## UI conventions
 
 - **Fullscreen screens** (Settings, Crash logs, Watched icons) are fullscreen dialogs with
-  the same M3 `TopAppBar`: back arrow, primary-tinted title, actions on the right.
+  the same M3 `TopAppBar`: back arrow, primary-tinted title, actions on the right. New ones use
+  `FullscreenDialogScaffold` (`ui/UIHelper.kt`); Watched icons keeps its own surface.
+- **Text on the wallpaper** (launcher-style previews) is white with `OnWallpaperTextShadow`
+  (`ui/theme/Color.kt`).
 - **Fullscreen content width**: single-column screens use `CenteredFullscreenContent` so rows
   stay at a readable 720 dp maximum on tablets and occupy the wider side of a separating fold.
 - **Feedback**: plain notices go through the shared `Toaster` (`LocalToaster` + `ToastHost`);

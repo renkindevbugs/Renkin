@@ -152,7 +152,7 @@ internal fun SegmentSelector(
                             modifier = Modifier.size(18.dp)
                         ) {}
                     },
-                    label = { Text("${(segment.coverage * 100).roundToInt()}%") }
+                    label = { Text(formatPercent(segment.coverage)) }
                 )
             }
         }
@@ -351,7 +351,7 @@ private fun PickedSegmentChips(
             // A pick still present in the current split is named by its share of the icon;
             // one left over from another Detail setting falls back to its colour value.
             val label = segments.firstOrNull { it.color == target }
-                ?.let { "${(it.coverage * 100).roundToInt()}%" }
+                ?.let { formatPercent(it.coverage) }
                 ?: target.toRgbHexString()
             InputChip(
                 selected = true,

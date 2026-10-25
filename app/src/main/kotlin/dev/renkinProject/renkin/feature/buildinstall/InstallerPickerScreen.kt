@@ -21,20 +21,15 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.InstallMobile
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,10 +44,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.ui.FullscreenDialogScaffold
 import dev.renkinProject.renkin.ui.CenteredFullscreenContent
 import dev.renkinProject.renkin.ui.drawVerticalScrollbar
 import dev.renkinProject.renkin.apk.InstallerOption
@@ -76,50 +71,24 @@ fun InstallerPickerScreen(
     val shizukuActions = shizukuActions(viewModel)
     val listState = rememberLazyListState()
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                topBar = {
-                    TopAppBar(
-                        title = { Text(stringResource(R.string.installerSelect)) },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.ArrowBack,
-                                    stringResource(R.string.close)
-                                )
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background,
-                            titleContentColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-                }
-            ) { innerPadding ->
-                CenteredFullscreenContent(Modifier.padding(innerPadding)) {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .drawVerticalScrollbar(listState),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        installerItems(options, selected, onSelect, shizukuActions)
+    FullscreenDialogScaffold(title = stringResource(R.string.installerSelect), onDismiss = onDismiss) { innerPadding ->
+        CenteredFullscreenContent(Modifier.padding(innerPadding)) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawVerticalScrollbar(listState),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                installerItems(options, selected, onSelect, shizukuActions)
 
-                        item(key = "ask_every_time") {
-                            AskEveryTimeCard(
-                                checked = askEveryTime,
-                                onCheckedChange = onAskEveryTimeChange,
-                                modifier = Modifier.padding(top = 6.dp)
-                            )
-                        }
-                    }
+                item(key = "ask_every_time") {
+                    AskEveryTimeCard(
+                        checked = askEveryTime,
+                        onCheckedChange = onAskEveryTimeChange,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
                 }
             }
         }

@@ -33,6 +33,15 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.window.Dialog
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -269,6 +278,49 @@ fun RenkinAlertDialog(
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         titleContentColor = MaterialTheme.colorScheme.onSurface
     )
+}
+
+/**
+ * The chrome every fullscreen screen shares (Settings, Crash logs, …): an edge-to-edge dialog with
+ * the back-arrow app bar and a primary title. [content] receives the scaffold padding and owns its
+ * own layout, e.g. [CenteredFullscreenContent].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun FullscreenDialogScaffold(
+    title: String,
+    onDismiss: () -> Unit,
+    actions: @Composable RowScope.() -> Unit = {},
+    bottomBar: @Composable () -> Unit = {},
+    content: @Composable (PaddingValues) -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
+                topBar = {
+                    TopAppBar(
+                        title = { Text(title) },
+                        navigationIcon = {
+                            IconButton(onClick = onDismiss) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.close))
+                            }
+                        },
+                        actions = actions,
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background,
+                            titleContentColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                },
+                bottomBar = bottomBar,
+                content = content
+            )
+        }
+    }
 }
 
 /**
