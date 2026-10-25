@@ -380,8 +380,11 @@ private fun AdvancedSourceSection(
 
         if (needIconPack(state.secondarySource)) {
             IconPackDropdown(
-                R.string.secondaryIconPack, iconPacks, state.secondaryIconPack, null
-            ) { viewModel.setSecondaryIconPack(it.packageName) }
+                labelId = R.string.secondaryIconPack,
+                iconPacks = iconPacks,
+                packageName = state.secondaryIconPack,
+                loadIcons = viewModel::iconPackDropdownIcons
+            ) { viewModel.setSecondaryIconPack(it) }
         }
 
         if (needImageEdit(state.secondarySource)) {

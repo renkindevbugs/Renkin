@@ -33,13 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
-import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.data.getImageEditLabels
@@ -155,22 +152,26 @@ fun IconPackDropdown(
     @StringRes labelId: Int,
     iconPacks: List<IconPack>,
     packageName: String,
-    application: InstalledApplication?,
-    onChange: (newValue: IconPack) -> Unit
+    loadIcons: suspend () -> Map<String, ResourceDrawable>,
+    onChange: (packageName: String) -> Unit
 ) {
-    val viewModel: MainViewModel = hiltViewModel()
-    val emptyPack = IconPack("", stringResource(R.string.none), 0, "", 0)
-    val newList = listOf(emptyPack) + iconPacks
-    val defaultPack = newList.find { it.packageName == packageName }
+    val none = stringResource(R.string.none)
+    // A pack that is no longer installed stays listed under its package name, so the field shows
+    // what the setting still holds instead of pretending it is None.
+    val options = remember(iconPacks, packageName, none) {
+        linkedMapOf("" to none).apply {
+            iconPacks.forEach { put(it.packageName, it.applicationName) }
+            if (packageName.isNotBlank() && packageName !in this) put(packageName, packageName)
+        }
+    }
 
     // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
     // Parcelable, so saving it on stop crashes. It's reloaded below anyway.
     var icons: Map<String, ResourceDrawable> by remember { mutableStateOf(mapOf()) }
     var expanded by remember { mutableStateOf(false) }
-    var selectedOption by remember { mutableStateOf(defaultPack ?: emptyPack) }
 
     LaunchedEffect(Unit) {
-        icons = viewModel.iconPackDropdownIcons(application)
+        icons = loadIcons()
     }
 
     ExposedDropdownMenuBox(
@@ -182,22 +183,21 @@ fun IconPackDropdown(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
-        DropdownAnchorField(labelId, selectedOption.applicationName, expanded)
+        DropdownAnchorField(labelId, options[packageName] ?: none, expanded)
         ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = {
                 expanded = false
             }
         ) {
-            newList.forEach { selectionOption ->
-                val icon = icons.entries.find { it.key == selectionOption.packageName }
-                val bitmap = icon?.value?.drawable?.shrinkIfBiggerThan(500)
+            options.forEach { (optionPackage, optionLabel) ->
+                val bitmap = icons[optionPackage]?.drawable?.shrinkIfBiggerThan(500)
 
                 DropdownMenuItem(
                     modifier = Modifier.padding(vertical = 2.dp),
                     text = {
                         Text(
-                            text = selectionOption.applicationName,
+                            text = optionLabel,
                             modifier = Modifier.padding(start = 4.dp)
                         )
                     },
@@ -213,10 +213,8 @@ fun IconPackDropdown(
                         }
                     },
                     onClick = {
-                        selectedOption = selectionOption
                         expanded = false
-
-                        onChange(selectionOption)
+                        onChange(optionPackage)
                     }
                 )
             }

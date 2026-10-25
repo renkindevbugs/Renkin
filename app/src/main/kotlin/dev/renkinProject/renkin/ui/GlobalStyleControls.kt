@@ -59,6 +59,7 @@ import dev.renkinProject.renkin.ui.modifier.ShapeSwatch
 import dev.renkinProject.renkin.ui.modifier.shapeLabel
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.FieldShape
+import dev.renkinProject.renkin.drawable.ResourceDrawable
 import kotlin.math.roundToInt
 
 private enum class GlobalStyleEffect { SHAPE, SCALE, OUTLINE, COLORIZE }
@@ -278,6 +279,7 @@ private fun sourceDisplayName(
 internal fun GenerationSourcesSheet(
     state: GlobalModifierState,
     iconPacks: List<IconPack>,
+    loadPackIcons: suspend () -> Map<String, ResourceDrawable>,
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -303,10 +305,11 @@ internal fun GenerationSourcesSheet(
                 state.normalizeFallbackSource()
             }
             if (state.primarySource == Source.ICON_PACK) {
-                GlobalIconPackDropdown(
+                IconPackDropdown(
                     labelId = R.string.primaryIconPack,
                     iconPacks = iconPacks,
-                    selectedPackage = state.primaryIconPack
+                    packageName = state.primaryIconPack,
+                    loadIcons = loadPackIcons
                 ) { packageName ->
                     state.primaryIconPack = packageName
                     state.normalizeFallbackSource()
@@ -317,10 +320,11 @@ internal fun GenerationSourcesSheet(
                     state.normalizeFallbackSource()
                 }
                 if (state.secondarySource == Source.ICON_PACK) {
-                    GlobalIconPackDropdown(
+                    IconPackDropdown(
                         labelId = R.string.secondaryIconPack,
                         iconPacks = iconPacks,
-                        selectedPackage = state.secondaryIconPack
+                        packageName = state.secondaryIconPack,
+                        loadIcons = loadPackIcons
                     ) { packageName ->
                         state.secondaryIconPack = packageName
                         state.normalizeFallbackSource()
@@ -352,25 +356,6 @@ internal fun GenerationSourcesSheet(
             }
         }
     }
-}
-
-@Composable
-private fun GlobalIconPackDropdown(
-    @androidx.annotation.StringRes labelId: Int,
-    iconPacks: List<IconPack>,
-    selectedPackage: String,
-    onChange: (String) -> Unit
-) {
-    val none = stringResource(R.string.none)
-    val labels = remember(iconPacks, selectedPackage, none) {
-        linkedMapOf("" to none).apply {
-            iconPacks.forEach { put(it.packageName, it.applicationName) }
-            if (selectedPackage.isNotBlank() && selectedPackage !in this) {
-                put(selectedPackage, selectedPackage)
-            }
-        }
-    }
-    EnumDropdown(labelId, selectedPackage, labels, onChange = onChange)
 }
 
 private fun GlobalModifierState.normalizeFallbackSource() {

@@ -332,32 +332,12 @@ class IconPackRepository(
         }
     }
 
-    /** One representative icon per pack (the pack's own icon, or the app's icon in that pack). */
-    suspend fun getDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
+    /** Each pack's own launcher icon, keyed by package, for the icon-pack dropdowns. */
+    suspend fun getDropdownIcons(): Map<String, ResourceDrawable> =
         withContext(Dispatchers.Default) {
-            val map = mutableMapOf<String, ResourceDrawable>()
-            val snapshot = state.value
-
-            for (pack in snapshot.packs) {
-                if (application == null) {
-                    val icon = runCatching {
-                        resourceResolver.getDrawable(pack.packageName, pack.iconID)
-                    }.getOrNull()
-
-                    if (icon != null) {
-                        map[pack.packageName] = ResourceDrawable(pack.iconID, icon)
-                    }
-                } else {
-                    val icon = runCatching {
-                        getAppDrawable(application, pack.packageName, snapshot.index)
-                    }.getOrNull()
-
-                    if (icon != null) {
-                        map[pack.packageName] = icon
-                    }
-                }
-            }
-
-            map
+            state.value.packs.mapNotNull { pack ->
+                runCatching { resourceResolver.getDrawable(pack.packageName, pack.iconID) }.getOrNull()
+                    ?.let { pack.packageName to ResourceDrawable(pack.iconID, it) }
+            }.toMap()
         }
 }

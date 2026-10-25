@@ -1182,10 +1182,6 @@ class MainViewModel @Inject constructor(
         )
     }
 
-    /** The selectable drawables for the icon-pack dropdown, keyed by display name. */
-    suspend fun iconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
-        appProvider.getIconPackDropdownIcons(application)
-
     private val packBrowserPreviews by lazy {
         appProvider.packBrowserPreviews()
     }
