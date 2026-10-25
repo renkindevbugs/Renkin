@@ -93,16 +93,29 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Receive an image shared back from an external editor (e.g. ImageToolbox); it's saved
-                 into the upload gallery so it can be picked as an icon. -->
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="" />
+        </activity>
+
+        <!-- Receives an image shared back from an external editor (e.g. ImageToolbox) and saves it
+             into the upload gallery. A trampoline, so the sender's task never gets a second
+             MainActivity; it finishes after the copy and brings Renkin's own task forward. Its empty
+             affinity keeps it out of Renkin's task, where the launcher intent would stack a new
+             MainActivity instead of resuming the existing one. -->
+        <activity
+            android:name=".ShareImportActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|locale|layoutDirection|fontScale">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
             </intent-filter>
-            <meta-data
-                android:name="android.app.lib_name"
-                android:value="" />
         </activity>
 
         <activity

@@ -2,9 +2,7 @@ package dev.renkinProject.renkin
 
 import android.content.Intent
 import android.content.pm.ActivityInfo
-import android.net.Uri
 import android.os.Bundle
-import androidx.core.content.IntentCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -29,6 +27,7 @@ import dev.renkinProject.renkin.feature.presets.PresetLibraryViewModel
 import dev.renkinProject.renkin.feature.backup.BackupRecoveryScreen
 import dev.renkinProject.renkin.feature.presets.ProvideColorPresets
 import dev.renkinProject.renkin.feature.presets.ProvideModifierPresets
+import dev.renkinProject.renkin.data.SharedImageImporter
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.StorageRecoveryState
 import dev.renkinProject.renkin.data.isDarkModeEnabled
@@ -52,19 +51,19 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var iconPackCatalog: IconPackCatalog
 
+    @Inject
+    lateinit var sharedImageImporter: SharedImageImporter
+
     private val viewModel: MainViewModel by viewModels()
     private val presetsViewModel: PresetLibraryViewModel by viewModels()
     private val editorViewModel: EditorSessionViewModel by viewModels()
     private val editorDraftViewModel: EditorDraftRecoveryViewModel by viewModels()
-    private var consumedSharedImageUri: String? = null
-
-    // Activity-scoped (not remember-ed in composition) so non-compose code — e.g. the share
-    // receiver in handleSharedImage — can queue toasts through the same single ToastHost.
+    // Activity-scoped (not remember-ed in composition) so non-compose code can queue toasts
+    // through the same single ToastHost.
     private val toaster = Toaster()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        consumedSharedImageUri = savedInstanceState?.getString(STATE_CONSUMED_SHARED_IMAGE_URI)
 
         // Start loading before handling launch intents or composing the startup shell.
         viewModel
@@ -79,7 +78,6 @@ class MainActivity : ComponentActivity() {
         }
 
         handleWatchIntent(intent)
-        handleSharedImage(intent)
 
         lifecycleScope.launch(Dispatchers.Default) {
             // Drop crash logs older than the retention window (and migrate any legacy log).
@@ -122,7 +120,7 @@ class MainActivity : ComponentActivity() {
 
             val colorPresets by presetsViewModel.colorPresets.collectAsStateWithLifecycle()
             val modifierPresets by presetsViewModel.modifierPresets.collectAsStateWithLifecycle()
-            CollectToasts(toaster, presetsViewModel.toastEvents)
+            CollectToasts(toaster, presetsViewModel.toastEvents, sharedImageImporter.toastEvents)
 
             ProvideAdaptiveLayoutInfo(this@MainActivity) {
                 CompositionLocalProvider(
@@ -167,18 +165,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        consumedSharedImageUri?.let { outState.putString(STATE_CONSUMED_SHARED_IMAGE_URI, it) }
-        super.onSaveInstanceState(outState)
-    }
-
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        // A newly delivered SEND is a new user action even when it points to the same URI.
-        consumedSharedImageUri = null
         handleWatchIntent(intent)
-        handleSharedImage(intent)
     }
 
     override fun onStart() {
@@ -232,27 +222,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * An image shared back from an external editor (the SEND intent-filter): decode it and store it
-     * in the upload gallery, so the user can pick it as an icon from the edit dialog's Upload tab.
-     */
-    private fun handleSharedImage(intent: Intent?) {
-        if (intent?.action != Intent.ACTION_SEND) return
-        if (intent.type?.startsWith("image/") != true) return
-        val uri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java) ?: return
-        // Activity state survives both configuration changes and process restoration; mutating an
-        // incoming Intent extra does not reliably survive the latter.
-        val uriKey = uri.toString()
-        if (consumedSharedImageUri == uriKey) return
-        consumedSharedImageUri = uriKey
-
-        lifecycleScope.launch {
-            // Same import as the gallery: a revoked, one-shot or broken provider URI only fails.
-            val added = viewModel.uploadedImages.import(listOf(uri)).added.isNotEmpty()
-            toaster.show(getString(if (added) R.string.sharedImageAdded else R.string.uploadImageError))
-        }
-    }
-
     private fun edgeToEdge(darkMode: Boolean) {
         val style = SystemBarStyle.auto(Color.Transparent.toArgb()
             , Color.Transparent.toArgb()
@@ -267,5 +236,3 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_SUGGESTION_ID = "watch_suggestion_id"
     }
 }
-
-private const val STATE_CONSUMED_SHARED_IMAGE_URI = "consumedSharedImageUri"
