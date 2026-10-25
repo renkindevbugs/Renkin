@@ -1,6 +1,7 @@
 @file:OptIn(com.github.takahirom.roborazzi.ExperimentalRoborazziApi::class)
 
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
@@ -99,10 +100,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
         buildConfig = true
@@ -195,6 +192,12 @@ tasks.withType<Test>().configureEach {
     inputs.files(fileTree("src/test/screenshots") { include("**/*.png") })
         .withPropertyName("renderingReferences")
         .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
 }
 
 ksp {
