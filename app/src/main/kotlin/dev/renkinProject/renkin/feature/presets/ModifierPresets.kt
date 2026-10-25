@@ -78,6 +78,7 @@ import dev.renkinProject.renkin.ui.modifier.shapeLabel
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.ui.theme.InnerShape
+import dev.renkinProject.renkin.util.runCatchingCancellable
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -644,7 +645,7 @@ private fun PresetPreview(
         delay(150)
         value = PresetPreviewResult(
             loaded = true,
-            bitmap = runCatching { payload?.let { previews?.preset?.invoke(it) } }.getOrNull()
+            bitmap = runCatchingCancellable { payload?.let { previews?.preset?.invoke(it) } }.getOrNull()
         )
     }
     Surface(

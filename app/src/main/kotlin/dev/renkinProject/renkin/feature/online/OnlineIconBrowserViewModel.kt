@@ -18,6 +18,7 @@ import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIcon
 import dev.renkinProject.renkin.data.online.OnlineIconRepository
 import dev.renkinProject.renkin.util.Log
+import dev.renkinProject.renkin.util.runCatchingCancellable
 import dev.renkinProject.renkin.vector.SvgRasterizer
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import javax.inject.Inject
@@ -269,7 +270,7 @@ class OnlineIconBrowserViewModel @Inject constructor(
             SvgRasterizer.rasterize(markup, IMAGE_IMPORT_SIZE, currentColorArgb)
         } ?: return null
         val saved = withContext(Dispatchers.IO) {
-            runCatching { UploadedImageStore.save(context, bitmap) }.getOrNull()
+            runCatchingCancellable { UploadedImageStore.save(context, bitmap) }.getOrNull()
         }
         return OnlineImageImport(bitmap, saved?.absolutePath)
     }
