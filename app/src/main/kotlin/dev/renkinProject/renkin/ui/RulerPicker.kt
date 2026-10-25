@@ -473,7 +473,10 @@ fun percentRuler(
     valueRange = valueRange,
     toRulerValue = toRulerValue,
     fromRulerValue = fromRulerValue
-) { "${(it * 100).roundToInt()}$suffix" }
+) { formatPercent(it, suffix) }
+
+/** A 0..1 fraction as a whole percentage, e.g. "42%". */
+fun formatPercent(fraction: Float, suffix: String = "%"): String = "${(fraction * 100).roundToInt()}$suffix"
 
 /** A whole-pixel value, e.g. the outline's thickness. */
 fun pixelRuler(): RulerSpec =

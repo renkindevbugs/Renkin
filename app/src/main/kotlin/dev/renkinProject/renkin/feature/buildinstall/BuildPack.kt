@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
@@ -55,12 +54,12 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.datastore.preferences.core.Preferences
+import dev.renkinProject.renkin.ui.theme.OnWallpaperTextShadow
 import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.WallpaperPreviewActivity
 import dev.renkinProject.renkin.profileSession
@@ -370,9 +369,7 @@ fun BuildPackPreviewContent(
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Text(
                             text = stringResource(R.string.buildPreviewEmpty),
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                shadow = Shadow(color = Color.Black.copy(alpha = 0.85f), blurRadius = 6f)
-                            ),
+                            style = MaterialTheme.typography.bodyMedium.copy(shadow = OnWallpaperTextShadow),
                             color = Color.White,
                             modifier = Modifier.padding(32.dp)
                         )
@@ -475,9 +472,7 @@ private fun BuildPreviewItem(
         // sits directly on the transparent, wallpaper-showing area).
         Text(
             text = app.appName,
-            style = MaterialTheme.typography.labelSmall.copy(
-                shadow = Shadow(color = Color.Black.copy(alpha = 0.85f), blurRadius = 6f)
-            ),
+            style = MaterialTheme.typography.labelSmall.copy(shadow = OnWallpaperTextShadow),
             color = Color.White,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

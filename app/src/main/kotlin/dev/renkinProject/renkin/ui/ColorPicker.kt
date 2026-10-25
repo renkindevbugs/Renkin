@@ -318,7 +318,7 @@ private fun SavedColorStrip(
     onPick: (Color) -> Unit
 ) {
     val store = LocalColorPresets.current
-    var saveOpen by remember { mutableStateOf(false) }
+    var saveOpen by rememberSaveable { mutableStateOf(false) }
     val singles = remember(store.presets) {
         store.presets.mapNotNull { preset ->
             decodeColorizerStyle(preset.style)

@@ -22,29 +22,23 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.LATEST_WHATS_NEW_VERSION_NAME
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.ui.FullscreenDialogScaffold
 import dev.renkinProject.renkin.ui.CenteredFullscreenContent
 import dev.renkinProject.renkin.ui.RenkinAlertDialog
 import dev.renkinProject.renkin.ui.boldStringResource
@@ -223,77 +217,57 @@ fun WhatsNewDialog(onDismiss: () -> Unit) {
 
 @Composable
 fun WhatsNewScreen(onDismiss: () -> Unit) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                topBar = {
-                    TopAppBar(
-                        title = { Text(stringResource(R.string.whatsNewTitle)) },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.close))
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background,
-                            titleContentColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-                },
-                bottomBar = {
-                    Surface(color = MaterialTheme.colorScheme.background) {
-                        Button(
-                            onClick = onDismiss,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 12.dp)
-                        ) {
-                            Text(stringResource(R.string.ok))
-                        }
-                    }
+    FullscreenDialogScaffold(
+        title = stringResource(R.string.whatsNewTitle),
+        onDismiss = onDismiss,
+        bottomBar = {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                ) {
+                    Text(stringResource(R.string.ok))
                 }
-            ) { innerPadding ->
-                CenteredFullscreenContent(Modifier.padding(innerPadding)) {
-                    val listState = rememberLazyListState()
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .drawVerticalScrollbar(listState),
-                        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(24.dp)
-                    ) {
-                        item {
-                            Icon(
-                                imageVector = Icons.Outlined.NewReleases,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.width(48.dp)
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                text = stringResource(R.string.whatsNewTitle),
-                                style = MaterialTheme.typography.headlineLarge
-                            )
-                            Text(
-                                text = stringResource(
-                                    R.string.whatsNewLatestCurrent,
-                                    LATEST_WHATS_NEW_VERSION_NAME,
-                                    BuildConfig.VERSION_NAME
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        releaseHistory.forEach { release ->
-                            item(key = release.version) {
-                                ReleaseNotes(release)
-                            }
-                        }
+            }
+        }
+    ) { innerPadding ->
+        CenteredFullscreenContent(Modifier.padding(innerPadding)) {
+            val listState = rememberLazyListState()
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawVerticalScrollbar(listState),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                item {
+                    Icon(
+                        imageVector = Icons.Outlined.NewReleases,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.width(48.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = stringResource(R.string.whatsNewTitle),
+                        style = MaterialTheme.typography.headlineLarge
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.whatsNewLatestCurrent,
+                            LATEST_WHATS_NEW_VERSION_NAME,
+                            BuildConfig.VERSION_NAME
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                releaseHistory.forEach { release ->
+                    item(key = release.version) {
+                        ReleaseNotes(release)
                     }
                 }
             }
