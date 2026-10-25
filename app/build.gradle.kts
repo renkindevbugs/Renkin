@@ -224,13 +224,30 @@ if (providers.gradleProperty("renkin.composeReports").orNull == "true") {
     }
 }
 
-//Pre build
-task("arcticons-font") {
-    println("Copy Arcticons Sans font")
+abstract class GeneratedFontResources : Sync() {
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+}
 
-    val gitFont = File(rootDir, "Arcticons-Font/ArcticonsSans-Regular.otf")
-    val resFont = File(projectDir, "src/main/res/font/arcticonssans_regular.otf")
-    gitFont.copyTo(resFont, true)
+// The Arcticons-Font submodule is the only copy of the font; it reaches the APK as a generated
+// resource, so configuring Gradle never writes into src/.
+val arcticonsFont = rootProject.layout.projectDirectory.file("Arcticons-Font/ArcticonsSans-Regular.otf")
+val prepareArcticonsFont = tasks.register<GeneratedFontResources>("prepareArcticonsFont") {
+    outputDirectory.set(layout.buildDirectory.dir("generated/arcticonsFont/res"))
+    into(outputDirectory)
+    from(arcticonsFont) {
+        into("font")
+        rename { "arcticonssans_regular.otf" }
+    }
+    doFirst {
+        check(arcticonsFont.asFile.isFile) { "Initialize the Arcticons-Font submodule with git submodule update --init" }
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.res?.addGeneratedSourceDirectory(prepareArcticonsFont) { it.outputDirectory }
+    }
 }
 
 //Disable baseline profile (https://gist.github.com/obfusk/61046e09cee352ae6dd109911534b12e#fix-proposed-by-linsui-disable-baseline-profiles)
