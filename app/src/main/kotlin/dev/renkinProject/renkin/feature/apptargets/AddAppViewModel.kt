@@ -23,6 +23,7 @@ import dev.renkinProject.renkin.data.AppTarget
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.packages.ApplicationIconSource
 import dev.renkinProject.renkin.util.Log
+import dev.renkinProject.renkin.util.runCatchingCancellable
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -98,7 +99,7 @@ class AddAppViewModel @Inject constructor(
 
     private suspend fun cachedIcon(key: String, load: suspend () -> android.graphics.Bitmap?): ImageBitmap? {
         icons.get(key)?.let { return it }
-        val bitmap = runCatching { load() }.onFailure { if (it is CancellationException) throw it }.getOrNull()
+        val bitmap = runCatchingCancellable { load() }.getOrNull()
         return bitmap?.asImageBitmap()?.also { icons.put(key, it) }
     }
 

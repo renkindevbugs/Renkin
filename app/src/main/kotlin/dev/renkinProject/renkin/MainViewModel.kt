@@ -95,6 +95,7 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.util.timeProfilePhase
 import dev.renkinProject.renkin.util.launchGuarded
+import dev.renkinProject.renkin.util.runCatchingCancellable
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -477,7 +478,7 @@ class MainViewModel @Inject constructor(
                 // Classify any source packs that still lack a paid/free verdict (quiet best
                 // effort; imported-offline icons stay locked until a lookup succeeds). A verdict
                 // becoming decisive can unlock icons without dropping unsaved session edits.
-                if (runCatching { appProvider.verifyPendingVerdicts() }.getOrDefault(false)) {
+                if (runCatchingCancellable { appProvider.verifyPendingVerdicts() }.getOrDefault(false)) {
                     profileSessionOperations.withLock {
                         appProvider.refreshIconLocks(sessionToken)
                         refreshMissingPacks(prompt = false)

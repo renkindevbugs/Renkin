@@ -111,6 +111,7 @@ import kotlinx.coroutines.withContext
 import dev.renkinProject.renkin.icon.creator.ColorFill
 import dev.renkinProject.renkin.icon.creator.EffectModifier
 import dev.renkinProject.renkin.icon.creator.ModifierStack
+import dev.renkinProject.renkin.util.runCatchingCancellable
 
 private const val GLOBAL_PREVIEW_DEBOUNCE_MS = 120L
 
@@ -903,7 +904,7 @@ private fun GlobalIconEditDialog(editor: GlobalIconEditorDraft, onDismiss: () ->
     val renderWith: suspend (GenerationOptions) -> Bitmap? = { previewOptions ->
         base?.let {
             withContext(Dispatchers.Default) {
-                runCatching { viewModel.applyModifier(it, previewOptions).toBitmap() }.getOrNull()
+                runCatchingCancellable { viewModel.applyModifier(it, previewOptions).toBitmap() }.getOrNull()
             }
         }
     }

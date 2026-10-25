@@ -8,6 +8,7 @@ import dev.renkinProject.renkin.data.UnsavedSessionMarker
 import dev.renkinProject.renkin.data.UnsavedSessionMarkerStore
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.util.Log
+import dev.renkinProject.renkin.util.runCatchingCancellable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -83,7 +84,7 @@ class UnsavedSessionMonitor internal constructor(
             // Read before this process records its own state, which replaces the previous one.
             // The same instance means only an Activity was recreated; its edits are still live.
             val marker = store.read()?.takeIf { it.providerInstanceId != instance && it.hasChanges }
-            val offer = runCatching { journal.takeOverPrevious(instance) }
+            val offer = runCatchingCancellable { journal.takeOverPrevious(instance) }
                 .onFailure { Log.error(TAG, "Could not read the unsaved icon journal", it) }
                 .getOrNull()
             if (marker != null || offer != null) mutableLostWork.value = LostUnsavedWork(marker, offer)
