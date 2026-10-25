@@ -32,10 +32,17 @@ class IconPackStateTest {
         return IconPackRepository(context, IconPackCatalog(context))
     }
 
+    private val item = RawItem("ComponentInfo{com.app/com.app.Main}", "app")
+
+    private fun assertVisible(packs: List<IconPack>, loaded: Boolean, state: IconPackState) {
+        assertEquals(packs, state.packs)
+        assertEquals(loaded, state.loaded)
+    }
+
     @Test fun publicLoadUsesInstalledCatalogAndCompletesWithoutExternalPacks() = runBlocking {
         val repo = repository()
         repo.load(emptyList())
-        assertEquals(IconPackState(emptyList(), true), repo.state.value)
+        assertVisible(emptyList(), true, repo.state.value)
     }
 
     @Test fun ownPacksOfEveryProfileAndThePreRenameNameAreNeverIconSources() = runBlocking {
@@ -51,9 +58,9 @@ class IconPackStateTest {
         assertEquals(listOf(pack), repo.state.value.packs)
     }
 
-    @Test fun discoveryIsVisibleBeforeReadinessAndReadyIncludesCompletedIndexes() = runBlocking {
+    @Test fun packsArePublishedTogetherWithTheirCompletedIndexes() = runBlocking {
         val repo = repository()
-        assertEquals(IconPackState(), repo.state.value)
+        assertVisible(emptyList(), false, repo.state.value)
         val entered = CompletableDeferred<Unit>()
         val release = CountDownLatch(1)
         val apps = listOf(InstalledApplication("com.app", "com.app.Main", 0))
@@ -68,8 +75,9 @@ class IconPackStateTest {
         }
         try {
             withTimeout(5000) { entered.await() }
-            assertEquals(IconPackState(listOf(pack), false), repo.state.value)
+            assertVisible(emptyList(), false, repo.state.value)
             assertFalse(repo.iconPackLoaded)
+            assertTrue(repo.matchedAppCounts().isEmpty())
         } finally { release.countDown() }
         withTimeout(5000) { load.await() }
         assertTrue(repo.state.value.loaded)
@@ -78,24 +86,66 @@ class IconPackStateTest {
         assertEquals(mapOf(pack.packageName to 1), repo.matchedAppCounts())
     }
 
+    @Test fun readersNeverPairPacksWithAnIndexFromAnotherLoad() = runBlocking {
+        val repo = repository()
+        repo.load(emptyList(), { listOf(pack) }) { _, _ -> listOf(item) }
+        val entered = CompletableDeferred<Unit>()
+        val release = CountDownLatch(1)
+        val reload = async {
+            repo.load(emptyList(), { listOf(other) }) { _, _ ->
+                entered.complete(Unit)
+                check(release.await(5, TimeUnit.SECONDS))
+                listOf(item)
+            }
+        }
+        try {
+            withTimeout(5000) { entered.await() }
+            val state = repo.state.value
+            assertEquals(state.packs.map { it.packageName }.toSet(), repo.matchedAppCounts().keys)
+        } finally { release.countDown() }
+        withTimeout(5000) { reload.await() }
+        assertVisible(listOf(other), true, repo.state.value)
+        assertEquals(setOf(other.packageName), repo.matchedAppCounts().keys)
+    }
+
+    @Test fun aLoadFinishingAfterANewerOneDoesNotPublishItsOlderResult() = runBlocking {
+        val repo = repository()
+        val olderParsing = CompletableDeferred<Unit>()
+        val releaseOlder = CountDownLatch(1)
+        val older = async {
+            repo.load(emptyList(), { listOf(pack) }) { _, _ ->
+                olderParsing.complete(Unit)
+                check(releaseOlder.await(5, TimeUnit.SECONDS))
+                listOf(item)
+            }
+        }
+        withTimeout(5000) { olderParsing.await() }
+        repo.load(emptyList(), { listOf(other) }) { _, _ -> listOf(item) }
+        releaseOlder.countDown()
+        withTimeout(5000) { older.await() }
+
+        assertVisible(listOf(other), true, repo.state.value)
+        assertEquals(setOf(other.packageName), repo.matchedAppCounts().keys)
+    }
+
     @Test fun emptyDiscoveryCompletesAndOwnGeneratedPacksAreExcluded() = runBlocking {
         val repo = repository()
         repo.load(emptyList(), { emptyList() }) { _, _ -> fail("No pack should be parsed"); emptyList() }
-        assertEquals(IconPackState(emptyList(), true), repo.state.value)
+        assertVisible(emptyList(), true, repo.state.value)
         repo.load(emptyList(), { listOf(pack, pack.copy(packageName = IconPackBuilder.PACKAGE_NAME),
             pack.copy(packageName = IconPackBuilder.PACKAGE_NAME + ".p2")) }) { parsed, _ ->
             assertEquals(pack, parsed)
             emptyList()
         }
-        assertEquals(IconPackState(listOf(pack), true), repo.state.value)
+        assertVisible(listOf(pack), true, repo.state.value)
     }
 
     @Test fun lateCollectorsReceiveCompletedStateAndReloadUsesNewSnapshot() = runBlocking {
         val repo = repository()
         repo.load(emptyList(), { listOf(pack) }) { _, _ -> emptyList() }
-        assertEquals(IconPackState(listOf(pack), true), repo.state.first())
+        assertVisible(listOf(pack), true, repo.state.first())
         repo.load(emptyList(), { listOf(other) }) { _, _ -> emptyList() }
-        assertEquals(IconPackState(listOf(other), true), repo.state.first())
+        assertVisible(listOf(other), true, repo.state.first())
         assertEquals(repo.state.value.loaded, repo.iconPackLoaded)
     }
 
@@ -108,9 +158,9 @@ class IconPackStateTest {
         }.exceptionOrNull()
         assertTrue(reported is IOException)
         assertEquals(failure.message, reported?.message)
-        assertEquals(IconPackState(listOf(pack), false), repo.state.value)
+        assertVisible(listOf(pack), false, repo.state.value)
         repo.load(emptyList(), { listOf(other) }) { _, _ -> emptyList() }
-        assertEquals(IconPackState(listOf(other), true), repo.state.value)
+        assertVisible(listOf(other), true, repo.state.value)
     }
 
     @Test fun malformedPackDoesNotPreventReadinessOrHealthyIndexes() = runBlocking {
@@ -133,6 +183,6 @@ class IconPackStateTest {
         assertTrue(cancelled.isCancelled)
         assertFalse(repo.state.value.loaded)
         repo.load(emptyList(), { listOf(other) }) { _, _ -> emptyList() }
-        assertEquals(IconPackState(listOf(other), true), repo.state.value)
+        assertVisible(listOf(other), true, repo.state.value)
     }
 }
