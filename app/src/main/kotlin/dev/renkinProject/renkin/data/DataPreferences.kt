@@ -54,6 +54,7 @@ private const val DARK_MODE_NAME = "NIGHT_THEME"
 private const val INSTALL_METHOD_NAME = "INSTALL_METHOD"
 private const val EXTERNAL_INSTALLER_COMPONENT_NAME = "EXTERNAL_INSTALLER_COMPONENT"
 private const val ASK_INSTALLER_EVERY_TIME_NAME = "ASK_INSTALLER_EVERY_TIME"
+private const val SHOW_RENKIN_PACKS_NAME = "SHOW_RENKIN_PACKS"
 private const val INSTALLER_CHOICE_CONFIRMED_NAME = "INSTALLER_CHOICE_CONFIRMED"
 private const val INCLUDE_VECTOR_NAME = "INCLUDE_VECTOR"
 private const val MONOCHROME_NAME = "MONOCHROME"
@@ -99,6 +100,8 @@ val DarkModeKey = intPreferencesKey(DARK_MODE_NAME)
 val InstallMethodKey = intPreferencesKey(INSTALL_METHOD_NAME)
 val ExternalInstallerComponentKey = stringPreferencesKey(EXTERNAL_INSTALLER_COMPONENT_NAME)
 val AskInstallerEveryTimeKey = booleanPreferencesKey(ASK_INSTALLER_EVERY_TIME_NAME)
+/** App-wide, not per profile: offer other profiles' generated packs as icon sources (issue #25). */
+val ShowRenkinPacksKey = booleanPreferencesKey(SHOW_RENKIN_PACKS_NAME)
 val InstallerChoiceConfirmedKey = booleanPreferencesKey(INSTALLER_CHOICE_CONFIRMED_NAME)
 val IncludeVectorKey = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
 val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
@@ -296,7 +299,7 @@ private val legacyProfilePreferences = LegacyProfilePreferences(
 private val persistedPreferenceTypes: Map<String, (Any) -> Boolean> = buildMap {
     for (key in ProfileBooleanPrefKeys + listOf(
         AskInstallerEveryTimeKey, InstallerChoiceConfirmedKey, AppFilterNoIconKey,
-        OnboardingSeenKey, HideProfileShareWarningKey
+        OnboardingSeenKey, HideProfileShareWarningKey, ShowRenkinPacksKey
     )) put(key.name) { it is Boolean }
     for (key in ProfileIntPrefKeys + listOf(
         DarkModeKey, InstallMethodKey, AppSortOrderKey, WatchCheckIntervalKey,

@@ -212,6 +212,8 @@
     <string name="deadZone">Dead zone</string>
     <string name="uploadImageError">Cannot upload image</string>
     <string name="syncPacks">Sync icon packs</string>
+    <string name="showRenkinPacks">Show Renkin packs as sources</string>
+    <string name="showRenkinPacksSummary">Offer packs built from your other profiles as icon sources</string>
     <string name="retrieveCalendarIcon">Retrieve calendar icons</string>
     <string name="calendarDayIcons">Calendar day icons</string>
     <string name="calendarDayIconsDesc">%1$s from %2$s · rotates with the date</string>

@@ -58,6 +58,37 @@ class IconPackStateTest {
         assertEquals(listOf(pack), repo.state.value.packs)
     }
 
+    private val defaultPack = IconPack("dev.renkinProject.renkinpack", "Renkin", 1, "1", 0)
+    private val profilePack = IconPack("dev.renkinProject.renkinpack.p4", "Renkin profile", 1, "1", 0)
+
+    @Test fun shownRenkinPacksExcludeTheActiveProfilesOwnPack() = runBlocking {
+        val repo = repository()
+        val visibility = GeneratedPackVisibility(showAll = true, activePack = profilePack.packageName)
+
+        repo.load(emptyList(), { listOf(defaultPack, profilePack, pack) }, visibility) { _, _ -> emptyList() }
+
+        assertEquals(listOf(defaultPack, pack), repo.state.value.packs)
+    }
+
+    @Test fun aSelectedRenkinPackStaysListedWhileTheOthersAreHidden() = runBlocking {
+        val repo = repository()
+        val visibility = GeneratedPackVisibility(selected = setOf(defaultPack.packageName))
+
+        repo.load(emptyList(), { listOf(defaultPack, profilePack, pack) }, visibility) { _, _ -> emptyList() }
+
+        assertEquals(listOf(defaultPack, pack), repo.state.value.packs)
+    }
+
+    @Test fun aProfileSwitchReloadsOnlyWhenTheOfferedRenkinPacksChange() = runBlocking {
+        val repo = repository()
+        val shown = GeneratedPackVisibility(showAll = true, activePack = profilePack.packageName)
+        repo.load(emptyList(), { listOf(defaultPack, profilePack, pack) }, shown) { _, _ -> emptyList() }
+
+        assertFalse(repo.generatedPacksChange(shown.copy(selected = setOf(defaultPack.packageName))))
+        assertTrue(repo.generatedPacksChange(shown.copy(activePack = defaultPack.packageName)))
+        assertTrue(repo.generatedPacksChange(GeneratedPackVisibility()))
+    }
+
     @Test fun packsArePublishedTogetherWithTheirCompletedIndexes() = runBlocking {
         val repo = repository()
         assertVisible(emptyList(), false, repo.state.value)
