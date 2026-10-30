@@ -27,6 +27,8 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 
 private const val MODIFIER_TAB_INDEX = 2
 
+internal enum class EditorPurpose { APPLICATION, PROFILE_ICON }
+
 // Live artwork and brush geometry belong to the same owner as their controls. Only the
 // session identifier and profile token go into saved state; this object never enters a Bundle.
 @Stable
@@ -35,7 +37,8 @@ internal class EditorSession(
     val application: PackageInfoStruct,
     initialPack: String,
     initialFont: String,
-    internal val baselineApplication: PackageInfoStruct = application
+    internal val baselineApplication: PackageInfoStruct = application,
+    val purpose: EditorPurpose = EditorPurpose.APPLICATION
 ) {
     init {
         require(baselineApplication.key == application.key) { "Editor baseline belongs to another component" }

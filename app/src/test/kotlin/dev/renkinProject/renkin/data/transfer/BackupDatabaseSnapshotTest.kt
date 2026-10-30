@@ -47,7 +47,7 @@ class BackupDatabaseSnapshotTest {
         val database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java).allowMainThreadQueries().build()
         try {
             val sql = database.openHelper.writableDatabase
-            for (version in listOf(18, 19, 20, 21)) {
+            for (version in listOf(18, 19, 20, 21, 22)) {
                 oldSnapshot(version, file)
                 sql.execSQL("DELETE FROM Profile")
                 sql.execSQL("INSERT INTO Profile (id, name, profileStyle, appTargets) VALUES (7, 'Newer', 'must not survive', 'must not survive')")
@@ -56,6 +56,8 @@ class BackupDatabaseSnapshotTest {
                 val profile = database.profileDao().get(7)!!
                 assertEquals("v$version", "", profile.profileStyle)
                 assertEquals("v$version", "", profile.appTargets)
+                assertEquals("v$version", "", profile.customPackageName)
+                assertEquals("v$version", "", profile.packIcon)
                 assertEquals("Original", profile.name)
                 assertEquals("description", profile.description)
                 assertEquals("Pack", profile.packLabel)
@@ -80,14 +82,17 @@ class BackupDatabaseSnapshotTest {
         val database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java).allowMainThreadQueries().build()
         try {
             val sql = database.openHelper.writableDatabase
-            sql.execSQL("INSERT INTO Profile (id, name, prefsSnapshot, profileStyle, appTargets) VALUES (7, 'Original', 'legacy', 'exact typed document', 'exact targets')")
+            sql.execSQL("INSERT INTO Profile (id, name, prefsSnapshot, profileStyle, appTargets, customPackageName, packIcon) " +
+                "VALUES (7, 'Original', 'legacy', 'exact typed document', 'exact targets', 'com.example.dark', 'exact icon document')")
             BackupDatabaseSnapshot.write(sql, file)
-            sql.execSQL("UPDATE Profile SET profileStyle = 'changed', prefsSnapshot = 'changed', appTargets = 'changed'")
+            sql.execSQL("UPDATE Profile SET profileStyle = 'changed', prefsSnapshot = 'changed', appTargets = 'changed', customPackageName = 'changed', packIcon = 'changed'")
             BackupDatabaseSnapshot.checkCompatibility(sql, file)
             database.withTransaction { BackupDatabaseSnapshot.restore(sql, file) }
             assertEquals("exact typed document", database.profileDao().get(7)!!.profileStyle)
             assertEquals("legacy", database.profileDao().get(7)!!.prefsSnapshot)
             assertEquals("exact targets", database.profileDao().get(7)!!.appTargets)
+            assertEquals("com.example.dark", database.profileDao().get(7)!!.customPackageName)
+            assertEquals("exact icon document", database.profileDao().get(7)!!.packIcon)
         } finally { database.close(); file.delete() }
     }
 
@@ -125,9 +130,9 @@ class BackupDatabaseSnapshotTest {
         val database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java).allowMainThreadQueries().build()
         try {
             val sql = database.openHelper.writableDatabase
-            sql.version = 23
+            sql.version = 24
             assertTrue(runCatching { BackupDatabaseSnapshot.checkCompatibility(sql, file) }.exceptionOrNull() is StorageRecoverySchemaException)
-            sql.version = 22
+            sql.version = 23
             val root = JSONObject(file.readText())
             val tables = root.getJSONArray("tables")
             for (index in 0 until tables.length()) {

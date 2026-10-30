@@ -50,6 +50,7 @@ import android.graphics.Bitmap
 import dev.renkinProject.renkin.icon.creator.materialYouSchemes
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.apk.GeneratedPackIdentity
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.calendarPrefixOrNull
 import dev.renkinProject.renkin.extension.prettyDrawableName
@@ -173,10 +174,13 @@ internal fun OptionsDialog(
     onRestoreModifiers: () -> Unit,
     onCancelModifierRestore: () -> Unit,
     autosaveNotice: @Composable () -> Unit = {},
-    flight: IconFlightState? = null
+    flight: IconFlightState? = null,
+    dismissOnConfirm: Boolean = true,
+    canInteract: () -> Boolean = { true }
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val app = session.application
+    val interactionAllowed = canInteract()
 
     var selectedTab by session::selectedTab
     var source by session::source
@@ -200,7 +204,9 @@ internal fun OptionsDialog(
     // The Create tab's icon search. Hoisted here (not inside CreateTab) so it survives leaving
     // and returning to the tab; it starts at the app's non-localized name and resets per dialog
     // (i.e. per edit) — icon packs name drawables in English, so the localized label rarely matches.
-    var createSearchQuery by rememberSaveable { mutableStateOf(app.originalName) }
+    var createSearchQuery by rememberSaveable {
+        mutableStateOf(if (session.purpose == EditorPurpose.APPLICATION) app.originalName else "")
+    }
     var iconSortOrder by rememberSaveable { mutableStateOf(IconSortOrder.NAME_ASC) }
     var packSortOrder by rememberSaveable { mutableStateOf(PackSortOrder.USAGE) }
     var createBusy by remember { mutableStateOf(false) }
@@ -246,12 +252,14 @@ internal fun OptionsDialog(
     val dialogTransition = remember { MutableTransitionState(false).apply { targetState = true } }
     // A returning icon must land in its row before the window, and the overlay with it, goes.
     val returning = flight?.phase == IconFlightPhase.RETURNING
-    LaunchedEffect(dialogTransition.targetState, dialogTransition.isIdle, returning) {
-        if (!dialogTransition.targetState && dialogTransition.isIdle && !returning) onDismiss()
+    LaunchedEffect(dialogTransition.targetState, dialogTransition.isIdle, returning, interactionAllowed) {
+        if (!dialogTransition.targetState && dialogTransition.isIdle && !returning && canInteract()) onDismiss()
     }
     val startClose: () -> Unit = {
-        flight?.beginReturn()
-        dialogTransition.targetState = false
+        if (canInteract()) {
+            flight?.beginReturn()
+            dialogTransition.targetState = false
+        }
     }
 
     // The Create tab's icon-pack browser is heavy to mount, so defer it until the open
@@ -467,11 +475,15 @@ internal fun OptionsDialog(
     }
 
     val confirmIcon: () -> Unit = confirm@{
+        if (!canInteract()) return@confirm
         if (!session.canConfirmDraft(session.renderWitnessOrNull())) return@confirm
         // Credit the icon to a pack only when it actually came from one: the Create
         // tab's Icon Pack source. A fresh pick uses the picked pack; keeping the
-        // existing icon keeps its stored source. Upload/vector/text/app-icon = none.
-        val sourcePackToPersist = if (session.modifierReplay != null) app.sourcePackName else confirmedSourcePack(
+        // existing icon keeps its stored source. Generated app icons resolve their provenance on Apply.
+        val sourcePackToPersist = if (session.modifierReplay != null) app.sourcePackName else if (
+            session.purpose == EditorPurpose.APPLICATION && draft.origin == IconOrigin.CREATE &&
+            source == Source.APPLICATION_ICON && GeneratedPackIdentity.isKnownGenerated(app.packageName)
+        ) app.packageName else confirmedSourcePack(
             origin = draft.origin,
             source = source,
             pickedPack = iconPack.takeIf { customIconList.isNotEmpty() },
@@ -490,6 +502,7 @@ internal fun OptionsDialog(
             draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName,
             sourcePackToPersist, sourceUrlToPersist, draft.modifierRecipeToConfirm, draft.modifierInputToConfirm
         )
+        if (!dismissOnConfirm) return@confirm
         // The icon is stored already; with a flight only the window waits, so the original
         // can fly home and the applied icon to the row's result slot before it closes.
         flight?.beginReturn(applied = true)
@@ -510,7 +523,9 @@ internal fun OptionsDialog(
         onDismissRequest = startClose,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
+            decorFitsSystemWindows = false,
+            dismissOnBackPress = interactionAllowed,
+            dismissOnClickOutside = interactionAllowed
         )
     ) {
         // The system's dialog window animation (a scale/slide on some OEM skins) would carry the
@@ -594,7 +609,7 @@ internal fun OptionsDialog(
                                 searchQuery = createSearchQuery,
                                 // Component matching only while the query is the untouched default
                                 // (the app's name); a custom query = pure text search.
-                                componentMatch = if (createSearchQuery == app.originalName) {
+                                componentMatch = if (session.purpose == EditorPurpose.APPLICATION && createSearchQuery == app.originalName) {
                                     app.toInstalledApplication()
                                 } else null,
                                 onIconSelect = { res, pack, drawableName ->
@@ -607,7 +622,9 @@ internal fun OptionsDialog(
                                     customIconList = listOf(res)
                                     iconPack = pack.packageName
                                     activateCreate()
-                                    val newPrefix = drawableName.calendarPrefixOrNull()
+                                    val newPrefix = drawableName.calendarPrefixOrNull().takeIf {
+                                        session.purpose == EditorPurpose.APPLICATION
+                                    }
                                     calendarPrefix = newPrefix
                                     calendarPackName = if (newPrefix != null) pack.packageName else null
                                     // If calendar was enabled but the new icon can't rotate, disable it
@@ -791,11 +808,11 @@ internal fun OptionsDialog(
                     appName = app.appName,
                     icon = draft.iconToConfirm,
                     loading = draft.generating,
-                    canConfirm = session.canConfirmDraft(composedRenderWitness)
+                    canConfirm = interactionAllowed && session.canConfirmDraft(composedRenderWitness)
                 )
                 val actions = OptionsPreviewActions(
                     onDismiss = startClose,
-                    onClear = { showConfirmClear = true },
+                    onClear = { if (canInteract()) showConfirmClear = true },
                     onConfirm = confirmIcon
                 )
                 val packBrowser = PackBrowserChrome(
@@ -811,7 +828,8 @@ internal fun OptionsDialog(
                     onPackSortChange = { packSortOrder = it }
                 )
                 val calendar = CalendarSelection(
-                    visible = selectedTab == 0 && source == Source.ICON_PACK && calendarPrefix != null,
+                    visible = session.purpose == EditorPurpose.APPLICATION &&
+                        selectedTab == 0 && source == Source.ICON_PACK && calendarPrefix != null,
                     packName = calendarPackLabel,
                     prefix = calendarPrefix.orEmpty(),
                     enabled = calendarEnabled,
@@ -857,16 +875,27 @@ internal fun OptionsDialog(
         }
     }
 
-    if (showConfirmClear) {
+    if (showConfirmClear && interactionAllowed) {
         ConfirmClearDialog(
             onDismiss = { showConfirmClear = false },
             onIconClear = {
-                showConfirmClear = false
-                onIconClear()
+                if (canInteract()) {
+                    showConfirmClear = false
+                    onIconClear()
+                }
             }
         )
     }
     if (session.restoringModifiers) RestoringModifiersDialog(onCancel = onCancelModifierRestore)
+    if (!interactionAllowed) {
+        MessageDialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            badge = { DialogProgressBadge() },
+            title = stringResource(R.string.iconGenerationInProgress),
+            actions = {}
+        )
+    }
 }
 
 @Composable

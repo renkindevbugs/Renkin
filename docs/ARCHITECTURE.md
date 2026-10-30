@@ -11,7 +11,7 @@ Several names float around; this trips up newcomers:
 | --- | --- |
 | App display name | **Renkin** |
 | Application id / namespace | `dev.renkinProject.renkin` (renamed 2026-07; a brand-new app identity) |
-| Generated icon pack package | `dev.renkinProject.renkinpack` (`IconPackBuilder.PACKAGE_NAME`); non-default profiles append `.p<profileId>` so several packs install side by side |
+| Generated icon pack package | Automatic: `dev.renkinProject.renkinpack` (`IconPackBuilder.PACKAGE_NAME`); non-default profiles append `.p<profileId>`. A profile can override its APK applicationId in Advanced settings. |
 | External libraries | `dev.alembiconsProject.imagetracer`, `dev.alembiconsProject.tgCannyEdgeCompose` and the `com.github.Alembicons` gradle coordinates are **upstream libraries — never rename** |
 
 It is a fork of **Alembicons** (formerly *Iconeration*). The upstream attribution
@@ -359,6 +359,12 @@ builds its own pack APK under its own package (see Naming). The default profile 
 undeletable; deleting a profile also deletes its watch rules, and a watch notification whose
 profile has since been deleted shows an explanation instead of applying to the wrong profile.
 Switcher = the top-bar title dropdown.
+
+Profile details reuse the icon editor for the generated APK's own icon and expose an optional
+applicationId override under Advanced. Room v23 stores self-contained artwork and the override;
+automatic IDs are prefilled for editing without turning an unchanged value into an override.
+Generated-pack format recognition and signed local ownership remain separate. See
+[profile pack identity](profile-pack-identity-checkpoint.md) for persistence, export and verification.
 
 Phase 7A1 isolates the existing JSON snapshot encoder, replacement rules and inactive-profile
 built-source patch in `data/LegacyProfilePreferences.kt`. The registered keys and synchronized

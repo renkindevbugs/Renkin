@@ -100,7 +100,7 @@ class BackupRecoveryTest {
             if (table.getString("name") != "Profile") continue
             val columns = table.getJSONArray("columns")
             // Profile columns appended after v20, newest last.
-            for (added in listOf("appTargets", "profileStyle")) {
+            for (added in listOf("packIcon", "customPackageName", "appTargets", "profileStyle")) {
                 assertEquals(added, columns.getString(columns.length() - 1))
                 columns.remove(columns.length() - 1)
                 val rows = table.getJSONArray("rows")

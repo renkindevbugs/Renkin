@@ -38,7 +38,7 @@ internal enum class BackupJsonNode {
     companion object {
         private val ROOT_FIELDS = setOf("prefs", "profiles", "packs", "colorPresets", "modifierPresets")
         private val PROFILE_FIELDS = setOf("id", "name", "description", "packLabel", "prefsSnapshot",
-            "hasUnbuiltChanges", "hideMissingPackWarning", "profileStyle", "appTargets", "icons", "watchRules")
+            "hasUnbuiltChanges", "hideMissingPackWarning", "profileStyle", "appTargets", "customPackageName", "packIcon", "icons", "watchRules")
         private val ICON_FIELDS = setOf("packageName", "activityName", "isAdaptiveIcon", "isXml", "drawable",
             "calendarEnabled", "calendarPrefix", "calendarPackName", "sourcePackName", "sourceDrawableName",
             "isCustomIcon", "isLegacyIcon", "baseDrawable", "baseIsAdaptiveIcon", "baseIsXml", "sourceUrl",

@@ -44,7 +44,7 @@ class RenkinPackMigrationTest {
 
     @Test
     fun everyReleasedSchemaMigratesToCurrent() {
-        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21).forEach { version ->
+        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22).forEach { version ->
             RenkinPackDatabase.open(context, historical(version, "from-$version")).useDatabase { database ->
                 database.openHelper.writableDatabase
             }
@@ -63,7 +63,7 @@ class RenkinPackMigrationTest {
         }
         RenkinPackDatabase.open(context, name).useDatabase { database ->
             val sql = database.openHelper.writableDatabase
-            assertEquals(22, sql.version)
+            assertEquals(23, sql.version)
             sql.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 expected.forEach { (column, value) -> assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column))) }
@@ -90,11 +90,11 @@ class RenkinPackMigrationTest {
         }
         RenkinPackDatabase.open(context, name).useDatabase { database ->
             val sql = database.openHelper.writableDatabase
-            assertEquals(22, sql.version)
+            assertEquals(23, sql.version)
             sql.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 expected.forEach { (column, value) -> assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column))) }
-                assertEquals("appTargets", cursor.columnNames.last())
+                assertTrue("appTargets" in cursor.columnNames)
                 assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("appTargets")))
             }
             assertEquals(1, database.profileDao().updateAppTargets(7, "[]"))
@@ -115,6 +115,41 @@ class RenkinPackMigrationTest {
             assertEquals("retained typed document", database.profileDao().get(7)!!.profileStyle)
         }
     }
+
+    @Test fun version22AddsEmptyPackIdentityWithoutChangingExistingProfileOrIconData() =
+        kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Default) {
+            var expected = emptyMap<String, String?>()
+            val name = historical(22, "v22-pack-identity") { db ->
+                db.execSQL("INSERT INTO Profile (id, name, description, packLabel, prefsSnapshot, hasUnbuiltChanges, hideMissingPackWarning, profileStyle, appTargets) " +
+                    "VALUES (7, 'Dark', 'description', 'Dark Pack', 'legacy', 1, 1, 'typed style', 'targets')")
+                db.execSQL("INSERT INTO DbApplication (packageName, activityName, isAdaptiveIcon, isXml, drawable, baseDrawable, profileId) " +
+                    "VALUES ('com.example', 'Main', 1, 1, 'rendered layers', 'base layers', 7)")
+                db.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    expected = cursor.columnNames.associateWith { cursor.getString(cursor.getColumnIndexOrThrow(it)) }
+                }
+            }
+            RenkinPackDatabase.open(context, name).useDatabase { database ->
+                val sql = database.openHelper.writableDatabase
+                assertEquals(23, sql.version)
+                sql.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    expected.forEach { (column, value) ->
+                        assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column)))
+                    }
+                    assertEquals(listOf("customPackageName", "packIcon"), cursor.columnNames.takeLast(2))
+                    assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("customPackageName")))
+                    assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("packIcon")))
+                }
+                val icon = database.renkinPackDao().getAllInline(7).single()
+                assertEquals("rendered layers", icon.drawable)
+                assertEquals("base layers", icon.baseDrawable)
+                assertTrue(icon.isAdaptiveIcon)
+                sql.execSQL("INSERT INTO Profile (id, name) VALUES (9, 'SQL defaults')")
+                assertEquals("", database.profileDao().get(9)!!.customPackageName)
+                assertEquals("", database.profileDao().get(9)!!.packIcon)
+            }
+        }
 
     @Test fun version19AddsEmptyInputAndPreservesEveryExistingColumn() {
         var expected = emptyMap<String, String?>()

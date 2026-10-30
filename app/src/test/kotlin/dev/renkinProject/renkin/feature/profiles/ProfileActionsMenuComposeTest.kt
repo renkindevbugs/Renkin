@@ -46,7 +46,7 @@ class ProfileActionsMenuComposeTest {
     }
 
     @Test
-    fun defaultProfileOnlyOffersShare() {
+    fun defaultProfileOffersEditAndShareButCannotBeDeleted() {
         compose.setContent {
             ProfileActionsMenu(
                 profile = Profile(id = DEFAULT_PROFILE_ID, name = "Renkin"),
@@ -59,7 +59,7 @@ class ProfileActionsMenuComposeTest {
         }
 
         compose.onNodeWithText(string(R.string.shareProfile)).assertIsDisplayed()
-        assertEquals(0, compose.onAllNodesWithText(string(R.string.editProfile)).fetchSemanticsNodes().size)
+        compose.onNodeWithText(string(R.string.editProfile)).assertIsDisplayed()
         assertEquals(0, compose.onAllNodesWithText(string(R.string.deleteProfile)).fetchSemanticsNodes().size)
     }
 }

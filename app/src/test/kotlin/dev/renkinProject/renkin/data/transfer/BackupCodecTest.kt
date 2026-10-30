@@ -6,6 +6,9 @@ import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.Profile
+import dev.renkinProject.renkin.data.ProfilePackIconCodec
+import dev.renkinProject.renkin.data.ProfileStyle
+import dev.renkinProject.renkin.data.ProfileStyleCodec
 import dev.renkinProject.renkin.data.watch.AppComponent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -22,6 +25,31 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33])
 class BackupCodecTest {
+
+    @Test fun profilePackIdentityRoundTripsAndOlderArchivesKeepDefaultIdentity() {
+        val icon = JSONObject().put("version", 1).put("sourcePackName", "pack.logo")
+            .put("sourceUrl", "https://example.org/logo.svg").put("modifierRecipe", "")
+            .put("icon", JSONObject().put("payload", "aWNvbg==").put("xml", false)
+                .put("adaptive", false).put("previewScale", 1)).toString()
+        val profile = Profile(id = 1, name = "Custom", packLabel = "Custom pack",
+            customPackageName = "com.example.custompack", packIcon = icon,
+            prefsSnapshot = "{}", profileStyle = ProfileStyleCodec.encode(ProfileStyle()))
+        val data = BackupData(listOf(BackupProfile(profile, emptyList(), emptyList())), emptyMap())
+        val json = JSONObject(BackupCodec.encode(data, BackupCodec.FORMAT_VERSION))
+        val restored = BackupCodec.decode(json.toString(), BackupCodec.FORMAT_VERSION).profiles.single().profile
+        assertEquals(profile, restored)
+        assertEquals("pack.logo", ProfilePackIconCodec.sourcePackName(restored.packIcon))
+        assertTrue(BackupJsonNode.PROFILE.retains("packIcon"))
+        assertTrue(BackupJsonNode.PROFILE.retains("customPackageName"))
+
+        val oldProfile = json.getJSONArray("profiles").getJSONObject(0)
+        oldProfile.remove("customPackageName")
+        oldProfile.remove("packIcon")
+        val old = BackupCodec.decode(json.toString(), BackupCodec.FORMAT_VERSION).profiles.single().profile
+        assertEquals("", old.customPackageName)
+        assertEquals("", old.packIcon)
+        assertEquals(profile.packLabel, old.packLabel)
+    }
 
     @Test fun recipeRoundTripsAndBadOrMissingMetadataDoesNotDiscardArtwork() {
         val recipe = dev.renkinProject.renkin.icon.creator.ModifierRecipeCodec.encode(

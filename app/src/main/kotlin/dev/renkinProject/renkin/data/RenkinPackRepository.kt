@@ -138,7 +138,9 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
     }
 
     internal suspend fun exportSourcePacks(profileId: Long? = null, excludedProfileId: Long? = null): Set<String> = access {
-        dao.exportSourcePacks(profileId, excludedProfileId).toSet()
+        dao.exportSourcePacks(profileId, excludedProfileId).toSet() + profileDao.getAll()
+            .filter { (profileId == null || it.id == profileId) && it.id != excludedProfileId }
+            .mapNotNull { ProfilePackIconCodec.sourcePackName(it.packIcon) }
     }
 
     internal suspend fun modifierInputDocuments(): List<String> = access { dao.modifierInputDocuments() }
@@ -273,9 +275,7 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
     }
 
     /** Every pack any stored icon (any profile) came from. */
-    suspend fun distinctSourcePacks(): List<String> = access {
-        dao.distinctSourcePacks()
-    }
+    suspend fun distinctSourcePacks(): List<String> = exportSourcePacks().toList()
 
     // ---- Profiles -----------------------------------------------------------------
 
@@ -286,6 +286,16 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
 
     suspend fun profile(id: Long): Profile? = access { profileDao.get(id) }
 
+    internal suspend fun nextProfileId(): Long = access {
+        db.openHelper.readableDatabase.query(
+            "SELECT MAX(COALESCE((SELECT MAX(id) FROM Profile), 0), " +
+                "COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'Profile'), 0)) + 1"
+        ).use { cursor ->
+            check(cursor.moveToFirst())
+            cursor.getLong(0)
+        }
+    }
+
     /** Restores the undeletable default row without touching its icons or an existing profile. */
     suspend fun ensureDefaultProfile(): Profile = access {
         profileDao.insertIfMissing(
@@ -295,7 +305,7 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
     }
 
     suspend fun createProfile(profile: Profile): Long = access {
-        profileDao.insert(profile)
+        profileDao.insert(profile.copy(packIcon = ProfilePackIconCodec.normalize(profile.packIcon)))
     }
 
     suspend fun updateProfile(profile: Profile) = access {
@@ -306,11 +316,25 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         val styled = if (current?.profileStyle?.isNotEmpty() == true) {
             profile.copy(profileStyle = current.profileStyle, prefsSnapshot = current.prefsSnapshot)
         } else profile
-        profileDao.update(styled.copy(appTargets = current?.appTargets ?: styled.appTargets))
+        val staleIdentity = current != null && (current.customPackageName != styled.customPackageName ||
+            current.packIcon != styled.packIcon || current.packLabel != styled.packLabel)
+        profileDao.update(styled.copy(appTargets = current?.appTargets ?: styled.appTargets,
+            customPackageName = current?.customPackageName ?: styled.customPackageName,
+            packIcon = current?.packIcon ?: styled.packIcon,
+            hasUnbuiltChanges = styled.hasUnbuiltChanges || (staleIdentity && current?.hasUnbuiltChanges == true)))
     }
 
-    suspend fun updateProfileDetails(profileId: Long, name: String, description: String, packLabel: String) = access {
-        profileDao.updateDetails(profileId, name, description, packLabel)
+    suspend fun updateProfileDetails(
+        profileId: Long, name: String, description: String, packLabel: String,
+        customPackageName: String? = null, packIcon: String? = null
+    ) = access {
+        // A profile deleted while its details dialog was open is not an error: nothing to save.
+        val current = profileDao.get(profileId) ?: return@access
+        val packageName = customPackageName ?: current.customPackageName
+        val icon = ProfilePackIconCodec.normalize(packIcon ?: current.packIcon)
+        val changed = current.packLabel != packLabel || current.customPackageName != packageName || current.packIcon != icon
+        profileDao.updateDetails(profileId, name, description, packLabel, packageName, icon,
+            current.hasUnbuiltChanges || changed)
     }
 
     suspend fun setProfileUnbuilt(profileId: Long, unbuilt: Boolean) = access {

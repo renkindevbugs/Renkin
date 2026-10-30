@@ -64,4 +64,26 @@ class PackProvenanceTest {
     fun parse_toleratesGarbage() {
         assertTrue(PackProvenance.parse("not json").isEmpty())
     }
+
+    @Test
+    fun customApkApplicationIconKeepsItsRealSourceAlongsideThemedApps() {
+        val component = "example.custom.icons/dev.renkinProject.renkinpack.MainActivity"
+        val parsed = PackProvenance.parse(PackProvenance.encode(
+            listOf(app("example.mail", "pack.mail")),
+            appIconComponent = component, appIconSource = "pack.profile.logo"
+        ))
+        assertEquals("pack.profile.logo", parsed[component])
+        assertEquals("pack.mail", parsed["example.mail/example.mail.Main"])
+    }
+
+    @Test
+    fun uploadedApplicationIconDoesNotInventSourceAndUnresolvedCustomSourcesStayAttributed() {
+        val component = "example.custom.icons/dev.renkinProject.renkinpack.MainActivity"
+        assertTrue(PackProvenance.parse(PackProvenance.encode(emptyList(), component, null)).isEmpty())
+        val parsed = PackProvenance.parse(PackProvenance.encode(
+            listOf(app("example.mail", "example.custom.container")), component, "example.custom.container"
+        ))
+        assertEquals("example.custom.container", parsed[component])
+        assertEquals("example.custom.container", parsed["example.mail/example.mail.Main"])
+    }
 }

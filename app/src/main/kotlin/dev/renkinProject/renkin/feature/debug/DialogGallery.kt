@@ -244,7 +244,7 @@ private fun profileEntries(otherProfileName: String) = listOf(
         ProfileDetailsDialog(
             title = stringResource(R.string.createProfileTitle),
             confirmLabel = stringResource(R.string.createProfileAction),
-            onConfirm = { _, _, _ -> close() },
+            onConfirm = { _, _, _, _, _ -> close() },
             onDismiss = close
         )
     },
@@ -255,7 +255,7 @@ private fun profileEntries(otherProfileName: String) = listOf(
             initialName = otherProfileName,
             initialDescription = "Muted colours for the work phone",
             initialPackLabel = MOCK_PACK_LABEL,
-            onConfirm = { _, _, _ -> close() },
+            onConfirm = { _, _, _, _, _ -> close() },
             onDismiss = close
         )
     },

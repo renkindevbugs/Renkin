@@ -52,6 +52,7 @@ import com.reandroid.dex.model.DexFile
 import com.reandroid.dex.sections.SectionType
 import com.reandroid.dex.smali.SmaliReader
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
+import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
 import dev.renkinProject.renkin.extension.toString
 import dev.renkinProject.renkin.packages.PackageVersion
@@ -75,7 +76,9 @@ class IconPackBuilder(
     private val packPackageName: String = PACKAGE_NAME,
     private val packLabel: String = "Renkin Pack",
     private val iconPackCatalog: IconPackCatalog = IconPackCatalog(ctx),
-    private val apkDir: File = ctx.cacheDir.resolve("apk").resolve(UUID.randomUUID().toString())
+    private val apkDir: File = ctx.cacheDir.resolve("apk").resolve(UUID.randomUUID().toString()),
+    private val packIcon: IconPackDrawable? = null,
+    private val packIconSource: String? = null
 ) {
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
@@ -86,6 +89,7 @@ class IconPackBuilder(
     companion object {
         /** Base package id of the generated Renkin icon pack (profiles append ".p<id>"). */
         const val PACKAGE_NAME = "dev.renkinProject.renkinpack"
+        private const val MAIN_ACTIVITY = "dev.renkinProject.renkinpack.MainActivity"
 
         /**
          * The pack-signing keystore in filesDir. Backups carry it (with its password file,
@@ -102,7 +106,9 @@ class IconPackBuilder(
          * or the pre-rename one. Used to keep our own output out of places where it would only
          * feed back on itself (icon sources, icon watch, new-pack prompts).
          */
-        fun isOwnPack(packageName: String): Boolean =
+        fun isOwnPack(packageName: String): Boolean = GeneratedPackIdentity.isKnownGenerated(packageName)
+
+        internal fun isLegacyOwnPack(packageName: String): Boolean =
             packageName.startsWith(PACKAGE_NAME) || packageName.startsWith(LEGACY_PACKAGE_NAME)
 
         /**
@@ -360,11 +366,14 @@ class IconPackBuilder(
         apkModule.add(ByteInputSource(appfilterXml.getBytes(), "assets/appfilter.xml"))
         apkModule.add(ByteInputSource(appMapXml.getBytes(), "assets/appmap.xml"))
         apkModule.add(ByteInputSource(themeResourcesXml.getBytes(), "assets/theme_resources.xml"))
+        apkModule.add(ByteInputSource(GeneratedPackIdentity.MARKER.toByteArray(Charsets.UTF_8),
+            "assets/" + GeneratedPackIdentity.ASSET_NAME))
         // Provenance: which real pack each icon came from, so this pack used as a source
         // elsewhere attributes icons to their origin (and the paid-pack checks still apply).
         apkModule.add(
             ByteInputSource(
-                PackProvenance.encode(apps).toByteArray(Charsets.UTF_8),
+                PackProvenance.encode(apps, "$packPackageName/$MAIN_ACTIVITY", packIconSource)
+                    .toByteArray(Charsets.UTF_8),
                 "assets/" + PackProvenance.ASSET_NAME
             )
         )
@@ -392,6 +401,7 @@ class IconPackBuilder(
         textMethod(ctx.resources.getString(R.string.signApk))
         checkActive()
         signApk(unsignedApk, signedApk)
+        GeneratedPackIdentity.recordBuilt(ctx, iconPackName, signedApk)
         checkActive()
 
         // No "done" step here: building/signing is finished, but the (slower) system install
@@ -477,7 +487,7 @@ class IconPackBuilder(
             AndroidManifestBlock.NAME_name,
             AndroidManifestBlock.ID_name
         )
-        activityName.valueAsString = "dev.renkinProject.renkinpack.MainActivity"
+        activityName.valueAsString = MAIN_ACTIVITY
 
         val exported = activity.getOrCreateAndroidAttribute(
             AndroidManifestBlock.NAME_exported,
@@ -535,10 +545,13 @@ class IconPackBuilder(
         packageBlock: PackageBlock,
         icon: AdaptiveIconPackDrawable,
         name: String,
-        legacyName: String
+        legacyName: String,
+        type: String = "drawable"
     ) {
-        val fallback = createBitmapResource(apkModule, packageBlock, icon.toBitmap(), name)
-        packageBlock.getOrCreate("", "drawable", legacyName).setValueAsString(fallback.valueAsString)
+        val fallback = createBitmapResource(apkModule, packageBlock, icon.toBitmap(), name, type = type)
+        if (legacyName != name) {
+            packageBlock.getOrCreate("", type, legacyName).setValueAsString(fallback.valueAsString)
+        }
         createBitmapResource(apkModule, packageBlock, icon.foreground, "${name}_foreground", "nodpi")
         createBitmapResource(apkModule, packageBlock, icon.background, "${name}_background", "nodpi")
         icon.monochrome?.let {
@@ -550,9 +563,9 @@ class IconPackBuilder(
             foreground(name)
             if (includeMonochrome) monochrome("@drawable/${name}_monochrome")
         }
-        createXmlDrawableResource(apkModule, packageBlock, adaptive(false), name, "anydpi-v26")
+        createXmlDrawableResource(apkModule, packageBlock, adaptive(false), name, "anydpi-v26", type)
         if (icon.hasMonochrome) {
-            createXmlDrawableResource(apkModule, packageBlock, adaptive(true), name, "anydpi-v33")
+            createXmlDrawableResource(apkModule, packageBlock, adaptive(true), name, "anydpi-v33", type)
         }
     }
 
@@ -706,6 +719,10 @@ class IconPackBuilder(
     }
 
     private fun insertIconPackAppIcons(apkModule: ApkModule, packageBlock: PackageBlock, manifest: AndroidManifestBlock) {
+        if (packIcon != null) {
+            insertCustomPackIcon(apkModule, packageBlock, manifest, packIcon)
+            return
+        }
         createBitmapResource(apkModule, packageBlock, R.drawable.mdpi_ic_launcher, "ic_launcher", "mdpi", "mipmap")
         createBitmapResource(apkModule, packageBlock, R.drawable.hdpi_ic_launcher, "ic_launcher", "hdpi", "mipmap")
         createBitmapResource(apkModule, packageBlock, R.drawable.xhdpi_ic_launcher, "ic_launcher", "xhdpi", "mipmap")
@@ -735,8 +752,37 @@ class IconPackBuilder(
         val appIcon = ValueCoder.encodeReference(packageBlock, "@mipmap/ic_launcher")
         val appIconRound = ValueCoder.encodeReference(packageBlock, "@mipmap/ic_launcher_round")
 
-        manifest.iconResourceId = appIcon.value
-        manifest.roundIconResourceId = appIconRound.value
+        setPackIconReferences(manifest, appIcon.value, appIconRound.value)
+    }
+
+    private fun insertCustomPackIcon(
+        apkModule: ApkModule,
+        packageBlock: PackageBlock,
+        manifest: AndroidManifestBlock,
+        icon: IconPackDrawable
+    ) {
+        if (icon is AdaptiveIconPackDrawable) {
+            exportAdaptiveLayers(apkModule, packageBlock, icon, "ic_launcher", "ic_launcher", "mipmap")
+        } else {
+            createBitmapResource(apkModule, packageBlock, icon.previewBitmap(), "ic_launcher", type = "mipmap")
+            if (icon.isAdaptiveIcon()) {
+                createBitmapResource(apkModule, packageBlock, icon.toBitmap(), "ic_launcher_foreground", "nodpi")
+                val adaptive = AdaptiveIconXml().apply {
+                    foreground("ic_launcher")
+                    background("@android:color/transparent")
+                }
+                createXmlDrawableResource(apkModule, packageBlock, adaptive, "ic_launcher", "anydpi-v26", "mipmap")
+            }
+        }
+        val reference = ValueCoder.encodeReference(packageBlock, "@mipmap/ic_launcher").value
+        setPackIconReferences(manifest, reference, reference)
+    }
+
+    private fun setPackIconReferences(manifest: AndroidManifestBlock, icon: Int, roundIcon: Int) {
+        manifest.iconResourceId = icon
+        // ARSCLib 1.3.5's round-icon setter incorrectly reuses the "icon" attribute name.
+        manifest.orCreateApplicationElement.getOrCreateAndroidAttribute("roundIcon", AndroidManifestBlock.ID_roundIcon)
+            .setTypeAndData(ValueType.REFERENCE, roundIcon)
     }
 
     private fun getInstalledVersion(): Version? {

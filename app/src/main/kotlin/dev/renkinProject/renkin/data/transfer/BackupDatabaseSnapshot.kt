@@ -219,7 +219,8 @@ internal object BackupDatabaseSnapshot {
             18 to mapOf("DbApplication" to listOf("modifierRecipe")),
             19 to mapOf("DbApplication" to listOf("modifierInput")),
             20 to mapOf("Profile" to listOf("profileStyle")),
-            21 to mapOf("Profile" to listOf("appTargets"))
+            21 to mapOf("Profile" to listOf("appTargets")),
+            22 to mapOf("Profile" to listOf("customPackageName", "packIcon"))
         )
         val omitted = mutableMapOf<String, List<String>>()
         for (version in snapshotVersion until currentVersion) {

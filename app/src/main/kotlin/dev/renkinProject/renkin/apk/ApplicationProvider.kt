@@ -563,8 +563,8 @@ class ApplicationProvider internal constructor(
                 }
                 val generated = result ?: return@runProfileOperation null
                 val live = applicationList.firstOrNull { it.key == target.key } ?: return@runProfileOperation null
-                val origin = lockManager.resolveOrigin(live.key, generated.sourcePack)
-                if (generated.rendered != null && origin in lockManager.lockedOriginsFor(plan.sourceOptions)) {
+                val (origin, locked) = lockManager.resolvePickedSource(live.key, generated.sourcePack)
+                if (generated.rendered != null && locked) {
                     return@runProfileOperation null
                 }
                 val unsavedBefore = unsavedIconKeys
@@ -621,7 +621,10 @@ class ApplicationProvider internal constructor(
             ) { results ->
                 runProfileOperation(expected) {
                     requireUnchangedRecipe(plan.preferences)
-                    val lockedOrigins = lockManager.lockedOriginsFor(plan.sourceOptions)
+                    val origins = results.associate { result ->
+                        result.key to (lockManager.resolveOrigin(result.key, result.sourcePack) ?: result.sourcePack)
+                    }
+                    val lockedOrigins = lockManager.lockedPacksAmong(origins.values.filter(String::isNotEmpty).toSet())
                     val indexByKey = applicationList.withIndex().associate { (index, app) -> app.key to index }
                     for (result in results) {
                         val index = indexByKey[result.key]
@@ -634,7 +637,7 @@ class ApplicationProvider internal constructor(
                             continue
                         }
                         val live = applicationList[index]
-                        val origin = lockManager.resolveOrigin(live.key, result.sourcePack) ?: result.sourcePack
+                        val origin = origins.getValue(result.key)
                         if (result.rendered != null && origin in lockedOrigins) {
                             withheld++
                             continue
@@ -781,12 +784,15 @@ class ApplicationProvider internal constructor(
         applications: List<PackageInfoStruct>, options: GenerationOptions
     ): EmptyIconSources {
         val packs = listOf(options.source.primaryIconPack, options.source.secondaryIconPack, "").distinct()
+        val origins = applications.associate { app ->
+            val sources = if (GeneratedPackIdentity.isKnownGenerated(app.packageName)) packs + app.packageName else packs
+            app.key to sources.associateWith { lockManager.resolveOrigin(app.key, it) }
+        }
         return EmptyIconSources(
             iconGenService.captureRefreshSources(options),
-            applications.associate { app ->
-                app.key to packs.associateWith { lockManager.resolveOrigin(app.key, it) }
-            },
-            lockManager.lockedOriginsFor(options)
+            origins,
+            lockManager.lockedPacksAmong(origins.values.flatMap { it.values }.filterNotNull()
+                .filter(String::isNotEmpty).toSet())
         )
     }
 
@@ -1544,17 +1550,35 @@ class ApplicationProvider internal constructor(
 
     fun profilesFlow() = profileManager.profilesFlow()
 
+    suspend fun nextProfilePackPackageName(): String = profileManager.nextPackPackageName()
+
     suspend fun activeProfile(): Profile? = profileManager.activeProfile()
 
     /** The package name the active profile's pack builds under (base pack for the default). */
     suspend fun activePackPackageName(): String = profileManager.packPackageNameFor(activeProfileId)
 
     /** Creates a profile and returns its id. */
-    suspend fun createProfile(name: String, description: String, packLabel: String): Long =
-        profileOperations.run { profileManager.createProfile(name, description, packLabel) }
+    suspend fun createProfile(
+        name: String, description: String, packLabel: String,
+        customPackageName: String = "", packIcon: String = ""
+    ): Long = withContext(Dispatchers.Default) {
+        profileOperations.run { profileManager.createProfile(name, description, packLabel, customPackageName, packIcon) }
+    }
 
-    suspend fun updateProfileDetails(id: Long, name: String, description: String, packLabel: String) =
-        profileOperations.run { profileManager.updateProfileDetails(id, name, description, packLabel) }
+    suspend fun updateProfileDetails(
+        id: Long, name: String, description: String, packLabel: String,
+        customPackageName: String? = null, packIcon: String? = null
+    ) = withContext(Dispatchers.Default) {
+        profileOperations.run {
+            val before = profileManager.profile(id) ?: return@run
+            profileManager.updateProfileDetails(id, name, description, packLabel, customPackageName, packIcon)
+            if (before.packLabel != packLabel ||
+                customPackageName != null && before.customPackageName != customPackageName ||
+                packIcon != null && before.packIcon != packIcon) {
+                savedProfileRevisions[id] = (savedProfileRevisions[id] ?: 0L) + 1L
+            }
+        }
+    }
 
     /** Deletes [id] (never the default) and its icons; switches to the default first if active. */
     suspend fun deleteProfile(id: Long) = withContext(Dispatchers.Default) {

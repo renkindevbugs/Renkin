@@ -8,6 +8,11 @@ import dev.renkinProject.renkin.util.Log
 
 internal const val SIGNATURE_MISMATCH_DETAIL = "The installed pack is signed with a different key than the new APK."
 
+@Suppress("DEPRECATION")
+internal fun packageSigningFlags(): Int = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+    PackageManager.GET_SIGNING_CERTIFICATES
+} else PackageManager.GET_SIGNATURES
+
 /**
  * Whether [apkPath] can update the installed [packageName] in place: true when nothing is
  * installed or the installed signer is in the new APK's signing lineage, false on a definite
@@ -15,11 +20,7 @@ internal const val SIGNATURE_MISMATCH_DETAIL = "The installed pack is signed wit
  */
 @Suppress("DEPRECATION")
 internal fun canUpdateWithSameSigner(packageManager: PackageManager, packageName: String, apkPath: String): Boolean? {
-    val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        PackageManager.GET_SIGNING_CERTIFICATES
-    } else {
-        PackageManager.GET_SIGNATURES
-    }
+    val flags = packageSigningFlags()
     return try {
         val installed = try {
             packageManager.getPackageInfo(packageName, flags)
@@ -37,7 +38,7 @@ internal fun canUpdateWithSameSigner(packageManager: PackageManager, packageName
 }
 
 @Suppress("DEPRECATION")
-private fun currentSigners(info: PackageInfo): Set<Signature>? =
+internal fun currentSigners(info: PackageInfo): Set<Signature>? =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         val signing = info.signingInfo ?: return null
         val signers = if (signing.hasMultipleSigners()) signing.apkContentsSigners

@@ -31,6 +31,32 @@ import java.util.zip.ZipOutputStream
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 class ModifierInputBackupTest {
+    @Test fun profilePackIdentityTravelsWithFullBackupAndSharedProfileWithoutExternalArtworkFiles() = runBlocking {
+        seed("Pack identity")
+        val icon = ProfilePackIconCodec(context).encode(
+            dev.renkinProject.renkin.drawable.BitmapIconDrawable(
+                android.graphics.Bitmap.createBitmap(4, 4, android.graphics.Bitmap.Config.ARGB_8888)
+            ), sourcePackName = "pack.logo.source"
+        )
+        pack.updateProfileDetails(1, "Pack identity", "", "Custom pack", "com.example.custompack", icon)
+        val full = export()
+        val shared = ByteArrayOutputStream().also { manager.exportProfile(1) { it } }.toByteArray()
+        pack.updateProfileDetails(1, "Changed", "", "Changed", "", "")
+
+        manager.importBackup { ByteArrayInputStream(full) }
+        val restored = checkNotNull(pack.profile(1))
+        assertEquals("com.example.custompack", restored.customPackageName)
+        assertEquals(icon, restored.packIcon)
+        assertEquals("pack.logo.source", ProfilePackIconCodec.sourcePackName(restored.packIcon))
+
+        val imported = manager.importFile { ByteArrayInputStream(shared) }
+        val added = checkNotNull(pack.profile(checkNotNull(imported.importedProfileId)))
+        assertEquals("", added.customPackageName)
+        assertEquals(icon, added.packIcon)
+        assertTrue(added.hasUnbuiltChanges)
+        assertTrue(pack.distinctSourcePacks().contains("pack.logo.source"))
+    }
+
     private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(context), UnsavedIconJournalStore(context)) }
     private lateinit var context: Context
     private lateinit var packDb: RenkinPackDatabase
