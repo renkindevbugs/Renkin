@@ -87,7 +87,7 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/Theme.Material3.DayNight.NoActionBar"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|locale|layoutDirection"
             tools:ignore="DiscouragedApi">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

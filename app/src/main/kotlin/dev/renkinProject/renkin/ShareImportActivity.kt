@@ -3,7 +3,7 @@ package dev.renkinProject.renkin
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import dev.renkinProject.renkin.feature.language.LocalizedActivity
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
@@ -17,7 +17,7 @@ import javax.inject.Inject
  * launcher icon does, so an open editor or Global options screen keeps its state.
  */
 @AndroidEntryPoint
-class ShareImportActivity : ComponentActivity() {
+class ShareImportActivity : LocalizedActivity() {
     @Inject
     lateinit var importer: SharedImageImporter
 

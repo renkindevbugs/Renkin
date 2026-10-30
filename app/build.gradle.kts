@@ -28,6 +28,24 @@ val sourceDirty = if (revisionOverride.isPresent) false else providers.exec {
 }.standardOutput.asText.map { it.isNotBlank() }.get()
 val buildRevision = sourceRevision + if (sourceDirty) "-dirty" else ""
 
+// Percent of the English strings each `values-*` translation covers, e.g. "es=76,zh-rCN=75";
+// the language picker shows it next to each language.
+val translationCoverage: String = run {
+    val stringName = Regex("""<(string|plurals)\s+name="([^"]+)"([^>]*)>""")
+    fun translatableNames(strings: File) = stringName.findAll(strings.readText())
+        .filterNot { it.groupValues[3].contains("translatable=\"false\"") }
+        .map { it.groupValues[2] }.toSet()
+    val res = file("src/main/res")
+    val english = translatableNames(res.resolve("values/strings.xml"))
+    res.listFiles().orEmpty()
+        .filter { it.name.matches(Regex("values-[a-z]{2,3}(-r[A-Z]{2})?")) && it.resolve("strings.xml").isFile }
+        .sortedBy { it.name }
+        .joinToString(",") { folder ->
+            val translated = translatableNames(folder.resolve("strings.xml")).count { it in english }
+            "${folder.name.removePrefix("values-")}=${translated * 100 / english.size}"
+        }
+}
+
 // Verification must not load signing credentials even on a configured developer machine.
 val unsignedRelease = providers.gradleProperty("renkin.unsignedRelease")
     .map { it.toBooleanStrict() }
@@ -56,6 +74,7 @@ android {
         versionCode = 55
         versionName = "2026.09.02"
         buildConfigField("String", "SOURCE_REVISION", "\"$buildRevision\"")
+        buildConfigField("String", "TRANSLATION_COVERAGE", "\"$translationCoverage\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -112,12 +131,24 @@ android {
         includeInBundle = false
     }
 
+    androidResources {
+        // Builds the system per-app language list (Android 13+) from the values-* folders.
+        generateLocaleConfig = true
+    }
+
+    bundle {
+        // The in-app language picker needs every language in the installed APK.
+        language { enableSplit = false }
+    }
+
     lint {
         baseline = file("lint-baseline.xml")
         // Known issues live in the baseline; any new warning fails lint.
         warningsAsErrors = true
         // Version-freshness checks change whenever a library publishes, not when the code does.
         disable += setOf("GradleDependency", "NewerVersionAvailable", "AndroidGradlePluginVersion", "OldTargetApi")
+        // Translations are contributed and may lag behind: missing strings fall back to English.
+        disable += "MissingTranslation"
     }
 
     testOptions {

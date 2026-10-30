@@ -3,7 +3,7 @@ package dev.renkinProject.renkin
 import android.content.pm.ActivityInfo
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import dev.renkinProject.renkin.feature.language.LocalizedActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -39,7 +39,7 @@ import javax.inject.Inject
  * pressed Build, and the launching side starts the actual build.
  */
 @AndroidEntryPoint
-class WallpaperPreviewActivity : ComponentActivity() {
+class WallpaperPreviewActivity : LocalizedActivity() {
     @Inject
     lateinit var appProvider: ApplicationProvider
 

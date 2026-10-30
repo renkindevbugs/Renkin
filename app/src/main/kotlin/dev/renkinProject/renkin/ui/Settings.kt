@@ -3,6 +3,7 @@
 package dev.renkinProject.renkin.ui
 
 import androidx.compose.ui.text.AnnotatedString
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -59,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -85,6 +87,8 @@ import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.util.CrashReporter
+import dev.renkinProject.renkin.feature.language.AppLocales
+import dev.renkinProject.renkin.feature.language.LanguageRow
 import dev.renkinProject.renkin.feature.help.InfoDialog
 import dev.renkinProject.renkin.feature.help.WhatsNewDialog
 import dev.renkinProject.renkin.feature.help.WhatsNewScreen
@@ -166,6 +170,14 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
             ) {
             SettingsSectionHeader(stringResource(R.string.settingsAppearance))
             ThemeRow(prefs, viewModel::setDarkMode)
+            val activity = LocalActivity.current
+            // MainActivity handles locale changes without recreation; re-read on each one.
+            val languageTag = remember(LocalConfiguration.current) { viewModel.appLanguageTag() }
+            LanguageRow(languageTag) { tag ->
+                viewModel.selectAppLanguage(tag)
+                // Android 13+ delivers it as a configuration change that MainActivity handles in place.
+                if (!AppLocales.handledBySystem) activity?.recreate()
+            }
 
             SettingsSectionHeader(stringResource(R.string.settingsIconPacks))
             SettingsRow(

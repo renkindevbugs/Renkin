@@ -3,7 +3,7 @@ package dev.renkinProject.renkin
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import dev.renkinProject.renkin.feature.language.LocalizedActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -47,7 +47,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : LocalizedActivity() {
     @Inject
     lateinit var iconPackCatalog: IconPackCatalog
 

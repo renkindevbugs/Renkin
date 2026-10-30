@@ -7,7 +7,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.util.LruCache
-import androidx.activity.ComponentActivity
+import dev.renkinProject.renkin.feature.language.LocalizedActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -88,7 +88,7 @@ import kotlinx.coroutines.withContext
  * baselines) travels back through the activity result.
  */
 @AndroidEntryPoint
-class GlobalOptionsActivity : ComponentActivity() {
+class GlobalOptionsActivity : LocalizedActivity() {
 
     private val toaster = Toaster()
     private val viewModel: GlobalOptionsViewModel by viewModels()
