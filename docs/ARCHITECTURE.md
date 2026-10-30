@@ -2358,6 +2358,31 @@ same way (`ApplicationProvider.applyGlobalStyleHistory`). The history is device-
 backups and shares do not carry it, a full restore clears it, deleting a profile deletes its
 entries, and recovery snapshots older than v24 restore it empty (audited added table).
 
+### Keeping Global style through an editor Apply
+
+The main-screen editor still opens an icon's base. When the profile's applied global layer would
+reach that icon (its category is targeted, or its stored render differs from its base), the editor
+shows "Keep Global style" (`EditorGlobalLayer`, `ApplicationProvider.editorGlobalLayer`), on by
+default and drawn over the preview. Apply with it on stores the draft as the base and the draft plus
+the applied layer as the render (`applyPickedIcon(keepGlobalStyle = true)`); off keeps the confirmed
+pick unstyled, the rule from before. The switch is in-memory session state, not part of draft
+recovery. Watch Apply and the Global screen's per-icon editor never keep the layer.
+
+### Global style bake
+
+Bake (`ApplicationProvider.bakeGlobalStyle`) makes every icon's current render its new base where
+the two differ, then switches the global layer off with `Preferences.withoutGlobalLayer()` (sources
+and Apply targets stay), so later effects stack. Locked keys are skipped. It is recorded with
+`recordGlobalStyleBake` as its own history entry (recipe: the cleared layer). The replaced bases
+are streamed to `GlobalStyleBakeStore` (`noBackupFilesDir/global-style-bakes/<entryId>.json.gz`),
+written as a pending file before any icon changes and renamed once the entry exists; its header
+must match the entry's profile and time because a restored database can reuse ids. Files without
+an entry are pruned when the history is listed. Undo (`undoGlobalStyleBake`) restores a base only
+where the stored base still has the fingerprint the bake wrote (unsaved or later edits are skipped),
+re-renders it with the baked recipe, restores that recipe and deletes the bake entry and file.
+Loading an entry older than a bake applies it on top of the baked icons; the main-screen Undo
+snackbar is not offered after a bake.
+
 ### Global per-icon editor ownership
 
 `GlobalOptionsViewModel` retains the open per-icon draft, its controls and loaded source in

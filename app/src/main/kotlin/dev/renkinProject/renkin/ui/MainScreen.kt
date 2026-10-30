@@ -94,6 +94,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import dev.renkinProject.renkin.apk.EditorGlobalLayer
+import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -1483,12 +1485,23 @@ fun OpenAppOptions(
         onDismiss()
     }
 
+    val globalLayer by produceState<EditorGlobalLayer?>(null, session, expected) {
+        value = try {
+            viewModel.editorGlobalLayer(session.application, expected)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            null
+        }
+    }
+
     OptionsDialog(iconPacks, session, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, modifierRecipe, modifierInput ->
         // Only stores the icon: the dialog closes itself through closeEditor, after any flight.
         val requestId = flight?.let { viewModel.newIconApplyRequestId().also { id -> it.applyRequestId = id } }
         viewModel.applyIcon(
             session.application, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName,
-            sourceUrl, expected, modifierRecipe, modifierInput, requestId
+            sourceUrl, expected, modifierRecipe, modifierInput, requestId,
+            keepGlobalStyle = globalLayer != null && session.keepGlobalStyle
         )
     }, closeEditor, onIconClear = {
         closeEditor()
@@ -1504,7 +1517,8 @@ fun OpenAppOptions(
                     onReview = { shown -> if (draftOwner.reviewSavedEdit(shown)) onDismiss() })
             }
         },
-        flight = flight)
+        flight = flight,
+        globalLayer = globalLayer)
 }
 
 @Composable

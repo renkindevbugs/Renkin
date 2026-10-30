@@ -337,6 +337,16 @@ fun Preferences.globalStyleRecipe(): Preferences =
 fun Preferences.withGlobalStyle(recipe: Preferences): Preferences =
     toMutablePreferences().apply { copyGlobalStyleFrom(recipe) }
 
+private val GlobalTargetKeys = listOf(GlobalApplyGeneratedKey, GlobalApplyExistingKey, GlobalApplyCustomKey, GlobalIncludeEmptyKey)
+
+/** These preferences with every global effect off; the sources and the Apply targets stay. */
+fun Preferences.withoutGlobalLayer(): Preferences {
+    val targetsOnly = mutablePreferencesOf().apply {
+        for (key in GlobalTargetKeys) this@withoutGlobalLayer[key]?.let { this[key] = it }
+    }
+    return toMutablePreferences().apply { copyGlobalModifierPrefsFrom(targetsOnly) }
+}
+
 private fun MutablePreferences.copyGlobalStyleFrom(source: Preferences) {
     this[PrimarySourceKey] = source.getIntValue(PrimarySourceKey, SOURCE_DEFAULT.ordinal)
     this[PrimaryIconPackKey] = source.getStringValue(PrimaryIconPackKey)

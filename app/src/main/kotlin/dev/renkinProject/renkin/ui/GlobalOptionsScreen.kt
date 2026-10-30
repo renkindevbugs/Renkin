@@ -189,6 +189,8 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
     var showSources by rememberSaveable { mutableStateOf(false) }
     var showBefore by rememberSaveable { mutableStateOf(false) }
     var showHistory by rememberSaveable { mutableStateOf(false) }
+    var confirmBake by rememberSaveable { mutableStateOf(false) }
+    var undoBakeId by rememberSaveable { mutableStateOf<Long?>(null) }
     var previewDebouncing by remember { mutableStateOf(false) }
     val close: () -> Unit = {
         if (applying) Unit
@@ -307,7 +309,7 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                         shape = dev.renkinProject.renkin.ui.theme.FieldShape
                     ) {
                         Text(
-                            if (applying) stringResource(R.string.globalApplying)
+                            if (applying) stringResource(viewModel.globalOperationLabel)
                             else if (targetCount == 0) stringResource(R.string.globalSaveStyle)
                             else stringResource(R.string.globalApplyCount, targetCount)
                         )
@@ -554,7 +556,37 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                 showHistory = false
             },
             onDelete = viewModel::deleteHistory,
+            canBake = !dirty && !applying,
+            onBake = {
+                showHistory = false
+                confirmBake = true
+            },
+            onUndoBake = { item ->
+                showHistory = false
+                undoBakeId = item.id
+            },
             onDismiss = { showHistory = false }
+        )
+    }
+    if (confirmBake) {
+        GlobalStyleBakeDialog(
+            onConfirm = {
+                confirmBake = false
+                view.performConfirmHaptic()
+                viewModel.bakeGlobalStyle()
+            },
+            onDismiss = { confirmBake = false }
+        )
+    }
+    viewModel.history.firstOrNull { it.id == undoBakeId }?.let { item ->
+        GlobalStyleUndoBakeDialog(
+            item = item,
+            onConfirm = {
+                undoBakeId = null
+                view.performConfirmHaptic()
+                viewModel.undoGlobalStyleBake(item)
+            },
+            onDismiss = { undoBakeId = null }
         )
     }
 

@@ -88,23 +88,38 @@ class RenkinPackStore(
         }
     }
 
+    /** An editable base detached from [icon]'s mutable geometry/pixels; null when it cannot be copied. */
+    fun detachedCopy(icon: IconPackDrawable): IconPackDrawable? = runCatching {
+        when (icon) {
+            is ImageVectorDrawable -> icon.deepCopy()
+            is BitmapIconDrawable -> icon.detachedStoredCopy() ?: icon.toBitmap().let { bitmap ->
+                bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, bitmap.isMutable)?.let {
+                    BitmapIconDrawable(it, icon.isAdaptiveIcon(), icon.previewScale)
+                }
+            }
+            else -> null
+        }
+    }.getOrNull()
+
+    // Per-payload guard: one corrupt base64/XML record loses that single icon (the row's
+    // calendar flags survive) instead of crashing the whole profile load.
+    fun decodeStored(drawable: String, isXml: Boolean, isAdaptive: Boolean, defaultColor: Color): IconPackDrawable? = runCatching {
+        when {
+            drawable.isEmpty() -> null
+            isXml -> {
+                val nodes = XmlDecoder.fromBase64(drawable)
+                XmlNodeParser.parse(context.resources, nodes, defaultColor)
+            }
+            // Adaptive Material You bitmaps are stored in their 108dp safe-zone form. Restore
+            // the preview zoom too; otherwise a restart displays and later re-renders the raw
+            // inset bitmap even though the adaptive export flag itself survived.
+            else -> BitmapIconDrawable.fromStored(drawable, isAdaptive)
+        }
+    }.getOrNull()
+
     /** Decodes one stored row — used by [load] and by late unlocks (a missing pack arriving). */
     fun decodeRow(dbApp: DbApplication, defaultColor: Color): SavedEntry {
-        // Per-row guard: one corrupt base64/XML record loses that single icon (the row's
-        // calendar flags survive) instead of crashing the whole profile load.
-        fun decode(drawable: String, isXml: Boolean, isAdaptive: Boolean): IconPackDrawable? = runCatching {
-            when {
-                drawable.isEmpty() -> null
-                isXml -> {
-                    val nodes = XmlDecoder.fromBase64(drawable)
-                    XmlNodeParser.parse(context.resources, nodes, defaultColor)
-                }
-                // Adaptive Material You bitmaps are stored in their 108dp safe-zone form. Restore
-                // the preview zoom too; otherwise a restart displays and later re-renders the raw
-                // inset bitmap even though the adaptive export flag itself survived.
-                else -> BitmapIconDrawable.fromStored(drawable, isAdaptive)
-            }
-        }.getOrNull()
+        fun decode(drawable: String, isXml: Boolean, isAdaptive: Boolean) = decodeStored(drawable, isXml, isAdaptive, defaultColor)
         val icon = decode(dbApp.drawable, dbApp.isXml, dbApp.isAdaptiveIcon)
         fun decodeBase() = decode(dbApp.baseDrawable, dbApp.baseIsXml, dbApp.baseIsAdaptiveIcon)
         // A base identical to the rendered icon is stored empty (issue #19: detailed adaptive
@@ -114,21 +129,8 @@ class RenkinPackStore(
             dbApp.baseIsAdaptiveIcon == dbApp.isAdaptiveIcon)
         val baseIcon = when {
             dbApp.baseDrawable.isEmpty() && dbApp.drawable.isEmpty() -> icon
-            baseIsRendered -> {
-                // Avoid parsing/decompressing identical payloads twice, while keeping the
-                // editable source detached from the rendered icon's mutable geometry/pixels.
-                runCatching {
-                    when (icon) {
-                        is ImageVectorDrawable -> icon.deepCopy()
-                        is BitmapIconDrawable -> icon.detachedStoredCopy() ?: icon.toBitmap().let { bitmap ->
-                            bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, bitmap.isMutable)?.let {
-                                BitmapIconDrawable(it, icon.isAdaptiveIcon(), icon.previewScale)
-                            }
-                        }
-                        else -> null
-                    }
-                }.getOrNull() ?: decode(dbApp.drawable, dbApp.isXml, dbApp.isAdaptiveIcon)
-            }
+            // Avoid parsing/decompressing identical payloads twice.
+            baseIsRendered -> icon?.let(::detachedCopy) ?: decode(dbApp.drawable, dbApp.isXml, dbApp.isAdaptiveIcon)
             else -> decodeBase()
         }
         // Stored artwork that refuses to decode: the icon is lost for this session, but the row

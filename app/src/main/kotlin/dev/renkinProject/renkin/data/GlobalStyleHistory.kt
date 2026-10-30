@@ -15,6 +15,7 @@ const val GLOBAL_STYLE_HISTORY_LIMIT = 20
  * One Global style Apply, kept so an earlier look can be loaded again. [style] is a
  * [ProfileStyleCodec] document holding only the sources and global layer that Apply persists:
  * Apply re-renders every icon from its base, so the recipe alone restores the look.
+ * A bake keeps the originals it replaced in [GlobalStyleBakeStore], named by the entry id.
  * Device-local undo history: portable backups and profile shares do not carry it.
  */
 @Entity(indices = [Index("profileId")])
@@ -32,6 +33,9 @@ interface GlobalStyleHistoryDao {
 
     @Query("SELECT * FROM GlobalStyleHistoryEntry WHERE id = :id")
     fun get(id: Long): GlobalStyleHistoryEntry?
+
+    @Query("SELECT id FROM GlobalStyleHistoryEntry")
+    fun ids(): List<Long>
 
     @Insert
     fun insert(entry: GlobalStyleHistoryEntry): Long
@@ -52,5 +56,15 @@ interface GlobalStyleHistoryDao {
     fun deleteEverything()
 }
 
-/** A decoded [GlobalStyleHistoryEntry]; [recipe] holds only the keys `globalStyleRecipe` keeps. */
-data class GlobalStyleHistoryItem(val id: Long, val appliedAt: Long, val recipe: Preferences)
+/**
+ * A decoded [GlobalStyleHistoryEntry]; [recipe] holds only the keys `globalStyleRecipe` keeps.
+ * A bake has [bakedRecipe]: the look it made permanent, while [recipe] is the cleared layer after it.
+ */
+data class GlobalStyleHistoryItem(
+    val id: Long,
+    val appliedAt: Long,
+    val recipe: Preferences,
+    val bakedRecipe: Preferences? = null
+) {
+    val isBake: Boolean get() = bakedRecipe != null
+}

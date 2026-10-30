@@ -33,6 +33,9 @@ import dev.renkinProject.renkin.data.GlobalStyleHistoryItem
 import dev.renkinProject.renkin.data.ProfileStyleCodec
 import dev.renkinProject.renkin.data.ProfileStylePreferences
 import dev.renkinProject.renkin.data.globalStyleRecipe
+import dev.renkinProject.renkin.data.GlobalStyleBakeStore
+import dev.renkinProject.renkin.data.withoutGlobalLayer
+import java.io.File
 import dev.renkinProject.renkin.data.withGlobalStyle
 import dev.renkinProject.renkin.data.GlobalApplyExistingKey
 import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
@@ -233,6 +236,7 @@ class ApplicationProvider internal constructor(
     private val initialLoadMutex = Mutex()
     private val profileOperations = ProfileOperationGate(::publishApplicationState)
     private val renderTracker = IconRenderTracker()
+    private val bakeStore = GlobalStyleBakeStore(File(context.noBackupFilesDir, "global-style-bakes"))
     private val savedProfileRevisions = mutableMapOf<Long, Long>()
     @Volatile private var loadedSavedKeys: Pair<ProfileSessionToken, Set<String>>? = null
     /** Keys from the completed profile load, available before its artwork fingerprints are read. */
@@ -710,6 +714,7 @@ class ApplicationProvider internal constructor(
         icon: IconPackDrawable?,
         sourcePackName: String?,
         onCommitted: () -> Unit = {},
+        keepGlobalStyle: Boolean = false,
         edit: (PackageInfoStruct, String?, IconPackDrawable?) -> PackageInfoStruct
     ): IconApplyOutcome = withContext(Dispatchers.Default) {
         profileOperations.run {
@@ -719,9 +724,15 @@ class ApplicationProvider internal constructor(
             if (index < 0) return@run IconApplyOutcome.TARGET_GONE
             val (origin, locked) = lockManager.resolvePickedSource(application.key, if (icon == null) null else sourcePackName)
             if (icon != null && locked) return@run IconApplyOutcome.LOCKED
-            // The caller already rendered the reviewed draft. Global Options applies its
-            // layer explicitly; stored global preferences must not change a confirmed pick.
-            val updated = edit(applicationList[index], origin, icon)
+            // The caller already rendered the reviewed draft and it becomes the base. Only an
+            // editor that offered "Keep Global style" (and kept it on) gets the applied layer on
+            // top; otherwise stored global preferences must not change a confirmed pick.
+            val live = applicationList[index]
+            val layer = if (keepGlobalStyle && icon != null) {
+                editorGlobalLayerFor(live, context.dataStore.getPreferencesAfterPendingWrites())
+            } else null
+            val rendered = if (icon != null && layer != null) renderGlobal(icon, layer) else icon
+            val updated = edit(live, origin, rendered)
             require(updated.key == application.key)
             // Mutation and its receipt form one cancellation boundary under the session gate.
             withContext(NonCancellable) {
@@ -877,32 +888,11 @@ class ApplicationProvider internal constructor(
                 onProgress(index + 1, plan.targets.size)
             }
             runProfileOperation(expected) {
-                if (!sameProfilePreferences(plan.previousPreferences, context.dataStore.getPreferencesAfterPendingWrites())) {
-                    throw ProfileOperationSupersededException()
-                }
-                if (plan.tickets.any { !renderTracker.isCurrent(it) } ||
-                    applicationList.map { it.key } != plan.original.map { it.key }) {
-                    throw ProfileOperationSupersededException()
-                }
+                requireUnchangedSince(plan.previousPreferences, plan.original, plan.tickets)
                 currentCoroutineContext().ensureActive()
                 // Once persistence starts, cancellation must not separate the recipe from its icons.
                 withContext(NonCancellable) {
-                    val previousUnsaved = unsavedIconKeys
-                    var preferencesPersisted = false
-                    try {
-                        context.dataStore.persistGlobalStylePrefs(preferences)
-                        preferencesPersisted = true
-                        replaceApplications(mergeGlobalRenders(plan.original, renderedByKey))
-                        persistActiveProfileIcons(unbuiltAfter = true)
-                    } catch (error: Exception) {
-                        replaceApplications(plan.original)
-                        unsavedIconKeys = previousUnsaved
-                        if (preferencesPersisted) {
-                            runCatching { context.dataStore.persistGlobalStylePrefs(plan.previousPreferences) }
-                                .onFailure(error::addSuppressed)
-                        }
-                        throw error
-                    }
+                    commitGlobalStyleChange(plan.previousPreferences, preferences, plan.original, renderedByKey, unbuiltAfter = true)
                     recordGlobalStyleHistory(expected.profileId, preferences, plan.previousPreferences)
                 }
             }
@@ -922,9 +912,18 @@ class ApplicationProvider internal constructor(
 
     /** Newest first; entries this build cannot decode are left out. */
     suspend fun globalStyleHistory(expected: ProfileSessionToken): List<GlobalStyleHistoryItem> =
-        withContext(Dispatchers.Default) {
-            packRepo.globalStyleHistory(expected.profileId).mapNotNull { entry ->
-                decodeGlobalStyle(entry.style)?.let { GlobalStyleHistoryItem(entry.id, entry.appliedAt, it) }
+        withContext(Dispatchers.IO) {
+            val entries = packRepo.globalStyleHistory(expected.profileId)
+            try {
+                bakeStore.prune(packRepo.globalStyleHistoryIds())
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                Log.error("ApplicationProvider", "Pruning Global style bake originals failed", error)
+            }
+            entries.mapNotNull { entry ->
+                val recipe = decodeGlobalStyle(entry.style) ?: return@mapNotNull null
+                val baked = bakeStore.header(entry)?.let { decodeGlobalStyle(it.bakedStyle) }
+                GlobalStyleHistoryItem(entry.id, entry.appliedAt, recipe, baked)
             }
         }
 
@@ -962,6 +961,231 @@ class ApplicationProvider internal constructor(
             applyGenerated, applyExisting, applyCustom, includeEmpty, onProgress
         )
     }
+
+    private data class BakePlan(
+        val preferences: Preferences,
+        val original: List<PackageInfoStruct>,
+        val tickets: List<IconRenderTicket>,
+        val lockedKeys: Set<String>
+    )
+
+    /**
+     * Makes every icon's current look its new base and switches the global layer off, so the next
+     * effects stack on top. Only icons whose look differs from their base change. The replaced
+     * bases are kept for [undoGlobalStyleBake]. Returns how many icons were baked.
+     */
+    suspend fun bakeGlobalStyle(
+        expected: ProfileSessionToken,
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
+    ): Int = withContext(Dispatchers.Default) {
+        runLongProfileOperation(expected) {
+            val plan = runProfileOperation(expected) {
+                val original = applicationList.toList()
+                BakePlan(
+                    context.dataStore.getPreferencesAfterPendingWrites(), original,
+                    original.map { renderTracker.observe(it.key) }, lockManager.lockedKeys.toSet()
+                )
+            }
+            val candidates = plan.original.filter { it.createdIcon != null && it.key !in plan.lockedKeys }
+            val bakedByKey = mutableMapOf<String, PackageInfoStruct>()
+            val originals = mutableListOf<GlobalStyleBakeStore.Original>()
+            onProgress(0, candidates.size)
+            for ((index, app) in candidates.withIndex()) {
+                currentCoroutineContext().ensureActive()
+                val rendered = app.createdIcon ?: continue
+                val base = app.baseIcon ?: rendered
+                if (base !== rendered && looksDifferent(base, rendered)) {
+                    renkinPackStore.detachedCopy(rendered)?.let { newBase ->
+                        originals += GlobalStyleBakeStore.Original(
+                            app.packageName, app.activityName, base.toDbString(), base !is BitmapIconDrawable,
+                            base.isAdaptiveIcon(), GlobalStyleBakeStore.fingerprint(newBase.toDbString())
+                        )
+                        bakedByKey[app.key] = app.changeBaseAndRender(newBase, rendered)
+                    }
+                }
+                onProgress(index + 1, candidates.size)
+            }
+            if (bakedByKey.isEmpty()) return@runLongProfileOperation 0
+            val bakedStyle = encodeGlobalStyle(plan.preferences)
+            val cleared = plan.preferences.withoutGlobalLayer()
+            val appliedAt = System.currentTimeMillis()
+            runProfileOperation(expected) {
+                requireUnchangedSince(plan.preferences, plan.original, plan.tickets)
+                currentCoroutineContext().ensureActive()
+                bakeStore.discardPending()
+                val pending = withContext(Dispatchers.IO) {
+                    bakeStore.writePending(GlobalStyleBakeStore.Header(expected.profileId, appliedAt, bakedStyle), originals)
+                }
+                withContext(NonCancellable) {
+                    commitGlobalStyleChange(plan.preferences, cleared, plan.original, bakedByKey, unbuiltAfter = null) {
+                        pending.delete()
+                    }
+                    try {
+                        val id = packRepo.recordGlobalStyleBake(expected.profileId, encodeGlobalStyle(cleared), appliedAt, bakedStyle)
+                        bakeStore.commitPending(pending, id)
+                    } catch (error: Exception) {
+                        pending.delete()
+                        Log.error("ApplicationProvider", "Keeping the Global style bake for undo failed", error)
+                    }
+                }
+            }
+            bakedByKey.size
+        }
+    }
+
+    data class GlobalStyleBakeUndo(val restored: Int, val skipped: Int)
+
+    private data class BakeUndoPlan(
+        val preferences: Preferences,
+        val original: List<PackageInfoStruct>,
+        val tickets: List<IconRenderTicket>,
+        val storedBaseFingerprints: Map<String, String>
+    )
+
+    /**
+     * Puts back the bases a bake replaced and the look it baked. Icons whose base changed since the
+     * bake (a hand edit, a later bake) keep their newer artwork and are counted as skipped.
+     */
+    suspend fun undoGlobalStyleBake(
+        expected: ProfileSessionToken,
+        id: Long,
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
+    ): GlobalStyleBakeUndo = withContext(Dispatchers.Default) {
+        val entry = packRepo.globalStyleHistoryEntry(id)?.takeIf { it.profileId == expected.profileId }
+            ?: throw ProfileOperationSupersededException()
+        val (header, originals) = withContext(Dispatchers.IO) {
+            bakeStore.header(entry) to bakeStore.originals(entry)
+        }
+        val bakedRecipe = header?.let { decodeGlobalStyle(it.bakedStyle) }
+        if (bakedRecipe == null || originals == null) throw IllegalStateException("The bake originals are gone")
+        runLongProfileOperation(expected) {
+            val plan = runProfileOperation(expected) {
+                val original = applicationList.toList()
+                val unsaved = unsavedIconKeys
+                val stored = packRepo.getAll(expected.profileId)
+                    .filter { "${it.packageName}/${it.activityName}" !in unsaved }
+                    .associate { "${it.packageName}/${it.activityName}" to GlobalStyleBakeStore.fingerprint(it.baseDrawable.ifEmpty { it.drawable }) }
+                BakeUndoPlan(
+                    context.dataStore.getPreferencesAfterPendingWrites(), original,
+                    original.map { renderTracker.observe(it.key) }, stored
+                )
+            }
+            val layer = modifierFor(bakedRecipe, apply = true)
+            val defaultColor = plan.preferences.getDefaultIconColor(context)
+            val appsByKey = plan.original.associateBy { it.key }
+            val restoredByKey = mutableMapOf<String, PackageInfoStruct>()
+            onProgress(0, originals.size)
+            for ((index, original) in originals.withIndex()) {
+                currentCoroutineContext().ensureActive()
+                val key = "${original.packageName}/${original.activityName}"
+                val app = appsByKey[key]
+                val base = if (app != null && plan.storedBaseFingerprints[key] == original.bakedFingerprint) {
+                    renkinPackStore.decodeStored(original.base, original.baseIsXml, original.baseIsAdaptive, defaultColor)
+                } else null
+                if (app != null && base != null) {
+                    restoredByKey[key] = app.changeBaseAndRender(base, renderGlobal(base, layer))
+                }
+                onProgress(index + 1, originals.size)
+            }
+            val restoredStyle = plan.preferences.withGlobalStyle(bakedRecipe)
+            runProfileOperation(expected) {
+                requireUnchangedSince(plan.preferences, plan.original, plan.tickets)
+                currentCoroutineContext().ensureActive()
+                withContext(NonCancellable) {
+                    commitGlobalStyleChange(plan.preferences, restoredStyle, plan.original, restoredByKey, unbuiltAfter = true)
+                    recordGlobalStyleHistory(expected.profileId, restoredStyle, plan.preferences)
+                    try {
+                        packRepo.deleteGlobalStyle(expected.profileId, id)
+                        bakeStore.delete(id)
+                    } catch (error: Exception) {
+                        Log.error("ApplicationProvider", "Removing an undone Global style bake failed", error)
+                    }
+                }
+            }
+            GlobalStyleBakeUndo(restoredByKey.size, originals.size - restoredByKey.size)
+        }
+    }
+
+    private suspend fun requireUnchangedSince(
+        preferences: Preferences,
+        original: List<PackageInfoStruct>,
+        tickets: List<IconRenderTicket>
+    ) {
+        if (!sameProfilePreferences(preferences, context.dataStore.getPreferencesAfterPendingWrites())) {
+            throw ProfileOperationSupersededException()
+        }
+        if (tickets.any { !renderTracker.isCurrent(it) } || applicationList.map { it.key } != original.map { it.key }) {
+            throw ProfileOperationSupersededException()
+        }
+    }
+
+    /**
+     * Writes [preferences] and the changed icons as one Global style transaction, rolling both back
+     * on failure. A null [unbuiltAfter] keeps the profile's build state (the exported look is the same).
+     */
+    private suspend fun commitGlobalStyleChange(
+        previousPreferences: Preferences,
+        preferences: Preferences,
+        original: List<PackageInfoStruct>,
+        changedByKey: Map<String, PackageInfoStruct>,
+        unbuiltAfter: Boolean?,
+        onRolledBack: () -> Unit = {}
+    ) {
+        val previousUnsaved = unsavedIconKeys
+        var preferencesPersisted = false
+        try {
+            context.dataStore.persistGlobalStylePrefs(preferences)
+            preferencesPersisted = true
+            replaceApplications(mergeGlobalRenders(original, changedByKey))
+            persistActiveProfileIcons(
+                unbuiltAfter = unbuiltAfter ?: (profileManager.profile(activeProfileId)?.hasUnbuiltChanges ?: true)
+            )
+        } catch (error: Exception) {
+            replaceApplications(original)
+            unsavedIconKeys = previousUnsaved
+            if (preferencesPersisted) {
+                runCatching { context.dataStore.persistGlobalStylePrefs(previousPreferences) }
+                    .onFailure(error::addSuppressed)
+            }
+            onRolledBack()
+            throw error
+        }
+    }
+
+    // Identical payloads are one look; comparing them is cheaper than a failed bake round trip.
+    private fun looksDifferent(base: IconPackDrawable, rendered: IconPackDrawable): Boolean =
+        base.isAdaptiveIcon() != rendered.isAdaptiveIcon() ||
+            (base is BitmapIconDrawable) != (rendered is BitmapIconDrawable) ||
+            base.toDbString() != rendered.toDbString()
+
+    /**
+     * The applied global layer an editor Apply can keep on [application]: when Global style targets
+     * it, or when its stored look already carries a layer. Null when nothing would be kept.
+     */
+    private fun editorGlobalLayerFor(application: PackageInfoStruct, preferences: Preferences): GenerationOptions? {
+        val rendered = application.createdIcon ?: return null
+        if (application.key in lockManager.lockedKeys) return null
+        val layer = modifierFor(preferences, apply = true) ?: return null
+        val targeted = shouldApplyGlobalLayer(
+            application.isCustom, application.isRefreshMade,
+            preferences.getBooleanValue(GlobalApplyGeneratedKey, true),
+            preferences.getBooleanValue(GlobalApplyExistingKey),
+            preferences.getBooleanValue(GlobalApplyCustomKey)
+        )
+        val base = application.baseIcon
+        val carriesLayer = base != null && base !== rendered && looksDifferent(base, rendered)
+        return layer.takeIf { targeted || carriesLayer }
+    }
+
+    /** The global layer the editor offers to keep on [application], with its recipe for display. */
+    suspend fun editorGlobalLayer(expected: ProfileSessionToken, application: PackageInfoStruct): EditorGlobalLayer? =
+        withContext(Dispatchers.Default) {
+            runProfileOperation(expected) {
+                val live = applicationList.firstOrNull { it.key == application.key } ?: return@runProfileOperation null
+                val preferences = context.dataStore.getPreferencesAfterPendingWrites()
+                editorGlobalLayerFor(live, preferences)?.let { EditorGlobalLayer(preferences.globalStyleRecipe(), it) }
+            }
+        }
 
     private fun encodeGlobalStyle(preferences: Preferences): String =
         ProfileStyleCodec.encode(ProfileStylePreferences.capture(preferences.globalStyleRecipe()))

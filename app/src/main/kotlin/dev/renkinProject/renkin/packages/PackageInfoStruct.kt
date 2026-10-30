@@ -142,6 +142,10 @@ class PackageInfoStruct(
     fun changeRenderedIcon(renderedIcon: IconPackDrawable?): PackageInfoStruct =
         copyWith(createdIcon = renderedIcon)
 
+    /** Replaces the stored base (and the derived render) while keeping provenance and modifier metadata. */
+    fun changeBaseAndRender(baseIcon: IconPackDrawable, renderedIcon: IconPackDrawable): PackageInfoStruct =
+        copyWith(createdIcon = renderedIcon, baseIcon = baseIcon)
+
     /** The built/saved copy of this icon: identical, but no longer refresh-replaceable. */
     fun locked(): PackageInfoStruct = copyWith(isRefreshMade = false)
 

@@ -47,6 +47,8 @@ internal class EditorSession(
     var selectedTab by mutableIntStateOf(0)
     var applicationIcon by mutableStateOf<EditorApplicationIcon?>(null)
         internal set
+    // Not part of draft recovery: a recovered editor offers the applied layer again, switched on.
+    var keepGlobalStyle by mutableStateOf(true)
     internal var applicationIconPrepared = false
     private var lastEnteredTab = selectedTab
     var source by mutableStateOf(Source.ICON_PACK)
