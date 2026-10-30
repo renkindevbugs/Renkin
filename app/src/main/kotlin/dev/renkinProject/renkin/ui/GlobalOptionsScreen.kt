@@ -180,6 +180,7 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
     var showTargets by rememberSaveable { mutableStateOf(false) }
     var showSources by rememberSaveable { mutableStateOf(false) }
     var showBefore by rememberSaveable { mutableStateOf(false) }
+    var showHistory by rememberSaveable { mutableStateOf(false) }
     var previewDebouncing by remember { mutableStateOf(false) }
     val close: () -> Unit = {
         if (applying) Unit
@@ -295,6 +296,7 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                         style = MaterialTheme.typography.titleMediumEmphasized,
                         modifier = Modifier.weight(1f)
                     )
+                    GlobalHistoryButton(enabled = !applying && state.initialized) { showHistory = true }
                     Button(
                         onClick = {
                             view.performConfirmHaptic()
@@ -454,6 +456,7 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                                     .padding(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
+                                viewModel.historyLoad?.let { GlobalHistoryLoadedBanner(it, viewModel::undoHistoryLoad) }
                                 GlobalStyleControlPanel(
                                     state = state,
                                     categories = categories,
@@ -519,6 +522,7 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                                         .background(MaterialTheme.colorScheme.outlineVariant)
                                         .align(Alignment.CenterHorizontally)
                                 )
+                                viewModel.historyLoad?.let { GlobalHistoryLoadedBanner(it, viewModel::undoHistoryLoad) }
                                 GlobalStyleControlPanel(
                                     state = state,
                                     categories = categories,
@@ -548,6 +552,26 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
             categories = categories,
             targetCount = targetCount,
             onDismiss = { showTargets = false }
+        )
+    }
+
+    LaunchedEffect(showHistory) { if (showHistory) viewModel.refreshHistory() }
+    if (showHistory) {
+        GlobalStyleHistorySheet(
+            history = viewModel.history,
+            current = viewModel.baseline,
+            previewApps = remember(categories) { categories.generated + categories.existing + categories.custom },
+            viewModel = viewModel,
+            onLoad = { item ->
+                viewModel.loadHistory(item)
+                showHistory = false
+            },
+            onLoadNoStyle = {
+                viewModel.loadNoGlobalStyle()
+                showHistory = false
+            },
+            onDelete = viewModel::deleteHistory,
+            onDismiss = { showHistory = false }
         )
     }
 

@@ -47,10 +47,11 @@ class BackupDatabaseSnapshotTest {
         val database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java).allowMainThreadQueries().build()
         try {
             val sql = database.openHelper.writableDatabase
-            for (version in listOf(18, 19, 20, 21, 22)) {
+            for (version in listOf(18, 19, 20, 21, 22, 23)) {
                 oldSnapshot(version, file)
                 sql.execSQL("DELETE FROM Profile")
                 sql.execSQL("INSERT INTO Profile (id, name, profileStyle, appTargets) VALUES (7, 'Newer', 'must not survive', 'must not survive')")
+                sql.execSQL("INSERT INTO GlobalStyleHistoryEntry (profileId, appliedAt, style) VALUES (7, 1, 'must not survive')")
                 BackupDatabaseSnapshot.checkCompatibility(sql, file)
                 database.withTransaction { BackupDatabaseSnapshot.restore(sql, file) }
                 val profile = database.profileDao().get(7)!!
@@ -70,6 +71,8 @@ class BackupDatabaseSnapshotTest {
                 assertEquals(if (version >= 19) "kept recipe" else "", icon.modifierRecipe)
                 assertEquals("", icon.modifierInput)
                 val next = database.profileDao().insert(dev.renkinProject.renkin.data.Profile(name = "Next"))
+                // The history table postdates every audited snapshot, so restore leaves it empty.
+                assertTrue("v$version", database.globalStyleHistoryDao().list(7).isEmpty())
                 assertEquals(8L, next)
             }
         } finally { database.close(); file.delete() }
@@ -130,7 +133,7 @@ class BackupDatabaseSnapshotTest {
         val database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java).allowMainThreadQueries().build()
         try {
             val sql = database.openHelper.writableDatabase
-            sql.version = 24
+            sql.version = 25
             assertTrue(runCatching { BackupDatabaseSnapshot.checkCompatibility(sql, file) }.exceptionOrNull() is StorageRecoverySchemaException)
             sql.version = 23
             val root = JSONObject(file.readText())

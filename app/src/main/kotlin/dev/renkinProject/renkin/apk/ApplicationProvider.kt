@@ -27,6 +27,13 @@ import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.StorageOperationBusyException
 import dev.renkinProject.renkin.data.FallbackSource
+import dev.renkinProject.renkin.data.GlobalApplyCustomKey
+import dev.renkinProject.renkin.data.GlobalIncludeEmptyKey
+import dev.renkinProject.renkin.data.GlobalStyleHistoryItem
+import dev.renkinProject.renkin.data.ProfileStyleCodec
+import dev.renkinProject.renkin.data.ProfileStylePreferences
+import dev.renkinProject.renkin.data.globalStyleRecipe
+import dev.renkinProject.renkin.data.withGlobalStyle
 import dev.renkinProject.renkin.data.GlobalApplyExistingKey
 import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
 import dev.renkinProject.renkin.data.getBooleanValue
@@ -896,9 +903,74 @@ class ApplicationProvider internal constructor(
                         }
                         throw error
                     }
+                    recordGlobalStyleHistory(expected.profileId, preferences, plan.previousPreferences)
                 }
             }
         }
+    }
+
+    // The Apply already succeeded; losing its history entry must not undo it.
+    private suspend fun recordGlobalStyleHistory(profileId: Long, preferences: Preferences, previous: Preferences) {
+        try {
+            packRepo.recordGlobalStyle(
+                profileId, encodeGlobalStyle(preferences), System.currentTimeMillis(), encodeGlobalStyle(previous)
+            )
+        } catch (error: Exception) {
+            Log.error("ApplicationProvider", "Recording the Global style history failed", error)
+        }
+    }
+
+    /** Newest first; entries this build cannot decode are left out. */
+    suspend fun globalStyleHistory(expected: ProfileSessionToken): List<GlobalStyleHistoryItem> =
+        withContext(Dispatchers.Default) {
+            packRepo.globalStyleHistory(expected.profileId).mapNotNull { entry ->
+                decodeGlobalStyle(entry.style)?.let { GlobalStyleHistoryItem(entry.id, entry.appliedAt, it) }
+            }
+        }
+
+    suspend fun deleteGlobalStyleHistory(expected: ProfileSessionToken, id: Long) =
+        packRepo.deleteGlobalStyle(expected.profileId, id)
+
+    /**
+     * Applies an earlier look as the Global screen would after loading it: the recipe's sources
+     * and global layer, re-rendered from the icon bases. Categories targeted now stay targeted, so
+     * the icons the latest Apply changed are reverted too. Records a new entry.
+     */
+    suspend fun applyGlobalStyleHistory(
+        expected: ProfileSessionToken,
+        id: Long,
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
+    ) {
+        val entry = packRepo.globalStyleHistoryEntry(id)?.takeIf { it.profileId == expected.profileId }
+            ?: throw ProfileOperationSupersededException()
+        val recipe = decodeGlobalStyle(entry.style) ?: throw IllegalStateException("Unreadable Global style entry")
+        val current = context.dataStore.getPreferencesAfterPendingWrites()
+        fun targets(key: Preferences.Key<Boolean>, default: Boolean = false) =
+            recipe.getBooleanValue(key, default) || current.getBooleanValue(key, default)
+        val applyGenerated = targets(GlobalApplyGeneratedKey, default = true)
+        val applyExisting = targets(GlobalApplyExistingKey)
+        val applyCustom = targets(GlobalApplyCustomKey)
+        val includeEmpty = targets(GlobalIncludeEmptyKey)
+        val preferences = current.withGlobalStyle(recipe).toMutablePreferences().apply {
+            this[GlobalApplyGeneratedKey] = applyGenerated
+            this[GlobalApplyExistingKey] = applyExisting
+            this[GlobalApplyCustomKey] = applyCustom
+            this[GlobalIncludeEmptyKey] = includeEmpty
+        }
+        applyGlobalModifiers(
+            expected, preferences, globalModifierOptions(recipe),
+            applyGenerated, applyExisting, applyCustom, includeEmpty, onProgress
+        )
+    }
+
+    private fun encodeGlobalStyle(preferences: Preferences): String =
+        ProfileStyleCodec.encode(ProfileStylePreferences.capture(preferences.globalStyleRecipe()))
+
+    private fun decodeGlobalStyle(style: String): Preferences? = try {
+        ProfileStylePreferences.toPreferences(ProfileStyleCodec.decode(style)).globalStyleRecipe()
+    } catch (error: IllegalArgumentException) {
+        Log.error("ApplicationProvider", "Skipping an unreadable Global style entry", error)
+        null
     }
 
     suspend fun previewEmptyIcon(

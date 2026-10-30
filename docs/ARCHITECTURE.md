@@ -2340,6 +2340,19 @@ Renkin cannot reproduce that launcher-only selection through the standard resour
   activity hosting shared composables must provide its own (see WallpaperPreviewActivity).
 
 
+### Global style Apply history
+
+Every successful Global Apply records its recipe in `GlobalStyleHistoryEntry` (Room v24): a
+`ProfileStyleCodec` document of exactly the keys `persistGlobalStylePrefs` writes
+(`Preferences.globalStyleRecipe()`), per profile, newest first, at most 20, skipping a recipe equal
+to the newest. The first Apply also records the look before it. No icons are stored: Apply
+re-renders from icon bases, so a recipe restores its look exactly. Loading an entry only stages it
+in `GlobalModifierState` and keeps the categories already targeted, so applying an older look also
+reverts icons a later Apply changed; the main screen's Undo snackbar applies the previous entry the
+same way (`ApplicationProvider.applyGlobalStyleHistory`). The history is device-local: portable
+backups and shares do not carry it, a full restore clears it, deleting a profile deletes its
+entries, and recovery snapshots older than v24 restore it empty (audited added table).
+
 ### Global per-icon editor ownership
 
 `GlobalOptionsViewModel` retains the open per-icon draft, its controls and loaded source in

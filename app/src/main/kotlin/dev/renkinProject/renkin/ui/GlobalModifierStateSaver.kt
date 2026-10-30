@@ -34,6 +34,24 @@ internal val GlobalModifierBaselineSaver = Saver<MutableState<GlobalModifierSnap
     restore = { saved -> mutableStateOf(restoreGlobalSnapshot(saved)) }
 )
 
+/** A history entry staged in the controls: when it was applied and the draft it replaced. */
+internal data class GlobalHistoryLoad(val appliedAt: Long, val before: GlobalModifierSnapshot) {
+    companion object {
+        // appliedAt of the always-present "No global style" row, which has no Apply time.
+        const val NO_GLOBAL_STYLE = 0L
+    }
+}
+
+internal val GlobalHistoryLoadSaver = Saver<MutableState<GlobalHistoryLoad?>, Any>(
+    save = { state -> state.value?.let { arrayListOf(it.appliedAt, it.before.toSaveableList()) } },
+    restore = { saved ->
+        val values = saved as? List<*>
+        val appliedAt = values?.getOrNull(0) as? Long
+        val before = values?.getOrNull(1)?.let(::restoreGlobalSnapshot)
+        mutableStateOf(if (appliedAt != null && before != null) GlobalHistoryLoad(appliedAt, before) else null)
+    }
+)
+
 private fun GlobalModifierSnapshot.toSaveableList(): ArrayList<Any> = arrayListOf(
     "primarySource", primarySource.ordinal,
     "primaryIconPack", primaryIconPack,

@@ -95,6 +95,10 @@ class BackupRecoveryTest {
         val file = snapshot.directory.resolve("pack.json")
         val root = org.json.JSONObject(file.readText()).put("version", 20)
         val tables = root.getJSONArray("tables")
+        // Tables created after v20 did not exist in a v20 snapshot.
+        for (index in tables.length() - 1 downTo 0) {
+            if (tables.getJSONObject(index).getString("name") == "GlobalStyleHistoryEntry") tables.remove(index)
+        }
         for (index in 0 until tables.length()) {
             val table = tables.getJSONObject(index)
             if (table.getString("name") != "Profile") continue

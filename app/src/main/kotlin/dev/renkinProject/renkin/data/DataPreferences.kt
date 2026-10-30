@@ -17,6 +17,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.toHexString
@@ -324,21 +325,25 @@ suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preference
 /** Commits the staged sources and modifiers as one profile-scoped Global style transaction. */
 suspend fun DataStore<Preferences>.persistGlobalStylePrefs(source: Preferences) {
     withPreferenceAccess {
-        editOwnedPreferences { target ->
-            target[PrimarySourceKey] = source.getIntValue(
-                PrimarySourceKey, SOURCE_DEFAULT.ordinal
-            )
-            target[PrimaryIconPackKey] = source.getStringValue(PrimaryIconPackKey)
-            target[SecondarySourceKey] = source.getIntValue(
-                SecondarySourceKey, SOURCE_DEFAULT.ordinal
-            )
-            target[SecondaryIconPackKey] = source.getStringValue(SecondaryIconPackKey)
-            target[FallbackSourceKey] = source.getIntValue(
-                FallbackSourceKey, FALLBACK_SOURCE_DEFAULT.ordinal
-            )
-            target.copyGlobalModifierPrefsFrom(source)
-        }
+        editOwnedPreferences { target -> target.copyGlobalStyleFrom(source) }
     }
+}
+
+/** Exactly the keys [persistGlobalStylePrefs] writes: the Global screen's sources and global layer. */
+fun Preferences.globalStyleRecipe(): Preferences =
+    mutablePreferencesOf().apply { copyGlobalStyleFrom(this@globalStyleRecipe) }
+
+/** These preferences with [recipe]'s Global style keys written over them. */
+fun Preferences.withGlobalStyle(recipe: Preferences): Preferences =
+    toMutablePreferences().apply { copyGlobalStyleFrom(recipe) }
+
+private fun MutablePreferences.copyGlobalStyleFrom(source: Preferences) {
+    this[PrimarySourceKey] = source.getIntValue(PrimarySourceKey, SOURCE_DEFAULT.ordinal)
+    this[PrimaryIconPackKey] = source.getStringValue(PrimaryIconPackKey)
+    this[SecondarySourceKey] = source.getIntValue(SecondarySourceKey, SOURCE_DEFAULT.ordinal)
+    this[SecondaryIconPackKey] = source.getStringValue(SecondaryIconPackKey)
+    this[FallbackSourceKey] = source.getIntValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT.ordinal)
+    copyGlobalModifierPrefsFrom(source)
 }
 
 private fun MutablePreferences.copyGlobalModifierPrefsFrom(source: Preferences) {
@@ -363,14 +368,20 @@ private fun MutablePreferences.copyGlobalModifierPrefsFrom(source: Preferences) 
 }
 
 // Copies every key of a colour style, so a style edited as a whole is also saved as a whole.
+// An unset colour is removed rather than copied as "", which colour parsing rejects.
 private fun MutablePreferences.copyColorStyleFrom(source: Preferences, keys: ColorStyleKeys) {
     this[keys.mode] = source.getIntValue(keys.mode)
     this[keys.gradientType] = source.getIntValue(keys.gradientType)
     this[keys.gradientAngle] = source.getIntValue(keys.gradientAngle)
-    this[keys.firstColor] = source.getStringValue(keys.firstColor)
-    this[keys.gradientColors] = source.getStringValue(keys.gradientColors)
-    this[keys.gradientPositions] = source.getStringValue(keys.gradientPositions)
-    keys.legacyGradientColor?.let { this[it] = source.getStringValue(it) }
+    copyColorStringFrom(source, keys.firstColor)
+    copyColorStringFrom(source, keys.gradientColors)
+    copyColorStringFrom(source, keys.gradientPositions)
+    keys.legacyGradientColor?.let { copyColorStringFrom(source, it) }
+}
+
+private fun MutablePreferences.copyColorStringFrom(source: Preferences, key: Preferences.Key<String>) {
+    val value = source.getStringValue(key)
+    if (value.isEmpty()) this -= key else this[key] = value
 }
 
 /** Records the hero source that a successful build actually used as one atomic profile write. */

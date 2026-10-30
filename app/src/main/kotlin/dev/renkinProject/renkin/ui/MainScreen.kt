@@ -386,6 +386,19 @@ fun MainColumn(iconPacks: List<IconPack>) {
             if (result == SnackbarResult.ActionPerformed) viewModel.undoLastIconChange(prompt.session, prompt.step)
         }
     }
+    val globalStyleAppliedMessage = stringResource(R.string.globalStyleAppliedUndo)
+    LaunchedEffect(Unit) {
+        viewModel.globalStyleUndoEvents.collectLatest { prompt ->
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result = snackbarHostState.showSnackbar(
+                message = globalStyleAppliedMessage,
+                actionLabel = undoLabel,
+                withDismissAction = true,
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) viewModel.undoGlobalStyle(prompt)
+        }
+    }
 
     // An external icon pack was installed while the app was open → offer to reload so it
     // shows up among the available icon-pack sources.

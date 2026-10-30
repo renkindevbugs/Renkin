@@ -380,7 +380,10 @@ interface ProfileDao {
 // Version 20 adds a reference to the retained input for local modifier replay.
 // Version 21 reserves Profile.profileStyle; DataStore still owns active settings until cutover.
 // Version 22 adds Profile.appTargets (hand-added launcher components, issue #24).
-// Recovery 20→22 is audited in BackupDatabaseSnapshot.supportedOmittedColumns; review it on every bump.
+// Version 23 adds Profile.customPackageName and Profile.packIcon (issue #26).
+// Version 24 adds the GlobalStyleHistoryEntry table (Global style Apply history).
+// Recovery from older snapshots is audited in BackupDatabaseSnapshot (omitted columns and added
+// tables); review it on every bump.
 @Database(
     entities = [
         DbApplication::class,
@@ -388,9 +391,10 @@ interface ProfileDao {
         PackVerdict::class,
         ColorPreset::class,
         BuiltIcon::class,
-        ModifierPreset::class
+        ModifierPreset::class,
+        GlobalStyleHistoryEntry::class
     ],
-    version = 23
+    version = 24
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -399,6 +403,7 @@ abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun colorPresetDao(): ColorPresetDao
     abstract fun modifierPresetDao(): ModifierPresetDao
     abstract fun builtIconDao(): BuiltIconDao
+    abstract fun globalStyleHistoryDao(): GlobalStyleHistoryDao
 
     companion object {
         @Volatile
@@ -651,6 +656,18 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `GlobalStyleHistoryEntry` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`profileId` INTEGER NOT NULL, `appliedAt` INTEGER NOT NULL, `style` TEXT NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_GlobalStyleHistoryEntry_profileId` ON `GlobalStyleHistoryEntry` (`profileId`)"
+                )
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -673,7 +690,8 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_19_20,
             MIGRATION_20_21,
             MIGRATION_21_22,
-            MIGRATION_22_23
+            MIGRATION_22_23,
+            MIGRATION_23_24
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {

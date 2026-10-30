@@ -1043,7 +1043,29 @@ class MainViewModel @Inject constructor(
             if (applied) {
                 loadChangeBaselines(expected)
                 refreshMissingPacks(prompt = false)
+                offerGlobalStyleUndo(expected)
             }
+        }
+    }
+
+    /** The look before a Global style Apply, offered as a snackbar Undo on the main screen. */
+    data class GlobalStyleUndoPrompt(val session: ProfileSessionToken, val entryId: Long)
+
+    private val _globalStyleUndoEvents = Channel<GlobalStyleUndoPrompt>(Channel.CONFLATED)
+    val globalStyleUndoEvents = _globalStyleUndoEvents.receiveAsFlow()
+
+    private suspend fun offerGlobalStyleUndo(expected: ProfileSessionToken) {
+        val previous = appProvider.globalStyleHistory(expected).getOrNull(1) ?: return
+        _globalStyleUndoEvents.trySend(GlobalStyleUndoPrompt(expected, previous.id))
+    }
+
+    /** Re-applies the previous look; it becomes the newest history entry, so nothing is lost. */
+    fun undoGlobalStyle(prompt: GlobalStyleUndoPrompt) {
+        launchVisibleProfileOperation(R.string.globalStyleUndoInProgress, prompt.session) { owner ->
+            appProvider.applyGlobalStyleHistory(owner, prompt.entryId)
+            loadChangeBaselines(owner)
+            refreshMissingPacks(prompt = false)
+            _toastEvents.trySend(R.string.globalStyleUndone)
         }
     }
 

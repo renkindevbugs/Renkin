@@ -28,6 +28,7 @@ internal object BackupDatabaseSnapshot {
                 requireField(reader, "tables")
                 val expected = tables(db).toSet()
                 val omittedColumns = supportedOmittedColumns(snapshotVersion, db.version, expected)
+                val snapshotTables = expected - addedTablesSince(snapshotVersion, db.version)
                 val found = mutableSetOf<String>()
                 reader.beginArray()
                 while (reader.hasNext()) {
@@ -35,7 +36,7 @@ internal object BackupDatabaseSnapshot {
                     reader.beginObject()
                     requireField(reader, "name")
                     val table = reader.nextString()
-                    if (table !in expected || !found.add(table)) throw StorageRecoverySnapshotException("Invalid recovery table")
+                    if (table !in snapshotTables || !found.add(table)) throw StorageRecoverySnapshotException("Invalid recovery table")
                     requireField(reader, "columns")
                     val columns = mutableListOf<String>()
                     reader.beginArray()
@@ -48,7 +49,7 @@ internal object BackupDatabaseSnapshot {
                 }
                 reader.endArray()
                 reader.endObject()
-                if (found != expected || reader.peek() != JsonToken.END_DOCUMENT) throw StorageRecoverySnapshotException("Incomplete recovery snapshot")
+                if (found != snapshotTables || reader.peek() != JsonToken.END_DOCUMENT) throw StorageRecoverySnapshotException("Incomplete recovery snapshot")
             }
         }
     }
@@ -151,6 +152,8 @@ internal object BackupDatabaseSnapshot {
                 requireField(reader, "tables")
                 val expected = tables(db).toSet()
                 val omittedColumns = supportedOmittedColumns(snapshotVersion, db.version, expected)
+                // Tables added after the snapshot are emptied below and stay empty.
+                val snapshotTables = expected - addedTablesSince(snapshotVersion, db.version)
                 db.execSQL("PRAGMA defer_foreign_keys = ON")
                 expected.forEach { db.execSQL("DELETE FROM ${quoted(it)}") }
                 val restored = mutableSetOf<String>()
@@ -160,7 +163,7 @@ internal object BackupDatabaseSnapshot {
                     reader.beginObject()
                     requireField(reader, "name")
                     val table = reader.nextString()
-                    if (table !in expected || !restored.add(table)) throw StorageRecoverySnapshotException("Invalid recovery table")
+                    if (table !in snapshotTables || !restored.add(table)) throw StorageRecoverySnapshotException("Invalid recovery table")
                     if (table == "sqlite_sequence") db.execSQL("DELETE FROM sqlite_sequence")
                     requireField(reader, "columns")
                     val columns = mutableListOf<String>()
@@ -203,7 +206,7 @@ internal object BackupDatabaseSnapshot {
                 }
                 reader.endArray()
                 reader.endObject()
-                if (restored != expected || reader.peek() != JsonToken.END_DOCUMENT) throw StorageRecoverySnapshotException("Incomplete recovery snapshot")
+                if (restored != snapshotTables || reader.peek() != JsonToken.END_DOCUMENT) throw StorageRecoverySnapshotException("Incomplete recovery snapshot")
             }
         }
     }
@@ -220,7 +223,8 @@ internal object BackupDatabaseSnapshot {
             19 to mapOf("DbApplication" to listOf("modifierInput")),
             20 to mapOf("Profile" to listOf("profileStyle")),
             21 to mapOf("Profile" to listOf("appTargets")),
-            22 to mapOf("Profile" to listOf("customPackageName", "packIcon"))
+            22 to mapOf("Profile" to listOf("customPackageName", "packIcon")),
+            23 to emptyMap()
         )
         val omitted = mutableMapOf<String, List<String>>()
         for (version in snapshotVersion until currentVersion) {
@@ -232,6 +236,12 @@ internal object BackupDatabaseSnapshot {
             }
         }
         return omitted
+    }
+
+    // Audited CREATE TABLE migrations; an older snapshot cannot contain these tables.
+    private fun addedTablesSince(snapshotVersion: Int, currentVersion: Int): Set<String> {
+        val auditedTables = mapOf(23 to setOf("GlobalStyleHistoryEntry"))
+        return (snapshotVersion until currentVersion).flatMap { auditedTables[it].orEmpty() }.toSet()
     }
 
     private fun checkColumns(

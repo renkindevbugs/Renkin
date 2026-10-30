@@ -44,7 +44,7 @@ class RenkinPackMigrationTest {
 
     @Test
     fun everyReleasedSchemaMigratesToCurrent() {
-        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22).forEach { version ->
+        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23).forEach { version ->
             RenkinPackDatabase.open(context, historical(version, "from-$version")).useDatabase { database ->
                 database.openHelper.writableDatabase
             }
@@ -63,7 +63,7 @@ class RenkinPackMigrationTest {
         }
         RenkinPackDatabase.open(context, name).useDatabase { database ->
             val sql = database.openHelper.writableDatabase
-            assertEquals(23, sql.version)
+            assertEquals(24, sql.version)
             sql.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 expected.forEach { (column, value) -> assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column))) }
@@ -90,7 +90,7 @@ class RenkinPackMigrationTest {
         }
         RenkinPackDatabase.open(context, name).useDatabase { database ->
             val sql = database.openHelper.writableDatabase
-            assertEquals(23, sql.version)
+            assertEquals(24, sql.version)
             sql.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 expected.forEach { (column, value) -> assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column))) }
@@ -116,6 +116,22 @@ class RenkinPackMigrationTest {
         }
     }
 
+    @Test fun version23AddsAnEmptyGlobalStyleHistoryAndKeepsProfilesAndIcons() =
+        kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Default) {
+            val name = historical(23, "v23-history") { db ->
+                db.execSQL("INSERT INTO Profile (id, name, customPackageName, packIcon) VALUES (7, 'Dark', 'com.example.pack', 'icon')")
+                db.execSQL("INSERT INTO DbApplication (packageName, activityName, isAdaptiveIcon, isXml, drawable, profileId) VALUES ('com.example', 'Main', 0, 0, 'rendered', 7)")
+            }
+            RenkinPackDatabase.open(context, name).useDatabase { database ->
+                assertEquals(24, database.openHelper.writableDatabase.version)
+                assertEquals("com.example.pack", database.profileDao().get(7)!!.customPackageName)
+                assertEquals("rendered", database.renkinPackDao().getAllInline(7).single().drawable)
+                assertTrue(database.globalStyleHistoryDao().list(7).isEmpty())
+                database.globalStyleHistoryDao().insert(GlobalStyleHistoryEntry(profileId = 7, appliedAt = 5, style = "{}"))
+                assertEquals(listOf("{}"), database.globalStyleHistoryDao().list(7).map { it.style })
+            }
+        }
+
     @Test fun version22AddsEmptyPackIdentityWithoutChangingExistingProfileOrIconData() =
         kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Default) {
             var expected = emptyMap<String, String?>()
@@ -131,7 +147,7 @@ class RenkinPackMigrationTest {
             }
             RenkinPackDatabase.open(context, name).useDatabase { database ->
                 val sql = database.openHelper.writableDatabase
-                assertEquals(23, sql.version)
+                assertEquals(24, sql.version)
                 sql.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
                     assertTrue(cursor.moveToFirst())
                     expected.forEach { (column, value) ->
