@@ -59,6 +59,7 @@ import dev.renkinProject.renkin.data.DarkMode
 import dev.renkinProject.renkin.data.DarkModeKey
 import dev.renkinProject.renkin.data.InstallMethod
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
+import dev.renkinProject.renkin.data.ShowRenkinPacksKey
 import dev.renkinProject.renkin.data.HideProfileShareWarningKey
 import dev.renkinProject.renkin.data.OnboardingSeenKey
 import dev.renkinProject.renkin.data.LastSeenWhatsNewVersionKey
@@ -721,6 +722,14 @@ class MainViewModel @Inject constructor(
 
     fun setAskInstallerEveryTime(enabled: Boolean) = updatePreferences {
         setBooleanValue(AskInstallerEveryTimeKey, enabled)
+    }
+
+    /** Generated packs join or leave the source lists, so the packs reload right after the write. */
+    fun setShowRenkinPacks(enabled: Boolean) {
+        launchUserAction(R.string.settingSaveFailed) {
+            getApplication<Application>().dataStore.setBooleanValue(ShowRenkinPacksKey, enabled)
+            sync()
+        }
     }
 
     /** A content URI an external editor can read [bitmap] from, or null when it cannot be written. */

@@ -17,6 +17,8 @@ import dev.renkinProject.renkin.data.UnsavedIconJournal
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
+import dev.renkinProject.renkin.data.SecondaryIconPackKey
+import dev.renkinProject.renkin.data.ShowRenkinPacksKey
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.OverrideIconKey
@@ -441,10 +443,23 @@ class ApplicationProvider internal constructor(
     }
 
     private suspend fun initializeIconPacks() {
-        iconPackRepo.load(packIndexApplications())
-        // Every pack seen installed is owned on this device forever — the paid-pack lock
-        // never applies to it again, even after an uninstall.
-        lockManager.recordInstalledPacks(iconPacks)
+        iconPackRepo.load(packIndexApplications(), generatedPackVisibility())
+        recordInstalledSourcePacks()
+    }
+
+    // Every pack seen installed is owned on this device forever — the paid-pack lock never
+    // applies to it again, even after an uninstall. Generated packs get no verdict of their own:
+    // provenance resolves their icons to the real source packs.
+    private suspend fun recordInstalledSourcePacks() =
+        lockManager.recordInstalledPacks(iconPacks.filterNot { IconPackBuilder.isOwnPack(it.packageName) })
+
+    private suspend fun generatedPackVisibility(): GeneratedPackVisibility {
+        val preferences = context.dataStore.getPreferencesAfterPendingWrites()
+        return GeneratedPackVisibility(
+            showAll = preferences.getBooleanValue(ShowRenkinPacksKey),
+            activePack = profileManager.profile(activeProfileId)?.effectivePackPackageName().orEmpty(),
+            selected = setOf(preferences.getStringValue(PrimaryIconPackKey), preferences.getStringValue(SecondaryIconPackKey)) - ""
+        )
     }
 
     @Volatile private var indexedApplicationKeys: Set<String> = emptySet()
@@ -1267,8 +1282,8 @@ class ApplicationProvider internal constructor(
     suspend fun forceSync(expected: ProfileSessionToken) = withContext(Dispatchers.Default) {
         runProfileOperation(expected) {
             if (!iconPackRepo.iconPackLoaded) return@runProfileOperation
-            iconPackRepo.load(packIndexApplications())
-            lockManager.recordInstalledPacks(iconPacks)
+            iconPackRepo.load(packIndexApplications(), generatedPackVisibility())
+            recordInstalledSourcePacks()
             // Packs may have been updated/rebuilt — their provenance maps can be stale.
             lockManager.clearProvenanceCache()
             applicationList.forEach { renderTracker.changed(it.key) }
@@ -1722,6 +1737,12 @@ class ApplicationProvider internal constructor(
         timeProfilePhase("reset departing icons") { resetInMemoryIcons() }
         loadRenkinPack(newProfileId)
         unsavedIconKeys = emptySet()
+        // The departing profile's pack becomes a source and the arriving one's stops being one.
+        // With the setting on, a pack built since the last load must show up too.
+        val visibility = generatedPackVisibility()
+        if (iconPackRepo.iconPackLoaded && (visibility.showAll || iconPackRepo.generatedPacksChange(visibility))) {
+            iconPackRepo.load(packIndexApplications(), visibility)
+        }
     }
 
     /**

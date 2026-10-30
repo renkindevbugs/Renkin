@@ -367,6 +367,13 @@ undeletable; deleting a profile also deletes its watch rules, and a watch notifi
 profile has since been deleted shows an explanation instead of applying to the wrong profile.
 Switcher = the top-bar title dropdown.
 
+Generated packs are hidden from the icon-source lists by default. The app-wide
+`ShowRenkinPacksKey` setting (issue #25) offers other profiles' packs through
+`GeneratedPackVisibility` in `IconPackRepository.load`; the active profile's own pack is never
+offered, and a pack a profile already selected stays listed. Watch lists keep filtering every
+generated pack, and generated packs never get a paid/free verdict: provenance resolves their
+icons to the real source packs.
+
 Profile details reuse the icon editor for the generated APK's own icon and expose an optional
 applicationId override under Advanced. Room v23 stores self-contained artwork and the override;
 automatic IDs are prefilled for editing without turning an unchanged value into an override.

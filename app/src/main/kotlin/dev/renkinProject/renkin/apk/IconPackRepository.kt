@@ -68,6 +68,20 @@ internal suspend fun loadIsolatedAppFilters(
     buildMap { parsed.filterNotNull().forEach { (pack, elements) -> put(pack, elements) } }
 }
 
+/**
+ * Which Renkin-generated packs are offered as icon sources. The active profile's own pack never
+ * is (it only holds the icons being edited); the others only when Settings shows them, or when
+ * this profile already selected one, so that selection does not dangle.
+ */
+data class GeneratedPackVisibility(
+    val showAll: Boolean = false,
+    val activePack: String = "",
+    val selected: Set<String> = emptySet()
+) {
+    fun isVisible(packageName: String): Boolean =
+        packageName != activePack && (showAll || packageName in selected)
+}
+
 /** A component one or more installed packs theme; the first pack supplies the preview. */
 data class PackAppCandidate(
     val packageName: String,
@@ -117,6 +131,8 @@ class IconPackRepository(
     val iconPackLoaded: Boolean get() = state.value.loaded
 
     private val loadGeneration = AtomicLong()
+    @Volatile private var installedGeneratedPacks: Set<String> = emptySet()
+    @Volatile private var visibleGeneratedPacks: Set<String> = emptySet()
     private val fallbackCache = mutableMapOf<String, IconPackFallback>()
 
     private val resourceResolver by lazy { PackageResourceResolver(context) }
@@ -126,24 +142,31 @@ class IconPackRepository(
      * [installedApps] comes from the caller's already-loaded app list — re-scanning the
      * launcher here used to repeat the whole per-app label/icon work a second time at startup.
      */
-    suspend fun load(installedApps: List<InstalledApplication>) = load(
+    suspend fun load(installedApps: List<InstalledApplication>, visibility: GeneratedPackVisibility = GeneratedPackVisibility()) = load(
         installedApps,
         discover = iconPackCatalog::installedIconPacks,
+        visibility = visibility,
         loadElements = { pack, apps -> appManager.getAppFilterRawElements(pack.packageName, apps) }
     )
 
     internal suspend fun load(
         installedApps: List<InstalledApplication>,
         discover: () -> List<IconPack>,
+        visibility: GeneratedPackVisibility = GeneratedPackVisibility(),
         loadElements: (IconPack, List<InstalledApplication>) -> List<RawElement>
     ) = withContext(Dispatchers.Default) {
         val generation = startLoad()
-        // Drop our own generated pack — it only ever holds icons we just built, so offering
-        // it as an icon source (or a watch target) is pointless and just clutters the lists.
-        val discovered = discover()
-            .filter { !IconPackBuilder.isOwnPack(it.packageName) }
+        val all = discover()
+        val generated = all.map { it.packageName }.filter(IconPackBuilder::isOwnPack).toSet()
+        val discovered = all.filter { it.packageName !in generated || visibility.isVisible(it.packageName) }
+        installedGeneratedPacks = generated
+        visibleGeneratedPacks = generated.filter(visibility::isVisible).toSet()
         publish(generation, discovered, buildIndex(discovered, installedApps, loadElements))
     }
+
+    /** True when [visibility] would offer other generated packs than the last load did. */
+    fun generatedPacksChange(visibility: GeneratedPackVisibility): Boolean =
+        installedGeneratedPacks.filter(visibility::isVisible).toSet() != visibleGeneratedPacks
 
     private fun startLoad(): Long {
         val generation = loadGeneration.incrementAndGet()

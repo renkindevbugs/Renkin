@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.InstallMobile
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.NewReleases
@@ -45,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -80,6 +82,7 @@ import dev.renkinProject.renkin.data.DarkMode
 import dev.renkinProject.renkin.data.DarkModeKey
 import dev.renkinProject.renkin.data.InstallMethod
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
+import dev.renkinProject.renkin.data.ShowRenkinPacksKey
 import dev.renkinProject.renkin.data.AUTO_BACKUP_INTERVAL_OFF
 import dev.renkinProject.renkin.data.getDarkModeLabels
 import dev.renkinProject.renkin.data.getEnumValue
@@ -186,6 +189,16 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                 busy = viewModel.syncing
             ) {
                 viewModel.sync()
+            }
+            val showRenkinPacks = prefs.getBooleanValue(ShowRenkinPacksKey)
+            SettingsRow(
+                Icons.Filled.Layers,
+                stringResource(R.string.showRenkinPacks),
+                subtitle = stringResource(R.string.showRenkinPacksSummary),
+                busy = viewModel.syncing,
+                trailing = { Switch(checked = showRenkinPacks, onCheckedChange = null) }
+            ) {
+                viewModel.setShowRenkinPacks(!showRenkinPacks)
             }
             SettingsRow(
                 Icons.Filled.Apps,
