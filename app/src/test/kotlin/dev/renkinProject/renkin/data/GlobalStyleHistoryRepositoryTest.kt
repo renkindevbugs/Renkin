@@ -105,4 +105,22 @@ class GlobalStyleHistoryRepositoryTest {
 
         assertTrue(styles(DEFAULT_PROFILE_ID).isEmpty())
     }
+
+    @Test
+    fun aBakeIsAlwaysItsOwnEntryEvenWhenItRepeatsTheNewestRecipe() = runBlocking {
+        repo.recordGlobalStyle(DEFAULT_PROFILE_ID, "plain", 10, previousStyle = "plain")
+
+        val id = repo.recordGlobalStyleBake(DEFAULT_PROFILE_ID, "plain", 20, previousStyle = "scaled")
+
+        assertEquals(listOf("plain", "plain"), styles(DEFAULT_PROFILE_ID))
+        assertEquals(id, repo.globalStyleHistory(DEFAULT_PROFILE_ID).first().id)
+        assertTrue(id in repo.globalStyleHistoryIds())
+    }
+
+    @Test
+    fun aFirstBakeAlsoRecordsTheLookItBaked() = runBlocking {
+        repo.recordGlobalStyleBake(DEFAULT_PROFILE_ID, "plain", 20, previousStyle = "scaled")
+
+        assertEquals(listOf("plain", "scaled"), styles(DEFAULT_PROFILE_ID))
+    }
 }

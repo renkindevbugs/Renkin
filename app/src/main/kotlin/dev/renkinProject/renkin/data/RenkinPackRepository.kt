@@ -185,6 +185,9 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
 
     suspend fun globalStyleHistoryEntry(id: Long): GlobalStyleHistoryEntry? = access { globalStyleHistoryDao.get(id) }
 
+    /** Every profile's entry ids, so files kept beside entries can be pruned. */
+    suspend fun globalStyleHistoryIds(): Set<Long> = access { globalStyleHistoryDao.ids().toSet() }
+
     /**
      * Skips a recipe equal to the newest one, then keeps the newest [GLOBAL_STYLE_HISTORY_LIMIT].
      * An empty history first records [previousStyle], so the very first Apply can be undone too.
@@ -197,6 +200,16 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         }
         globalStyleHistoryDao.insert(GlobalStyleHistoryEntry(profileId = profileId, appliedAt = appliedAt, style = style))
         globalStyleHistoryDao.trim(profileId, GLOBAL_STYLE_HISTORY_LIMIT)
+    }
+
+    /** A bake is always its own entry, even when its recipe repeats the newest one. Returns its id. */
+    suspend fun recordGlobalStyleBake(profileId: Long, style: String, appliedAt: Long, previousStyle: String): Long = transaction {
+        if (globalStyleHistoryDao.list(profileId).isEmpty()) {
+            globalStyleHistoryDao.insert(GlobalStyleHistoryEntry(profileId = profileId, appliedAt = appliedAt, style = previousStyle))
+        }
+        val id = globalStyleHistoryDao.insert(GlobalStyleHistoryEntry(profileId = profileId, appliedAt = appliedAt, style = style))
+        globalStyleHistoryDao.trim(profileId, GLOBAL_STYLE_HISTORY_LIMIT)
+        id
     }
 
     suspend fun deleteGlobalStyle(profileId: Long, id: Long) = access { globalStyleHistoryDao.delete(profileId, id) }

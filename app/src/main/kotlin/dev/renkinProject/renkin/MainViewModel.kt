@@ -977,8 +977,9 @@ class MainViewModel @Inject constructor(
         expected: ProfileSessionToken,
         modifierRecipe: String? = null,
         modifierInput: IconModifierInput? = null,
-        requestId: Long? = null
-    ) = applyPickedIcon(expected, app, icon, sourcePackName, requestId) { live, origin, rendered ->
+        requestId: Long? = null,
+        keepGlobalStyle: Boolean = false
+    ) = applyPickedIcon(expected, app, icon, sourcePackName, requestId, keepGlobalStyle) { live, origin, rendered ->
         live.changeExport(
             rendered, sourcePackName = origin, isRefreshMade = false, isCustom = true,
             isLegacy = false, baseIcon = icon, sourceUrl = sourceUrl,
@@ -996,12 +997,13 @@ class MainViewModel @Inject constructor(
         icon: IconPackDrawable?,
         sourcePackName: String?,
         requestId: Long?,
+        keepGlobalStyle: Boolean = false,
         edit: (live: PackageInfoStruct, origin: String?, rendered: IconPackDrawable?) -> PackageInfoStruct
     ) {
         launchProfileOperation(expected, serialize = false) {
             var outcome = IconApplyOutcome.FAILED
             try {
-                outcome = appProvider.applyPickedIcon(expected, app, icon, sourcePackName, edit = edit)
+                outcome = appProvider.applyPickedIcon(expected, app, icon, sourcePackName, keepGlobalStyle = keepGlobalStyle, edit = edit)
                 when (outcome) {
                     IconApplyOutcome.APPLIED -> markUpdated(expected, app, icon)
                     IconApplyOutcome.LOCKED -> _toastEvents.trySend(R.string.iconOriginLocked)
@@ -1055,7 +1057,12 @@ class MainViewModel @Inject constructor(
     val globalStyleUndoEvents = _globalStyleUndoEvents.receiveAsFlow()
 
     private suspend fun offerGlobalStyleUndo(expected: ProfileSessionToken) {
-        val previous = appProvider.globalStyleHistory(expected).getOrNull(1) ?: return
+        val history = appProvider.globalStyleHistory(expected)
+        // Loading the look before a bake would apply it again on top of the baked icons.
+        if (history.firstOrNull()?.isBake != false) return
+        val previous = history.getOrNull(1) ?: return
+        // Undoing a bake records the look it restored; offering the same look again would change nothing.
+        if (previous.recipe == history.first().recipe) return
         _globalStyleUndoEvents.trySend(GlobalStyleUndoPrompt(expected, previous.id))
     }
 
@@ -1204,6 +1211,9 @@ class MainViewModel @Inject constructor(
 
     internal suspend fun prepareModifierReplay(app: PackageInfoStruct, expected: ProfileSessionToken) =
         appProvider.prepareModifierReplay(app, expected)
+
+    internal suspend fun editorGlobalLayer(app: PackageInfoStruct, expected: ProfileSessionToken) =
+        appProvider.editorGlobalLayer(expected, app)
 
     internal suspend fun renderModifierReplay(
         replay: VerifiedModifierInput,

@@ -17,6 +17,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
@@ -391,6 +392,10 @@ class GlobalOptionsViewModel @Inject constructor(
     var globalApplyProgress by mutableStateOf<Pair<Int, Int>?>(null)
         private set
 
+    /** What the running operation is called in the top bar while [globalApplyProgress] is set. */
+    var globalOperationLabel by mutableIntStateOf(R.string.globalApplying)
+        private set
+
     // The staged settings and the last saved snapshot live here, not in the screen, so a Save
     // that outlives an activity recreation still updates the baseline the screen compares with.
     @OptIn(SavedStateHandleSaveableApi::class)
@@ -501,32 +506,68 @@ class GlobalOptionsViewModel @Inject constructor(
     }
 
     /** Saves the staged draft; the outcome arrives as a toast and as the updated [baseline]. */
-    fun saveGlobalStyle(): Job? {
+    fun saveGlobalStyle(): Job? = launchGlobalStyleOperation(R.string.globalApplying, R.string.globalOptionsApplyFailed) { expected ->
+        val savedState = draft.snapshot()
+        // Read the captured draft after suspension, never the live controls.
+        val stagedDraft = GlobalModifierState().apply { restore(savedState) }
+        val preferences = getApplication<Application>().dataStore.getPreferencesAfterPendingWrites()
+        appProvider.applyGlobalModifiers(
+            expected, stagedDraft.overlay(preferences), stagedDraft.toModifierOptions(),
+            savedState.applyGenerated, savedState.applyExisting,
+            savedState.applyCustom, savedState.includeEmpty
+        ) { done, total -> globalApplyProgress = done to total }
+        val committed = appProvider.commitSessionState(expected) {
+            appliedGlobal = true
+            baseline = savedState
+            historyLoad = null
+        }
+        if (committed) R.string.globalOptionsApplied else expiredSessionNotice
+    }
+
+    /** Bakes the applied look into the icons; the controls then start from no effects. */
+    fun bakeGlobalStyle(): Job? {
+        if (isDirty) return null
+        return launchGlobalStyleOperation(R.string.globalBaking, R.string.globalBakeFailed) { expected ->
+            val baked = appProvider.bakeGlobalStyle(expected) { done, total -> globalApplyProgress = done to total }
+            if (baked == 0) R.string.globalBakeNothing else adoptStoredStyle(expected, R.string.globalBaked)
+        }
+    }
+
+    internal fun undoGlobalStyleBake(item: GlobalStyleHistoryItem): Job? =
+        launchGlobalStyleOperation(R.string.globalUndoingBake, R.string.globalUndoBakeFailed) { expected ->
+            val result = appProvider.undoGlobalStyleBake(expected, item.id) { done, total -> globalApplyProgress = done to total }
+            adoptStoredStyle(expected, if (result.skipped == 0) R.string.globalBakeUndone else R.string.globalBakeUndoneSkipped)
+        }
+
+    // The provider rewrote the profile's Global style itself; the controls start again from what it stored.
+    private suspend fun adoptStoredStyle(expected: ProfileSessionToken, message: Int): Int {
+        val stored = GlobalModifierState().apply {
+            seedFrom(getApplication<Application>().dataStore.getPreferencesAfterPendingWrites())
+        }.snapshot()
+        val committed = appProvider.commitSessionState(expected) {
+            appliedGlobal = true
+            draft.restore(stored)
+            baseline = stored
+            historyLoad = null
+        }
+        return if (committed) message else expiredSessionNotice
+    }
+
+    /** Runs one icon-rewriting Global style operation with progress; its result message arrives as a toast. */
+    private fun launchGlobalStyleOperation(label: Int, failure: Int, operation: suspend (ProfileSessionToken) -> Int): Job? {
         if (saveJob?.isActive == true || globalApplyProgress != null || iconEditor != null || !draft.initialized) return null
         if (profileChanged) {
             _toastEvents.trySend(expiredSessionNotice)
             return null
         }
         val expected = screenSession ?: return null
+        globalOperationLabel = label
         globalApplyProgress = 0 to 0
         return viewModelScope.launch {
             try {
-                val savedState = draft.snapshot()
-                // Read the captured draft after suspension, never the live controls.
-                val stagedDraft = GlobalModifierState().apply { restore(savedState) }
-                val preferences = getApplication<Application>().dataStore.getPreferencesAfterPendingWrites()
-                appProvider.applyGlobalModifiers(
-                    expected, stagedDraft.overlay(preferences), stagedDraft.toModifierOptions(),
-                    savedState.applyGenerated, savedState.applyExisting,
-                    savedState.applyCustom, savedState.includeEmpty
-                ) { done, total -> globalApplyProgress = done to total }
-                val committed = appProvider.commitSessionState(expected) {
-                    appliedGlobal = true
-                    baseline = savedState
-                    historyLoad = null
-                }
+                val message = operation(expected)
                 refreshHistory()
-                _toastEvents.trySend(if (committed) R.string.globalOptionsApplied else expiredSessionNotice)
+                _toastEvents.trySend(message)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ProfileOperationBusyException) {
@@ -536,8 +577,8 @@ class GlobalOptionsViewModel @Inject constructor(
             } catch (e: ProfileSessionChangedException) {
                 _toastEvents.trySend(e.userMessage())
             } catch (e: Exception) {
-                Log.error("GlobalOptionsViewModel", "Saving global style failed", e)
-                _toastEvents.trySend(R.string.globalOptionsApplyFailed)
+                Log.error("GlobalOptionsViewModel", "A Global style operation failed", e)
+                _toastEvents.trySend(failure)
             } finally {
                 globalApplyProgress = null
             }

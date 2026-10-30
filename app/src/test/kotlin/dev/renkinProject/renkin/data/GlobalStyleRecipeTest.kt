@@ -81,4 +81,21 @@ class GlobalStyleRecipeTest {
         assertNull("".toNullableColor())
         assertNull("not a colour".toNullableColor())
     }
+
+    @Test
+    fun clearingTheLayerKeepsTheSourcesAndTheApplyTargets() {
+        val cleared = preferencesOf(
+            GlobalIconScaleKey to 137,
+            OutlineAddKey to true,
+            PrimaryIconPackKey to "pack.one",
+            GlobalApplyExistingKey to true,
+            GlobalApplyGeneratedKey to false
+        ).withoutGlobalLayer()
+
+        assertEquals(100, cleared[GlobalIconScaleKey])
+        assertEquals(false, cleared[OutlineAddKey])
+        assertEquals("pack.one", cleared[PrimaryIconPackKey])
+        assertEquals(true, cleared[GlobalApplyExistingKey])
+        assertEquals(false, cleared[GlobalApplyGeneratedKey])
+    }
 }

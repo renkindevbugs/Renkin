@@ -118,6 +118,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.LayersClear
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.produceState
+import dev.renkinProject.renkin.apk.EditorGlobalLayer
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -176,7 +182,8 @@ internal fun OptionsDialog(
     autosaveNotice: @Composable () -> Unit = {},
     flight: IconFlightState? = null,
     dismissOnConfirm: Boolean = true,
-    canInteract: () -> Boolean = { true }
+    canInteract: () -> Boolean = { true },
+    globalLayer: EditorGlobalLayer? = null
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val app = session.application
@@ -455,6 +462,17 @@ internal fun OptionsDialog(
     LaunchedEffect(composedRenderWitness, generatingOptions, draft.generating, draft.completedFrameSerial) {
         draft.acknowledgeWitness(composedRenderWitness, app, generatingOptions, composedSelections)
     }
+
+    // The applied Global style drawn over the draft, as Apply with "Keep Global style" stores it.
+    val keptGlobalLayer = globalLayer?.takeIf { session.keepGlobalStyle }
+    val draftIcon = draft.iconToConfirm
+    val globalPreview by produceState<Pair<IconPackDrawable, IconPackDrawable>?>(null, draftIcon, keptGlobalLayer) {
+        if (draftIcon != null && keptGlobalLayer != null) {
+            value = draftIcon to (runCatching { viewModel.applyModifier(draftIcon, keptGlobalLayer.options) }.getOrNull() ?: draftIcon)
+        }
+    }
+    val globalPreviewPending = keptGlobalLayer != null && draftIcon != null && globalPreview?.first !== draftIcon
+    val previewIcon = if (keptGlobalLayer == null) draftIcon else globalPreview?.second ?: draftIcon
 
     // The snackbar surface exists only for the upload gallery's Undo action; plain hints go
     // through the shared Toaster like everywhere else in the app.
@@ -806,8 +824,8 @@ internal fun OptionsDialog(
                 val preview = OptionsPreview(
                     heroBitmap = heroBitmap,
                     appName = app.appName,
-                    icon = draft.iconToConfirm,
-                    loading = draft.generating,
+                    icon = previewIcon,
+                    loading = draft.generating || globalPreviewPending,
                     canConfirm = interactionAllowed && session.canConfirmDraft(composedRenderWitness)
                 )
                 val actions = OptionsPreviewActions(
@@ -835,6 +853,11 @@ internal fun OptionsDialog(
                     enabled = calendarEnabled,
                     onToggle = { calendarEnabled = it }
                 )
+                val globalStyle = GlobalStyleSelection(
+                    layer = globalLayer,
+                    keep = session.keepGlobalStyle,
+                    onToggle = { session.keepGlobalStyle = it }
+                )
 
                 if (paneLayout != null) {
                     WideOptionsLayout(
@@ -843,6 +866,7 @@ internal fun OptionsDialog(
                         actions = actions,
                         packBrowser = packBrowser,
                         calendar = calendar,
+                        globalStyle = globalStyle,
                         tabContent = tabContent,
                         bottomSection = bottomSection
                     )
@@ -853,6 +877,7 @@ internal fun OptionsDialog(
                         actions = actions,
                         packBrowser = packBrowser,
                         calendar = calendar,
+                        globalStyle = globalStyle,
                         headerScrollBehavior = headerScrollBehavior,
                         labelExpand = labelExpand,
                         tabContent = tabContent,
@@ -1061,6 +1086,12 @@ private data class PackBrowserChrome(
     val onPackSortChange: (PackSortOrder) -> Unit
 )
 
+private data class GlobalStyleSelection(
+    val layer: EditorGlobalLayer?,
+    val keep: Boolean,
+    val onToggle: (Boolean) -> Unit
+)
+
 private data class CalendarSelection(
     val visible: Boolean,
     val packName: String,
@@ -1076,6 +1107,7 @@ private fun WideOptionsLayout(
     actions: OptionsPreviewActions,
     packBrowser: PackBrowserChrome,
     calendar: CalendarSelection,
+    globalStyle: GlobalStyleSelection,
     tabContent: @Composable (PaddingValues) -> Unit,
     bottomSection: @Composable () -> Unit
 ) {
@@ -1090,14 +1122,19 @@ private fun WideOptionsLayout(
             onClear = actions.onClear,
             onConfirm = actions.onConfirm,
             modifier = Modifier.width(paneLayout.leadingWidth),
-            extraCard = if (calendar.visible) {
+            extraCard = if (calendar.visible || globalStyle.layer != null) {
                 {
-                    CalendarCard(
-                        packName = calendar.packName,
-                        calendarPrefix = calendar.prefix,
-                        calendarEnabled = calendar.enabled,
-                        onToggle = calendar.onToggle
-                    )
+                    androidx.compose.foundation.layout.Column {
+                        globalStyle.layer?.let { GlobalStyleCard(it, globalStyle.keep, globalStyle.onToggle) }
+                        if (calendar.visible) {
+                            CalendarCard(
+                                packName = calendar.packName,
+                                calendarPrefix = calendar.prefix,
+                                calendarEnabled = calendar.enabled,
+                                onToggle = calendar.onToggle
+                            )
+                        }
+                    }
                 }
             } else null
         )
@@ -1118,6 +1155,7 @@ private fun PhoneOptionsLayout(
     actions: OptionsPreviewActions,
     packBrowser: PackBrowserChrome,
     calendar: CalendarSelection,
+    globalStyle: GlobalStyleSelection,
     headerScrollBehavior: TopAppBarScrollBehavior,
     labelExpand: Float,
     tabContent: @Composable (PaddingValues) -> Unit,
@@ -1174,6 +1212,7 @@ private fun PhoneOptionsLayout(
                         showProgress = packBrowser.visible && packBrowser.busy
                     )
                     if (selectedTab != 0) HorizontalDivider()
+                    globalStyle.layer?.let { GlobalStyleCard(it, globalStyle.keep, globalStyle.onToggle) }
                     AnimatedVisibility(visible = calendar.visible) {
                         CalendarCard(
                             packName = calendar.packName,
@@ -1310,6 +1349,49 @@ fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
  * Shown when the selected icon ends in a number — the user can opt in to day rotation.
  * Works with any icon from any pack regardless of which app it was designed for.
  */
+/** Offers to keep the applied Global style on top of the edited icon; off stores the edit alone. */
+@Composable
+private fun GlobalStyleCard(layer: EditorGlobalLayer, keep: Boolean, onToggle: (Boolean) -> Unit) {
+    val chips = globalStyleChips(layer.recipe)
+    Surface(
+        shape = dev.renkinProject.renkin.ui.theme.CardShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .toggleable(value = keep, role = Role.Switch, onValueChange = onToggle)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = if (keep) Icons.Filled.Layers else Icons.Filled.LayersClear,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(22.dp)
+            )
+            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.editorKeepGlobalStyle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = if (keep) chips.joinToString(" · ")
+                    else stringResource(R.string.editorGlobalStyleOff, chips.joinToString(", ")),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                )
+            }
+            // The whole card toggles, so the switch itself only shows the state.
+            Switch(checked = keep, onCheckedChange = null)
+        }
+    }
+}
+
 @Composable
 private fun CalendarCard(
     packName: String,

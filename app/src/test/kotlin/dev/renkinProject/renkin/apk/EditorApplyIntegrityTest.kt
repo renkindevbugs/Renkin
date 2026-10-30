@@ -715,4 +715,81 @@ class EditorApplyIntegrityTest {
             })
         assertSame(current, provider.applicationState.value)
     }
+
+    private fun corner(icon: IconPackDrawable?) = requireNotNull(icon).toBitmap().getPixel(0, 0)
+
+    // An app the Global style already reaches: a custom icon, with custom icons targeted in setUp.
+    private suspend fun styledApp(): PackageInfoStruct {
+        apply(initializeApp(), draft())
+        return provider.applicationList.single()
+    }
+
+    private suspend fun applyKeepingGlobalStyle(app: PackageInfoStruct, icon: IconPackDrawable): IconApplyOutcome =
+        provider.applyPickedIcon(provider.sessionToken, app, icon, null, keepGlobalStyle = true) { live, origin, rendered ->
+            live.changeExport(rendered, sourcePackName = origin, isCustom = true, isRefreshMade = false, baseIcon = icon)
+        }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun keepingGlobalStyleDrawsTheAppliedLayerOverTheEditedBase() = runBlocking {
+        val app = styledApp()
+        val icon = draft()
+
+        assertNotNull(provider.editorGlobalLayer(provider.sessionToken, app))
+        assertEquals(IconApplyOutcome.APPLIED, applyKeepingGlobalStyle(app, icon))
+
+        val stored = provider.applicationList.single()
+        assertSame(icon, stored.baseIcon)
+        assertEquals(Color.WHITE, corner(stored.baseIcon))
+        // Scale 50 % leaves the corners of the white draft empty.
+        assertEquals(Color.TRANSPARENT, corner(stored.createdIcon))
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun aBakeMakesTheLookTheNewBaseAndItsUndoBringsTheOriginalBack() = runBlocking {
+        val app = styledApp()
+        applyKeepingGlobalStyle(app, draft())
+
+        assertEquals(1, provider.bakeGlobalStyle(provider.sessionToken))
+
+        val baked = provider.applicationList.single()
+        assertEquals(Color.TRANSPARENT, corner(baked.baseIcon))
+        assertEquals(Color.TRANSPARENT, corner(baked.createdIcon))
+        assertEquals(100, context.dataStore.data.first()[GlobalIconScaleKey])
+        assertNull(provider.editorGlobalLayer(provider.sessionToken, baked))
+        val bake = provider.globalStyleHistory(provider.sessionToken).first()
+        assertTrue(bake.isBake)
+
+        val undo = provider.undoGlobalStyleBake(provider.sessionToken, bake.id)
+
+        assertEquals(ApplicationProvider.GlobalStyleBakeUndo(restored = 1, skipped = 0), undo)
+        val restored = provider.applicationList.single()
+        assertEquals(Color.WHITE, corner(restored.baseIcon))
+        assertEquals(Color.TRANSPARENT, corner(restored.createdIcon))
+        assertEquals(50, context.dataStore.data.first()[GlobalIconScaleKey])
+        assertFalse(provider.globalStyleHistory(provider.sessionToken).any { it.isBake })
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun undoingABakeKeepsAnIconEditedSinceThen() = runBlocking {
+        val app = styledApp()
+        applyKeepingGlobalStyle(app, draft())
+        provider.bakeGlobalStyle(provider.sessionToken)
+        val bake = provider.globalStyleHistory(provider.sessionToken).first()
+        val edited = BitmapIconDrawable(Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) })
+        apply(provider.applicationList.single(), edited)
+
+        val undo = provider.undoGlobalStyleBake(provider.sessionToken, bake.id)
+
+        assertEquals(ApplicationProvider.GlobalStyleBakeUndo(restored = 0, skipped = 1), undo)
+        assertSame(edited, provider.applicationList.single().baseIcon)
+    }
+
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Test fun nothingIsBakedWhenNoIconCarriesTheLayer() = runBlocking {
+        val app = initializeApp()
+        apply(app, draft())
+
+        assertEquals(0, provider.bakeGlobalStyle(provider.sessionToken))
+        assertEquals(50, context.dataStore.data.first()[GlobalIconScaleKey])
+    }
 }
