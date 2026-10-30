@@ -13,6 +13,7 @@ import android.os.Build
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.annotation.Px
 import androidx.annotation.RequiresApi
+import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.graphics.drawable.toBitmapOrNull
 import dev.renkinProject.renkin.packages.PackageVersion
@@ -47,7 +48,18 @@ fun Drawable.toSafeBitmapOrNull(
     if (width <= 0 || height <= 0)
         return null
 
-    return toBitmapOrNull(width, height, config)
+    return toBitmapOrNull(width, height, config)?.withRenderingDensity()
+}
+
+// A BitmapDrawable hands back its resource bitmap (or a scaled copy) with the source density, e.g.
+// 160 for a legacy PNG in res/drawable. Canvas.drawBitmap(bitmap, x, y) rescales by the density
+// ratio, so every modifier drew such an app icon about 3x zoomed into its top-left corner.
+private fun Bitmap.withRenderingDensity(): Bitmap {
+    // What a new bitmap and every canvas here use; read per call, as the display density can change.
+    val renderingDensity = createBitmap(1, 1, Config.ALPHA_8).density
+    if (density == renderingDensity || density == Bitmap.DENSITY_NONE) return this
+    // The bitmap may still be the drawable's cached resource bitmap, so retag a copy.
+    return copy(config ?: Config.ARGB_8888, isMutable)?.also { it.density = renderingDensity } ?: this
 }
 
 fun Drawable.hasValidDimensions(): Boolean {
