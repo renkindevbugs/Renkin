@@ -186,6 +186,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.window)
     implementation(libs.colorpicker.compose)
+    implementation(libs.haze)
     implementation("androidx.compose.material:material-icons-extended")
 
     //Data

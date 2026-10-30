@@ -1961,6 +1961,11 @@ follow-ups; CRC verifies transport integrity only.
   go once material3 ships the fix.
 - No pull-to-refresh on the home list **on purpose**: its nested-scroll handler fought the
   collapsing large top bar (glitches, ghost taps). The app list reloads from Settings.
+- **Global style grid sections** are `LazyGridScope.stickyHeader`s: a section title stays pinned
+  and the next one pushes it out. The bar is frosted with Haze (`dev.chrisbanes.haze`, held at
+  1.6.x because 1.7+ requires Compose 1.12): tiles are `hazeSource`s and the header blurs them
+  under a 70% surface tint. The system-drawn wallpaper cannot be blurred, and below Android 12
+  Haze falls back to the tint alone.
 
 ## Colourizing
 

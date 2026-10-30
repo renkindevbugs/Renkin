@@ -102,6 +102,14 @@ import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.isMissingIcon
 import dev.renkinProject.renkin.ui.theme.OnWallpaperTextShadow
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.ui.theme.IconShape as IconTileShape
@@ -256,16 +264,9 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
         )
     }
 
-    // Which section the top visible tile belongs to ('g'/'c'/'e'), read from the item keys —
-    // drives the pinned "you are here" bar while the grid scrolls.
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
-    val currentSection by remember {
-        androidx.compose.runtime.derivedStateOf {
-            gridState.layoutInfo.visibleItemsInfo.firstNotNullOfOrNull { info ->
-                (info.key as? String)?.takeIf { it.length > 2 && it[1] == '/' }?.get(0)
-            }
-        }
-    }
+    // Tiles are the blur sources; the pinned section headers frost whatever scrolls beneath them.
+    val hazeState = remember { HazeState() }
 
     // The preview remains transparent so the real wallpaper is part of the decision. Every
     // control surface paints its own background and therefore stays legible over any wallpaper.
@@ -358,75 +359,69 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                     }
 
                     if (generated.isNotEmpty()) {
-                        item(key = "genHeader", span = { GridItemSpan(maxLineSpan) }) {
-                            SectionHeader(
-                                title = stringResource(R.string.globalGeneratedSection, generated.size),
-                                applies = state.applyGenerated,
-                                hint = androidx.compose.ui.text.AnnotatedString(stringResource(R.string.globalGridHint))
-                            )
-                        }
+                        sectionHeader(
+                            key = "genHeader", hazeState = hazeState,
+                            title = { stringResource(R.string.globalGeneratedSection, generated.size) },
+                            applies = state.applyGenerated,
+                            hint = { stringResource(R.string.globalGridHint) }
+                        )
                         items(generated, key = { "g/${it.key}" }) { app ->
                             IconPreviewTile(
                                 app,
                                 if (!showBefore && state.applyGenerated) tileOptions else null,
                                 viewModel,
-                                modifier = Modifier.animateItem()
+                                modifier = Modifier.animateItem().hazeSource(hazeState)
                             ) { viewModel.openIconEditor(app) }
                         }
                     }
 
                     if (custom.isNotEmpty()) {
-                        item(key = "customHeader", span = { GridItemSpan(maxLineSpan) }) {
-                            SectionHeader(
-                                title = stringResource(R.string.globalCustomSection, custom.size),
-                                applies = state.applyCustom
-                            )
-                        }
+                        sectionHeader(
+                            key = "customHeader", hazeState = hazeState,
+                            title = { stringResource(R.string.globalCustomSection, custom.size) },
+                            applies = state.applyCustom
+                        )
                         items(custom, key = { "c/${it.key}" }) { app ->
                             IconPreviewTile(
                                 app,
                                 if (!showBefore && state.applyCustom) tileOptions else null,
                                 viewModel,
                                 showEditBadge = true,
-                                modifier = Modifier.animateItem()
+                                modifier = Modifier.animateItem().hazeSource(hazeState)
                             ) { viewModel.openIconEditor(app) }
                         }
                     }
 
                     if (existing.isNotEmpty()) {
-                        item(key = "existingHeader", span = { GridItemSpan(maxLineSpan) }) {
-                            SectionHeader(
-                                title = stringResource(R.string.globalExistingSection, existing.size),
-                                applies = state.applyExisting,
-                                hint = androidx.compose.ui.text.AnnotatedString(
-                                    stringResource(R.string.globalExistingHint)
-                                )
-                            )
-                        }
+                        sectionHeader(
+                            key = "existingHeader", hazeState = hazeState,
+                            title = { stringResource(R.string.globalExistingSection, existing.size) },
+                            applies = state.applyExisting,
+                            hint = { stringResource(R.string.globalExistingHint) }
+                        )
                         items(existing, key = { "s/${it.key}" }) { app ->
                             IconPreviewTile(
                                 app,
                                 if (!showBefore && state.applyExisting) tileOptions else null,
                                 viewModel,
-                                modifier = Modifier.animateItem()
+                                modifier = Modifier.animateItem().hazeSource(hazeState)
                             ) { viewModel.openIconEditor(app) }
                         }
                     }
 
                     if (iconless.isNotEmpty()) {
-                        item(key = "emptyHeader", span = { GridItemSpan(maxLineSpan) }) {
-                            SectionHeader(
-                                title = stringResource(R.string.globalEmptySection, iconless.size),
-                                applies = state.includeEmpty
-                            )
-                        }
+                        sectionHeader(
+                            key = "emptyHeader", hazeState = hazeState,
+                            title = { stringResource(R.string.globalEmptySection, iconless.size) },
+                            applies = state.includeEmpty
+                        )
                         items(iconless, key = { "e/${it.key}" }) { app ->
                             GeneratedPreviewTile(
                                 app,
                                 if (showBefore) null else emptySourceOptions,
                                 if (showBefore) null else tileOptions,
                                 viewModel,
-                                modifier = Modifier.animateItem()
+                                modifier = Modifier.animateItem().hazeSource(hazeState)
                             ) { viewModel.openIconEditor(app) }
                         }
                     }
@@ -478,12 +473,6 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                     AdaptivePaneSeparator(paneLayout)
                     Column(Modifier.width(paneLayout.trailingWidth)) {
                         PreviewModeBar(showBefore) { showBefore = it }
-                        currentSection?.let { section ->
-                            CurrentSectionBar(
-                                section, generated.size, custom.size,
-                                existing.size, iconless.size, state
-                            )
-                        }
                         HorizontalDivider()
                         Box(Modifier.fillMaxSize()) { gridContent() }
                     }
@@ -491,12 +480,6 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
             } else {
                 Column(Modifier.weight(1f)) {
                     PreviewModeBar(showBefore) { showBefore = it }
-                    currentSection?.let { section ->
-                        CurrentSectionBar(
-                            section, generated.size, custom.size,
-                            existing.size, iconless.size, state
-                        )
-                    }
                     HorizontalDivider()
                     Box(Modifier.weight(1f)) { gridContent() }
                     Surface(
@@ -605,104 +588,76 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
     }
 }
 
-
-
-
-/** Names the section at the top of the preview and whether it belongs to the current targets. */
-@Composable
-private fun CurrentSectionBar(
-    section: Char,
-    generatedCount: Int,
-    customCount: Int,
-    existingCount: Int,
-    iconlessCount: Int,
-    state: GlobalModifierState
-) {
-    val (title, applies) = when (section) {
-        'g' -> stringResource(R.string.globalGeneratedSection, generatedCount) to state.applyGenerated
-        'c' -> stringResource(R.string.globalCustomSection, customCount) to state.applyCustom
-        's' -> stringResource(R.string.globalExistingSection, existingCount) to state.applyExisting
-        else -> stringResource(R.string.globalEmptySection, iconlessCount) to state.includeEmpty
-    }
-    val marker = if (applies) MaterialTheme.colorScheme.primary
-        else MaterialTheme.colorScheme.onSurfaceVariant
-    Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TargetStatusDot(
-                included = applies,
-                excludedColor = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .weight(1f)
-            )
-            Text(
-                text = stringResource(
-                    if (applies) R.string.globalSectionApplies else R.string.globalSectionSkipped
-                ),
-                style = MaterialTheme.typography.labelMedium,
-                color = marker
-            )
-        }
-    }
-}
-
-/** A grid section title with a primary included state and a neutral excluded state. */
-@Composable
-private fun SectionHeader(
-    title: String,
+/**
+ * A section title that stays pinned while its tiles scroll beneath it; the next section's title
+ * pushes it up and takes its place. The hint scrolls away with the tiles.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private fun LazyGridScope.sectionHeader(
+    key: String,
+    hazeState: HazeState,
+    title: @Composable () -> String,
     applies: Boolean,
-    hint: androidx.compose.ui.text.AnnotatedString? = null
+    hint: (@Composable () -> String)? = null
 ) {
-    val marker = if (applies) MaterialTheme.colorScheme.primary
-        else Color.White.copy(alpha = 0.7f)
-    // Sits directly on the wallpaper — white text with a shadow, like the tile labels.
-    Column(Modifier.padding(top = 6.dp)) {
-        HorizontalDivider(thickness = 2.dp, color = marker)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TargetStatusDot(
-                included = applies,
-                excludedColor = Color.White.copy(alpha = 0.8f)
-            )
+    stickyHeader(key = key, contentType = "sectionHeader") {
+        SectionHeader(title(), applies, hazeState)
+    }
+    if (hint != null) {
+        item(key = "${key}Hint", span = { GridItemSpan(maxLineSpan) }, contentType = "sectionHint") {
             Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall.copy(shadow = OnWallpaperTextShadow),
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White,
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .weight(1f)
-            )
-            Text(
-                text = stringResource(
-                    if (applies) R.string.globalSectionApplies else R.string.globalSectionSkipped
-                ),
-                style = MaterialTheme.typography.labelMedium.copy(shadow = OnWallpaperTextShadow),
-                color = marker
-            )
-        }
-        if (hint != null) {
-            Text(
-                text = hint,
+                text = hint(),
                 style = MaterialTheme.typography.bodySmall.copy(shadow = OnWallpaperTextShadow),
                 color = Color.White.copy(alpha = 0.85f),
-                modifier = Modifier.padding(top = 2.dp)
+                modifier = Modifier.padding(horizontal = 4.dp)
             )
         }
     }
 }
+
+/** A frosted bar: the wallpaper shows through its tint and tiles passing beneath are blurred. */
+@Composable
+private fun SectionHeader(title: String, applies: Boolean, hazeState: HazeState) {
+    val surface = MaterialTheme.colorScheme.surfaceContainer
+    val marker = if (applies) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(InnerShape)
+            .hazeEffect(
+                state = hazeState,
+                style = HazeStyle(
+                    backgroundColor = surface,
+                    tint = HazeTint(surface.copy(alpha = SECTION_HEADER_TINT_ALPHA)),
+                    blurRadius = 20.dp
+                )
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TargetStatusDot(included = applies, excludedColor = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .padding(start = 8.dp)
+                .weight(1f)
+        )
+        Text(
+            text = stringResource(
+                if (applies) R.string.globalSectionApplies else R.string.globalSectionSkipped
+            ),
+            style = MaterialTheme.typography.labelMedium,
+            color = marker
+        )
+    }
+}
+
+// Opaque enough to read over any wallpaper, translucent enough to keep the wallpaper visible.
+private const val SECTION_HEADER_TINT_ALPHA = 0.7f
 
 /** A filled dot means included; a hollow dot means excluded. */
 @Composable
