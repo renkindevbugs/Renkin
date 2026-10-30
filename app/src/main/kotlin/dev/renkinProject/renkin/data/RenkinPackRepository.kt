@@ -156,6 +156,8 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         profiles.forEach { profileDao.insert(it) }
         dao.insertAll(apps)
         builtIconDao.deleteForMissingProfiles()
+        // Backup ids can reuse a profile id this device had; its looks must not carry over.
+        globalStyleHistoryDao.deleteEverything()
     }
 
     // ---- What the last build shipped -----------------------------------------------
@@ -171,6 +173,33 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         builtIconDao.deleteForProfile(profileId)
         builtIconDao.insertAll(rows)
     }
+
+    // ---- Global style Apply history ---------------------------------------------------
+
+    private val globalStyleHistoryDao = db.globalStyleHistoryDao()
+
+    /** Newest first. */
+    suspend fun globalStyleHistory(profileId: Long): List<GlobalStyleHistoryEntry> = access {
+        globalStyleHistoryDao.list(profileId)
+    }
+
+    suspend fun globalStyleHistoryEntry(id: Long): GlobalStyleHistoryEntry? = access { globalStyleHistoryDao.get(id) }
+
+    /**
+     * Skips a recipe equal to the newest one, then keeps the newest [GLOBAL_STYLE_HISTORY_LIMIT].
+     * An empty history first records [previousStyle], so the very first Apply can be undone too.
+     */
+    suspend fun recordGlobalStyle(profileId: Long, style: String, appliedAt: Long, previousStyle: String) = transaction {
+        val newest = globalStyleHistoryDao.list(profileId).firstOrNull()
+        if (newest?.style == style) return@transaction
+        if (newest == null && previousStyle != style) {
+            globalStyleHistoryDao.insert(GlobalStyleHistoryEntry(profileId = profileId, appliedAt = appliedAt, style = previousStyle))
+        }
+        globalStyleHistoryDao.insert(GlobalStyleHistoryEntry(profileId = profileId, appliedAt = appliedAt, style = style))
+        globalStyleHistoryDao.trim(profileId, GLOBAL_STYLE_HISTORY_LIMIT)
+    }
+
+    suspend fun deleteGlobalStyle(profileId: Long, id: Long) = access { globalStyleHistoryDao.delete(profileId, id) }
 
     // ---- Saved colours -------------------------------------------------------------
 
@@ -366,5 +395,6 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         dao.deleteAllApplications(id)
         profileDao.delete(id)
         builtIconDao.deleteForMissingProfiles()
+        globalStyleHistoryDao.deleteForMissingProfiles()
     }
 }

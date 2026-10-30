@@ -851,6 +851,20 @@
     <string name="globalDiscardTitle">Discard changes?</string>
     <string name="globalDiscardText">The modifier changes on this screen haven\'t been applied yet.</string>
     <string name="globalOptionsApplied">Global modifiers applied</string>
+    <string name="globalHistoryTitle">Apply history</string>
+    <string name="globalHistoryHint">Tap a look to load it into the controls. Nothing changes until you tap Apply.</string>
+    <string name="globalHistoryCurrent">Current · %1$s</string>
+    <string name="globalHistoryNoStyle">No global style</string>
+    <string name="globalHistoryNoStyleHint">Every effect off</string>
+    <string name="globalHistoryNoEffects">No effects</string>
+    <string name="globalHistoryEmpty">Every Apply is saved here, so you can return to an earlier look.</string>
+    <string name="globalHistoryChip">%1$s: %2$s</string>
+    <string name="globalHistoryLoaded">Loaded the look from %1$s</string>
+    <string name="globalHistoryLoadedNoStyle">Loaded: no global style</string>
+    <string name="globalHistoryDelete">Delete from history</string>
+    <string name="globalStyleAppliedUndo">Global style applied</string>
+    <string name="globalStyleUndoInProgress">Restoring the previous Global style…</string>
+    <string name="globalStyleUndone">Previous Global style restored</string>
     <string name="globalOptionsApplyFailed">Applying global modifiers failed</string>
     <string name="globalApplying">Applying…</string>
     <string name="globalApplyCount">Apply to %1$d</string>
@@ -969,4 +983,8 @@
     <string name="savedModifierSourceDescription">This icon uses its saved artwork. Choose a source below to replace it. Browsing icon packs keeps the current source until you select an icon.</string>
     <string name="watchApplyCleanupFailed">Icon set, but the watch entry could not be removed. Retry removes the entry without applying the icon again.</string>
     <string name="watchRetryCleanup">Retry removing the watch entry</string>
+    <plurals name="globalHistoryLimit">
+        <item quantity="one">Keeps the last %1$d apply of this profile.</item>
+        <item quantity="other">Keeps the last %1$d applies of this profile.</item>
+    </plurals>
 </resources>

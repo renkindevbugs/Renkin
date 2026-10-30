@@ -28,6 +28,11 @@ import androidx.lifecycle.viewmodel.compose.saveable
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.renkinProject.renkin.data.GlobalStyleHistoryItem
+import dev.renkinProject.renkin.icon.creator.TransformModifier
+import dev.renkinProject.renkin.icon.creator.OutlineMode
+import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.SharedIconHandoff
 import dev.renkinProject.renkin.feature.presets.PresetLibraryViewModel
 import dev.renkinProject.renkin.feature.presets.ProvideColorPresets
@@ -50,6 +55,8 @@ import dev.renkinProject.renkin.icon.creator.IconGenerationResult
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.GlobalIconEditorDraft
 import java.util.concurrent.atomic.AtomicReference
+import dev.renkinProject.renkin.ui.GlobalHistoryLoad
+import dev.renkinProject.renkin.ui.GlobalHistoryLoadSaver
 import dev.renkinProject.renkin.ui.GlobalModifierSnapshot
 import dev.renkinProject.renkin.ui.GlobalModifierState
 import dev.renkinProject.renkin.ui.GlobalOptionsScreen
@@ -416,6 +423,81 @@ class GlobalOptionsViewModel @Inject constructor(
 
     fun resetDraft() {
         baseline?.let(draft::restore)
+        historyLoad = null
+    }
+
+    var history by mutableStateOf<List<GlobalStyleHistoryItem>>(emptyList())
+        private set
+
+    // The draft before a history entry replaced it, so the banner's Undo can put it back.
+    @OptIn(SavedStateHandleSaveableApi::class)
+    private val savedHistoryLoad by savedStateHandle.saveable(saver = GlobalHistoryLoadSaver) {
+        mutableStateOf<GlobalHistoryLoad?>(null)
+    }
+
+    internal var historyLoad: GlobalHistoryLoad?
+        get() = savedHistoryLoad.value
+        private set(value) { savedHistoryLoad.value = value }
+
+    fun refreshHistory() {
+        val expected = screenSession ?: return
+        viewModelScope.launch {
+            try {
+                history = appProvider.globalStyleHistory(expected)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.error("GlobalOptionsViewModel", "Loading the Global style history failed", e)
+                _toastEvents.trySend(R.string.profileOperationFailed)
+            }
+        }
+    }
+
+    /**
+     * Stages [item] in the controls; nothing is written until Apply. The categories the controls
+     * already target stay on, so applying an older look also reverts the icons a later Apply changed.
+     */
+    internal fun loadHistory(item: GlobalStyleHistoryItem) {
+        if (globalApplyProgress != null || !draft.initialized) return
+        val before = historyLoad?.before ?: draft.snapshot()
+        val targeted = draft.snapshot()
+        draft.seedFrom(item.recipe)
+        draft.applyGenerated = draft.applyGenerated || targeted.applyGenerated
+        draft.applyExisting = draft.applyExisting || targeted.applyExisting
+        draft.applyCustom = draft.applyCustom || targeted.applyCustom
+        draft.includeEmpty = draft.includeEmpty || targeted.includeEmpty
+        historyLoad = GlobalHistoryLoad(item.appliedAt, before)
+    }
+
+    /** Stages every effect off while keeping the sources and categories. */
+    fun loadNoGlobalStyle() {
+        if (globalApplyProgress != null || !draft.initialized) return
+        val before = historyLoad?.before ?: draft.snapshot()
+        draft.updateEffect { copy(imageEdit = ImageEdit.NONE) }
+        draft.updateTransform { TransformModifier() }
+        draft.updateShape { copy(shape = IconShape.NONE) }
+        draft.updateOutline { copy(mode = OutlineMode.NONE) }
+        historyLoad = GlobalHistoryLoad(GlobalHistoryLoad.NO_GLOBAL_STYLE, before)
+    }
+
+    fun undoHistoryLoad() {
+        historyLoad?.let { draft.restore(it.before) }
+        historyLoad = null
+    }
+
+    internal fun deleteHistory(item: GlobalStyleHistoryItem) {
+        val expected = screenSession ?: return
+        viewModelScope.launch {
+            try {
+                appProvider.deleteGlobalStyleHistory(expected, item.id)
+                history = history - item
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.error("GlobalOptionsViewModel", "Deleting a Global style history entry failed", e)
+                _toastEvents.trySend(R.string.profileOperationFailed)
+            }
+        }
     }
 
     /** Saves the staged draft; the outcome arrives as a toast and as the updated [baseline]. */
@@ -441,7 +523,9 @@ class GlobalOptionsViewModel @Inject constructor(
                 val committed = appProvider.commitSessionState(expected) {
                     appliedGlobal = true
                     baseline = savedState
+                    historyLoad = null
                 }
+                refreshHistory()
                 _toastEvents.trySend(if (committed) R.string.globalOptionsApplied else expiredSessionNotice)
             } catch (e: CancellationException) {
                 throw e

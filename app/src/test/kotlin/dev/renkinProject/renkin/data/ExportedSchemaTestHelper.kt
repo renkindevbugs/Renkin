@@ -5,6 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.room.RoomDatabase
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
@@ -33,7 +34,8 @@ internal fun createDatabaseFromExportedSchema(
                         val tableName = entity.getString("tableName")
                         db.execSQL(entity.getString("createSql").replace("${'$'}{TABLE_NAME}", tableName))
                     }
-                    schema.getJSONArray("views").forEachObject { view ->
+                    // Newer Room versions omit an empty "views" array from the exported schema.
+                    (schema.optJSONArray("views") ?: JSONArray()).forEachObject { view ->
                         db.execSQL(view.getString("createSql"))
                     }
                     schema.getJSONArray("setupQueries").forEachString(db::execSQL)

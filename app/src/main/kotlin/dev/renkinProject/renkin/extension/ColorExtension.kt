@@ -41,6 +41,8 @@ fun String.toColor(): Color {
 }
 
 fun String.toNullableColor(): Color? {
+    // parseColor throws StringIndexOutOfBoundsException, not IllegalArgumentException, for "".
+    if (isEmpty()) return null
     return try {
         this.toColor()
     } catch (ex: IllegalArgumentException) {
