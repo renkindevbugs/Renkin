@@ -1,13 +1,21 @@
 package dev.renkinProject.renkin.feature.profiles
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -24,10 +32,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -83,24 +93,24 @@ internal fun ProfileDetailsDialog(
         properties = DialogProperties(dismissOnBackPress = !blocked, dismissOnClickOutside = !blocked),
         badge = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Image(
-                    painter = preview?.getPainter() ?: painterResource(R.drawable.xxxhdpi_ic_launcher),
-                    contentDescription = null,
-                    modifier = Modifier.size(72.dp).clip(IconShape)
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(
-                        enabled = !blocked && packs.loaded,
-                        onClick = { state.openEditor(runtime.sessionToken, packs.packs.firstOrNull()?.packageName.orEmpty()) }
-                    ) { Text(stringResource(R.string.profileEditIcon)) }
-                    if (state.hasCustomIcon) {
-                        RenkinTooltipBox(stringResource(R.string.resetToDefault)) {
-                            IconButton(enabled = !blocked, onClick = state::resetIcon) {
-                                Icon(Icons.Filled.Restore, contentDescription = stringResource(R.string.resetToDefault))
-                            }
-                        }
-                    }
+                // Drawn above Edit icon so the badge's 48dp target wins where the two touch areas meet
+                Box(Modifier.zIndex(1f)) {
+                    Image(
+                        painter = preview?.getPainter() ?: painterResource(R.drawable.xxxhdpi_ic_launcher),
+                        contentDescription = null,
+                        modifier = Modifier.size(72.dp).clip(IconShape)
+                    )
+                    IconResetBadge(
+                        visible = state.hasCustomIcon,
+                        enabled = !blocked,
+                        onClick = state::resetIcon,
+                        modifier = Modifier.align(Alignment.BottomEnd).size(55.dp)
+                    )
                 }
+                TextButton(
+                    enabled = !blocked && packs.loaded,
+                    onClick = { state.openEditor(runtime.sessionToken, packs.packs.firstOrNull()?.packageName.orEmpty()) }
+                ) { Text(stringResource(R.string.profileEditIcon)) }
             }
         },
         title = title,
@@ -208,5 +218,39 @@ internal fun ProfileDetailsDialog(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
             }
         )
+    }
+}
+
+/** Reset badge hung on the pack icon's corner: a 28dp disc inside a touch target of at least 48dp. */
+@Composable
+internal fun IconResetBadge(visible: Boolean, enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val label = stringResource(R.string.resetToDefault)
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier.offset(16.dp, 16.dp),
+        enter = fadeIn() + scaleIn(initialScale = 0.6f),
+        exit = fadeOut() + scaleOut(targetScale = 0.6f)
+    ) {
+        RenkinTooltipBox(label) {
+            IconButton(enabled = enabled, onClick = onClick) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .alpha(if (enabled) 1f else 0.38f)
+                        // Ring in the dialog's own surface so the disc reads as cut into the icon corner
+                        .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
+                        .padding(2.dp)
+                        .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                ) {
+                    Icon(
+                        Icons.Filled.Restore,
+                        contentDescription = label,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
     }
 }
