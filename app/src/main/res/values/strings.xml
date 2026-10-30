@@ -29,6 +29,9 @@
     <string name="settingsData">Data</string>
     <string name="settingsDiagnostics">Diagnostics</string>
     <string name="theme">Theme</string>
+    <string name="language">Language</string>
+    <string name="languageFollowDevice">Follow device language</string>
+    <string name="languageTranslatedShare">%1$s · %2$d%% translated</string>
     <string name="installerMethod">Installer</string>
     <string name="installerSystem">System installer</string>
     <string name="installerShizuku">Shizuku</string>

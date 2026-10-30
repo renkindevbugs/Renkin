@@ -328,6 +328,13 @@ whole provider and all persistence state is shared deliberately.
 
 ## Activities
 
+Every activity extends `LocalizedActivity` (`feature/language`) so the in-app language from
+Settings applies before Android 13 too. On 13+ `AppLocales` delegates to the system
+`LocaleManager` (which recreates activities and feeds the per-app language page via the
+generated locale config); older versions keep the tag in the `app_locale` SharedPreferences,
+wrap each `attachBaseContext`, update the application Resources in place and recreate the
+current activity. A new activity must extend `LocalizedActivity`.
+
 - **MainActivity** — the whole app UI; provides `LocalMainActivity` and `LocalToaster`.
 - **GlobalOptionsActivity** — wallpaper-backed Global options grid. It uses a lightweight
   view model over the shared provider and performs guarded provider initialization when Android

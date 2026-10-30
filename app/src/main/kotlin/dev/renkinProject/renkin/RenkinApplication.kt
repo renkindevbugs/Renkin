@@ -10,6 +10,7 @@ import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import dagger.hilt.android.HiltAndroidApp
+import dev.renkinProject.renkin.feature.language.AppLocales
 import dev.renkinProject.renkin.data.transfer.BackupManagerEntryPoint
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.ProfileStyleAccess
@@ -33,7 +34,7 @@ class RenkinApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun attachBaseContext(base: Context) {
-        super.attachBaseContext(base)
+        super.attachBaseContext(AppLocales.loadForApplication(base))
         if (isMainProcess()) {
             ProfileStyleAccess.install {
                 EntryPointAccessors.fromApplication(this, BackupManagerEntryPoint::class.java).profileStyleStore()

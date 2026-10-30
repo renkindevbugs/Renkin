@@ -80,6 +80,7 @@ import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchApplySnapshot
 import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
 import dev.renkinProject.renkin.apk.IconPackBuilder
+import dev.renkinProject.renkin.feature.language.AppLocales
 import dev.renkinProject.renkin.feature.watch.WatchApplyOwner
 import dev.renkinProject.renkin.feature.watch.WatchApplyRequest
 import dev.renkinProject.renkin.feature.watch.WatchApplyState
@@ -709,6 +710,10 @@ class MainViewModel @Inject constructor(
     fun setDarkMode(mode: DarkMode) = updatePreferences {
         setEnumValue(DarkModeKey, mode)
     }
+
+    fun appLanguageTag(): String = AppLocales.selectedTag(getApplication())
+
+    fun selectAppLanguage(tag: String) = AppLocales.select(getApplication(), tag)
 
     fun setInstallMethod(method: InstallMethod, externalComponent: String = "") = updatePreferences {
         persistInstallerSelection(InstallerSelection(method, externalComponent))

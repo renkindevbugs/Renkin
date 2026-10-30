@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.apk
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import app.revanced.library.ApkSigner
@@ -66,6 +67,8 @@ object GeneratedPackIdentity {
         return !isLocallyOwned(context, packageName)
     }
 
+    // The KTX edit {} discards commit()'s result, which decides whether the build may report success.
+    @SuppressLint("UseKtx")
     internal fun recordBuilt(context: Context, packageName: String, apk: File) {
         val info = context.packageManager.getPackageArchiveInfo(apk.path, packageSigningFlags())
             ?: error("Built APK signing certificate is unavailable")
