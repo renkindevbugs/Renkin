@@ -93,12 +93,19 @@ class IconLockManager(
     // Session cache of the provenance maps carried by installed Renkin-built packs
     // (component key → original source pack). Cleared when packs re-sync or rebuild.
     private val provenanceCache = mutableMapOf<String, Map<String, String>>()
+    private val generatedPackCache = mutableMapOf<String, Boolean>()
 
     private fun provenanceFor(packPackage: String): Map<String, String> =
         provenanceCache.getOrPut(packPackage) { PackProvenance.read(context, packPackage) }
 
     /** Drops cached provenance maps (packs were re-synced or rebuilt). */
-    fun clearProvenanceCache() = provenanceCache.clear()
+    fun clearProvenanceCache() {
+        provenanceCache.clear()
+        generatedPackCache.clear()
+    }
+
+    private fun isGeneratedPack(packageName: String): Boolean =
+        generatedPackCache.getOrPut(packageName) { GeneratedPackIdentity.isGenerated(context, packageName) }
 
     /**
      * The REAL origin of an icon sourced from [sourcePack]: our own built packs carry a
@@ -106,9 +113,13 @@ class IconLockManager(
      * X even when it arrives through a Renkin pack. Foreign packs pass through unchanged.
      */
     fun resolveOrigin(appKey: String, sourcePack: String?): String? {
-        val source = sourcePack?.takeIf { it.isNotEmpty() } ?: return sourcePack
-        if (!IconPackBuilder.isOwnPack(source)) return source
-        return provenanceFor(source)[appKey] ?: source
+        var source = sourcePack?.takeIf { it.isNotEmpty() } ?: return sourcePack
+        val visited = mutableSetOf<String>()
+        repeat(8) {
+            if (!visited.add(source) || !isGeneratedPack(source)) return source
+            source = provenanceFor(source)[appKey]?.takeIf(String::isNotEmpty) ?: return source
+        }
+        return source
     }
 
     /**
@@ -117,7 +128,7 @@ class IconLockManager(
      */
     suspend fun lockedOriginsFor(options: GenerationOptions): Set<String> {
         val ownPacks = listOf(options.source.primaryIconPack, options.source.secondaryIconPack)
-            .filter { it.isNotEmpty() && IconPackBuilder.isOwnPack(it) }
+            .filter { it.isNotEmpty() && isGeneratedPack(it) }
         if (ownPacks.isEmpty()) return emptySet()
         return lockedPacksAmong(ownPacks.flatMap { provenanceFor(it).values }.toSet())
     }

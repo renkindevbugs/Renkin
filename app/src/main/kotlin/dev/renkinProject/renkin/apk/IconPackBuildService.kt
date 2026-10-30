@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.datastore.preferences.core.Preferences
+import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.data.ProfilePackIconCodec
+import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.data.CalendarIconsKey
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.ExportThemedKey
@@ -92,7 +95,9 @@ class IconPackBuildService internal constructor(
         val preservedRows: List<DbApplication>,
         val calendarSelections: List<CalendarSelection>,
         val packageName: String,
-        val label: String
+        val label: String,
+        val packIcon: IconPackDrawable? = null,
+        val packIconSource: String? = null
     )
 
     private val buildOperations = Mutex()
@@ -117,11 +122,18 @@ class IconPackBuildService internal constructor(
             profileApps.mapNotNull { it.sourcePackName?.takeIf(String::isNotEmpty) }.toSet()
         )
         val profile = packRepository.profile(profileId)
+        validateProfilePackIdentity(context, profileId, profile?.customPackageName.orEmpty(), packRepository.profiles())
+        val packIcon = ProfilePackIconCodec(context).decode(profile?.packIcon.orEmpty())
+        val iconSource = packIcon?.sourcePackName?.takeIf { it.isNotEmpty() }
+        check(iconSource == null || lockManager.lockedPacksAmong(setOf(iconSource)).isEmpty()) {
+            context.getString(R.string.profilePackIconLocked)
+        }
         PreparedIconPack(
             profileId, preferences, profileApps, excludeLockedSources(profileApps, lockedSources),
             preservedRows, globalSelections + perAppSelections,
             profileManager.packPackageNameFor(profileId),
-            profile?.packLabel?.ifEmpty { profile.name } ?: "Renkin Pack"
+            profile?.packLabel?.ifEmpty { profile.name } ?: "Renkin Pack",
+            packIcon?.icon, iconSource
         )
     }
 
@@ -141,7 +153,8 @@ class IconPackBuildService internal constructor(
                     val builder = IconPackBuilder(
                         context, prepared.buildApps, calendarData.mappings, calendarData.drawables,
                         packPackageName = prepared.packageName, packLabel = prepared.label,
-                        iconPackCatalog = iconPackCatalog, apkDir = directory
+                        iconPackCatalog = iconPackCatalog, apkDir = directory, packIcon = prepared.packIcon,
+                        packIconSource = prepared.packIconSource
                     )
                     val buildContext = currentCoroutineContext()
                     val canBeInstalled = StorageOperationGate.run { builder.canBeInstalled() }
@@ -218,6 +231,7 @@ class IconPackBuildService internal constructor(
     ): ApkInstallOutcome =
         withContext(Dispatchers.Default) {
             try {
+                if (hasForeignCustomTarget(iconPack)) return@withContext occupiedPackageOutcome()
                 val sameSigner = iconPack.uri.path?.let { path ->
                     withContext(Dispatchers.IO) { canUpdateWithSameSigner(context.packageManager, iconPack.packageName, path) }
                 }
@@ -237,6 +251,7 @@ class IconPackBuildService internal constructor(
     ): ApkInstallOutcome =
         withContext(Dispatchers.Default) {
             try {
+                if (hasForeignCustomTarget(iconPack)) return@withContext occupiedPackageOutcome()
                 replaceAfterConflict(
                     uninstall = { ApkUninstaller(context).uninstall(iconPack.packageName) },
                     install = { runInstall(iconPack, resolveInstaller(iconPack, selectionOverride), onRoute) }
@@ -246,6 +261,14 @@ class IconPackBuildService internal constructor(
                 throw error
             }
         }
+
+    private fun hasForeignCustomTarget(iconPack: BuiltIconPack): Boolean =
+        iconPack.packageName != automaticPackPackageName(iconPack.profileId) &&
+            GeneratedPackIdentity.hasForeignInstalledPackage(context, iconPack.packageName)
+
+    private fun occupiedPackageOutcome() = ApkInstallOutcome(
+        ApkInstallResult.BLOCKED, context.getString(R.string.profilePackageOccupied)
+    )
 
     private fun resolveInstaller(
         iconPack: BuiltIconPack,

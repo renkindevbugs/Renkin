@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.icon.creator
 
 import dev.renkinProject.renkin.packages.LoadedApplicationIcon
 import dev.renkinProject.renkin.packages.InstalledIconLoader
+import dev.renkinProject.renkin.apk.GeneratedPackIdentity
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -178,7 +179,7 @@ class IconGenerator(
                 // the pack-wide outline can differ from the no-op defaults, but every icon the
                 // refresh produces (fallback-styled ones included) must carry it.
                 if (primary != null) {
-                    onUpdate(app, primary.render(stageRenderer, retainInput = false).icon, false, sourcePackNameFor(source.primarySource, primaryIconPackApplications))
+                    onUpdate(app, primary.render(stageRenderer, retainInput = false).icon, false, sourcePackNameFor(app, source.primarySource, primaryIconPackApplications))
                 } else {
                     val secondary = generateIcon(
                         app,
@@ -189,12 +190,12 @@ class IconGenerator(
                     )
 
                     if (secondary != null) {
-                        onUpdate(app, secondary.render(stageRenderer, retainInput = false).icon, false, sourcePackNameFor(source.secondarySource, secondaryIconPackApplications))
+                        onUpdate(app, secondary.render(stageRenderer, retainInput = false).icon, false, sourcePackNameFor(app, source.secondarySource, secondaryIconPackApplications))
                     } else {
                         // Neither pack themes this app — give it the primary pack's fallback styling.
-                        // The result isn't a real pack icon, so it carries no source pack.
+                        // Styling is local, but a generated app's own icon still carries its origin.
                         val fallback = generateFallback(app)?.let { applyAdjustments(it) }
-                        onUpdate(app, fallback, fallback != null, "")
+                        onUpdate(app, fallback, fallback != null, sourcePackNameFor(app, Source.APPLICATION_ICON, primaryIconPackApplications))
                     }
                 }
             } catch (e: CancellationException) {
@@ -207,10 +208,12 @@ class IconGenerator(
         }
     }
 
-    // The pack an icon should be credited to: only icon-pack sources count, the others
-    // (app icon, app name) don't come from a pack and so report an empty source.
-    private fun sourcePackNameFor(source: Source, iconPack: IconPackContainer): String =
-        if (source == Source.ICON_PACK) iconPack.iconPackName else ""
+    private fun sourcePackNameFor(app: PackageInfoStruct, source: Source, iconPack: IconPackContainer): String = when {
+        source == Source.ICON_PACK -> iconPack.iconPackName
+        source == Source.APPLICATION_ICON &&
+            GeneratedPackIdentity.isKnownGenerated(app.packageName) -> app.packageName
+        else -> ""
+    }
 
     /**
      * Composites the primary pack's classic fallback styling onto [app]'s own icon so an app

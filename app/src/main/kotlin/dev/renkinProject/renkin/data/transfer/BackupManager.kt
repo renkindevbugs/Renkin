@@ -13,6 +13,8 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.apk.PackKeystore
+import dev.renkinProject.renkin.apk.ProfilePackIdentityException
+import dev.renkinProject.renkin.apk.validateProfilePackIdentity
 import dev.renkinProject.renkin.data.AutoBackupIntervalKey
 import dev.renkinProject.renkin.data.AutoBackupTreeUriKey
 import dev.renkinProject.renkin.data.DbApplication
@@ -834,6 +836,10 @@ class BackupManager(
         commit: suspend (suspend () -> ImportResult) -> ImportResult
     ): ImportResult {
         val data = archive.data
+        val profiles = data.profiles.map { it.profile }
+        profiles.forEach { profile ->
+            validateProfilePackIdentity(context, profile.id, profile.customPackageName, profiles, checkInstalled = false)
+        }
         val uploadsDir = UploadedImageStore.directory(context)
         val inputsDir = IconModifierInputStore.directory(context)
         if (archive.modifierInputs.isNotEmpty() && !inputsDir.isDirectory && !inputsDir.mkdirs()) {
@@ -915,12 +921,20 @@ class BackupManager(
     /** A shared profile always lands as a NEW profile — imports never overwrite anything. */
     private suspend fun importProfile(data: BackupData): ImportResult {
         val bp = data.profiles.firstOrNull() ?: throw IOException("File contains no profile")
+        val existing = packRepo.profiles()
+        val packageName = try {
+            validateProfilePackIdentity(context, null, bp.profile.customPackageName, existing)
+            bp.profile.customPackageName
+        } catch (_: ProfilePackIdentityException) {
+            ""
+        }
         // A numbered suffix keeps repeated imports of the same share tellable apart.
         val name = uniqueProfileName(bp.profile.name, packRepo.profiles().map { it.name }.toSet())
         val newId = packRepo.createProfile(
             // Fresh identity (the id also names the built pack's package) and fresh flags:
             // the icons are saved-but-not-built, and the missing-pack dialog choice is local.
-            bp.profile.copy(id = 0, name = name, hasUnbuiltChanges = true, hideMissingPackWarning = false)
+            bp.profile.copy(id = 0, name = name, hasUnbuiltChanges = true, hideMissingPackWarning = false,
+                customPackageName = packageName)
         )
         packRepo.replaceAll(newId, bp.icons.map { it.copy(profileId = newId) })
         watchRepo.insertRules(bp.watchRules.map { it.toImport(newId) })

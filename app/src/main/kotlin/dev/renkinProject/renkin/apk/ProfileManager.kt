@@ -55,15 +55,24 @@ class ProfileManager internal constructor(
 
     suspend fun profile(id: Long): Profile? = packRepo.profile(id)
 
+    suspend fun nextPackPackageName(): String = automaticPackPackageName(packRepo.nextProfileId())
+
     /** The package name [profileId]'s pack builds under (base pack for the default). */
-    fun packPackageNameFor(profileId: Long): String =
-        if (profileId == DEFAULT_PROFILE_ID) IconPackBuilder.PACKAGE_NAME
-        else "${IconPackBuilder.PACKAGE_NAME}.p$profileId"
+    suspend fun packPackageNameFor(profileId: Long): String =
+        packRepo.profile(profileId)?.effectivePackPackageName() ?: automaticPackPackageName(profileId)
 
     /** Creates a profile and returns its id. */
-    suspend fun createProfile(name: String, description: String, packLabel: String): Long =
+    suspend fun createProfile(
+        name: String, description: String, packLabel: String,
+        customPackageName: String = "", packIcon: String = ""
+    ): Long =
         StorageOperationGate.run {
-            val profile = Profile(name = name, description = description, packLabel = packLabel)
+            validateProfilePackIdentity(context, null, customPackageName, packRepo.profiles())
+            val profile = Profile(
+                name = name, description = description, packLabel = packLabel,
+                customPackageName = customPackageName, packIcon = packIcon,
+                hasUnbuiltChanges = customPackageName.isNotEmpty() || packIcon.isNotEmpty()
+            )
             ProfileStyleAccess.ownerFor(store)?.createProfile(profile) ?: packRepo.createProfile(profile)
         }
 
@@ -71,8 +80,12 @@ class ProfileManager internal constructor(
      * Updates [id]'s user-facing details. The pack label only takes effect on the next build
      * (it's the launcher-visible label baked into the pack APK's manifest).
      */
-    suspend fun updateProfileDetails(id: Long, name: String, description: String, packLabel: String) {
-        packRepo.updateProfileDetails(id, name, description, packLabel)
+    suspend fun updateProfileDetails(
+        id: Long, name: String, description: String, packLabel: String,
+        customPackageName: String? = null, packIcon: String? = null
+    ) {
+        customPackageName?.let { validateProfilePackIdentity(context, id, it, packRepo.profiles()) }
+        packRepo.updateProfileDetails(id, name, description, packLabel, customPackageName, packIcon)
     }
 
     /**

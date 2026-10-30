@@ -2,7 +2,9 @@ package dev.renkinProject.renkin.data
 
 import android.app.Application
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.room.Room
+import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -174,5 +176,40 @@ class RenkinPackRepositoryTest {
         val profile = repo.profile(DEFAULT_PROFILE_ID)!!
         assertEquals("Renamed", profile.name)
         assertEquals("added apps", profile.appTargets)
+    }
+
+    @Test fun staleProfileUpdateKeepsPackIdentityAndItsPendingBuildFlag() = runBlocking {
+        val stale = repo.ensureDefaultProfile()
+        val icon = ProfilePackIconCodec(RuntimeEnvironment.getApplication()).encode(
+            BitmapIconDrawable(Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888)), "pack.profile.only")
+        repo.updateProfileDetails(stale.id, stale.name, stale.description, stale.packLabel,
+            customPackageName = "com.example.dark", packIcon = icon)
+        repo.updateProfile(stale.copy(name = "Renamed", hasUnbuiltChanges = false))
+        val updated = repo.profile(stale.id)!!
+        assertEquals("Renamed", updated.name)
+        assertEquals("com.example.dark", updated.customPackageName)
+        assertEquals(icon, updated.packIcon)
+        assertTrue(updated.hasUnbuiltChanges)
+        assertEquals(setOf("pack.profile.only"), repo.distinctSourcePacks().toSet())
+        assertEquals(setOf("pack.profile.only"), repo.exportSourcePacks(stale.id))
+        assertTrue(repo.exportSourcePacks(excludedProfileId = stale.id).isEmpty())
+
+        repo.updateProfileDetails(updated.id, "Metadata only", "Changed description", updated.packLabel)
+        assertEquals(icon, repo.profile(updated.id)!!.packIcon)
+        assertEquals("com.example.dark", repo.profile(updated.id)!!.customPackageName)
+    }
+
+    @Test fun profileIdPreviewFollowsAutoincrementEvenWhenTheLargestProfileWasDeleted() = runBlocking {
+        repo.ensureDefaultProfile()
+        val last = repo.createProfile(Profile(id = 99, name = "Deleted"))
+        repo.deleteProfile(last)
+        assertEquals(100L, repo.nextProfileId())
+        assertEquals(100L, repo.createProfile(Profile(name = "Next")))
+        assertEquals(101L, repo.nextProfileId())
+    }
+
+    @Test fun invalidPackIconCannotBeInsertedAsAProfile() = runBlocking {
+        assertTrue(runCatching { repo.createProfile(Profile(name = "Broken", packIcon = "not an icon document")) }.isFailure)
+        assertTrue(repo.profiles().none { it.name == "Broken" })
     }
 }

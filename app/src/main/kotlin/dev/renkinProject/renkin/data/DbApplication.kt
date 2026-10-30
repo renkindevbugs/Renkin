@@ -42,7 +42,9 @@ data class Profile(
     // Empty only for unconverted legacy rows; bootstrap fills it before storage becomes ready.
     @ColumnInfo(defaultValue = "") val profileStyle: String = "",
     // Hand-added launcher components (AppTargetCodec JSON). Only updateAppTargets writes it.
-    @ColumnInfo(defaultValue = "") val appTargets: String = ""
+    @ColumnInfo(defaultValue = "") val appTargets: String = "",
+    @ColumnInfo(defaultValue = "") val customPackageName: String = "",
+    @ColumnInfo(defaultValue = "") val packIcon: String = ""
 )
 
 @Entity(primaryKeys = ["packageName", "activityName", "profileId"])
@@ -320,8 +322,8 @@ interface ProfileDao {
     @Query("UPDATE Profile SET appTargets = :targets WHERE id = :id")
     fun updateAppTargets(id: Long, targets: String): Int
 
-    @Query("UPDATE Profile SET name = :name, description = :description, packLabel = :packLabel WHERE id = :id")
-    fun updateDetails(id: Long, name: String, description: String, packLabel: String): Int
+    @Query("UPDATE Profile SET name = :name, description = :description, packLabel = :packLabel, customPackageName = :customPackageName, packIcon = :packIcon, hasUnbuiltChanges = :unbuilt WHERE id = :id")
+    fun updateDetails(id: Long, name: String, description: String, packLabel: String, customPackageName: String, packIcon: String, unbuilt: Boolean): Int
 
     @Query("UPDATE Profile SET hasUnbuiltChanges = :unbuilt WHERE id = :id")
     fun setUnbuilt(id: Long, unbuilt: Boolean): Int
@@ -388,7 +390,7 @@ interface ProfileDao {
         BuiltIcon::class,
         ModifierPreset::class
     ],
-    version = 22
+    version = 23
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -642,6 +644,13 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE Profile ADD COLUMN customPackageName TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE Profile ADD COLUMN packIcon TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -663,7 +672,8 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_18_19,
             MIGRATION_19_20,
             MIGRATION_20_21,
-            MIGRATION_21_22
+            MIGRATION_21_22,
+            MIGRATION_22_23
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {

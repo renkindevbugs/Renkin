@@ -2,12 +2,8 @@ package dev.renkinProject.renkin.feature.profiles
 
 import dev.renkinProject.renkin.ui.DialogSplitActions
 import dev.renkinProject.renkin.ui.DialogSecondaryAction
-import dev.renkinProject.renkin.ui.DialogPrimaryAction
 import dev.renkinProject.renkin.ui.DialogBadge
 import dev.renkinProject.renkin.ui.MessageDialog
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -15,7 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -33,9 +28,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -53,12 +46,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.apk.automaticPackPackageName
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.ConfirmDialog
 import dev.renkinProject.renkin.ui.IconPackStudioExportWarningDialog
 import dev.renkinProject.renkin.ui.IconPackStudioWarningTarget
 import dev.renkinProject.renkin.ui.ProfileShareWarningDialog
-import dev.renkinProject.renkin.ui.RenkinAlertDialog
 import dev.renkinProject.renkin.ui.boldStringResource
 import dev.renkinProject.renkin.ui.getPreferences
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
@@ -68,21 +61,15 @@ import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import kotlinx.coroutines.launch
 
-// Input caps: the profile name doubles as the top-bar title and the pack label ends up as the
-// launcher-visible app name of the built pack — unbounded text breaks both layouts.
-private const val MAX_PROFILE_NAME = 24
-private const val MAX_PROFILE_DESCRIPTION = 60
-private const val MAX_PACK_LABEL = 30
-
 /**
  * The top-bar title as a profile switcher: shows the active profile's name (the default profile
  * shows the app name) and opens a dropdown with every profile plus "Create new profile". Each
- * profile is its own icon set + preferences + built pack; the default one can't be deleted or
- * edited (its identity is the app itself), every other one gets edit + delete actions.
+ * profile is its own icon set + preferences + built pack; the default one can't be deleted.
  */
 @Composable
 fun ProfileSwitcherTitle() {
     val viewModel: MainViewModel = hiltViewModel()
+    val detailsViewModel: ProfileDetailsViewModel = hiltViewModel()
     val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val activeId = runtimeState.activeProfileId
@@ -91,16 +78,13 @@ fun ProfileSwitcherTitle() {
     var menuOpen by remember { mutableStateOf(false) }
     var actionsFor by remember { mutableStateOf<Profile?>(null) }
     var createOpen by rememberSaveable { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<Profile?>(null) }
+    var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val editing = profiles.find { it.id == editingId }
     var pendingDelete by remember { mutableStateOf<Profile?>(null) }
     // Switch target (or create request) held while the save-before-switch prompt is up.
     var pendingSwitch by rememberSaveable { mutableStateOf<Long?>(null) }
-    // The create form remains composed behind the prompt. Save its primitive request fields too,
-    // so recreation restores the same prompt without trying to save a domain object or Triple.
+    // The retained form owns the submitted artwork while this prompt is open, never a Bundle.
     var pendingCreate by rememberSaveable { mutableStateOf(false) }
-    var pendingCreateName by rememberSaveable { mutableStateOf("") }
-    var pendingCreateDescription by rememberSaveable { mutableStateOf("") }
-    var pendingCreatePackLabel by rememberSaveable { mutableStateOf("") }
     // Unsaved icons die with the process, so a prompt restored into a new one asks about nothing.
     var pendingPromptProcess by rememberSaveable { mutableStateOf<String?>(null) }
     val currentProcess = runtimeState.sessionToken.providerInstanceId
@@ -195,7 +179,7 @@ fun ProfileSwitcherTitle() {
                     onEdit = {
                         actionsFor = null
                         menuOpen = false
-                        editing = actionProfile
+                        editingId = actionProfile.id
                     },
                     onDelete = {
                         actionsFor = null
@@ -283,29 +267,41 @@ fun ProfileSwitcherTitle() {
         ProfileDetailsDialog(
             title = stringResource(R.string.createProfileTitle),
             confirmLabel = stringResource(R.string.createProfileAction),
-            onConfirm = { name, description, packLabel ->
+            onConfirm = { name, description, packLabel, customPackageName, packIcon ->
                 // The save prompt stacks ON the form instead of replacing it: cancelling the
                 // prompt then returns to the details the user already typed, rather than an
                 // empty dialog they have to fill in again.
                 if (viewModel.hasUnsavedChanges()) {
-                    pendingCreateName = name
-                    pendingCreateDescription = description
-                    pendingCreatePackLabel = packLabel
+                    detailsViewModel.pendingSubmission = ProfileDetailsSubmission(
+                        name, description, packLabel, customPackageName, packIcon
+                    )
                     pendingPromptProcess = currentProcess
                     pendingCreate = true
                 } else {
-                    createOpen = false
-                    viewModel.createProfile(name, description, packLabel)
+                    viewModel.createProfile(name, description, packLabel,
+                        customPackageName = customPackageName, packIcon = packIcon)
                 }
             },
             onDismiss = { createOpen = false }
         )
     }
 
+    val createdDetailsId = viewModel.createdProfileDetailsId
+    LaunchedEffect(createdDetailsId) {
+        if (createdDetailsId == null) return@LaunchedEffect
+        createOpen = false
+        pendingCreate = false
+        detailsViewModel.discard()
+        viewModel.consumeCreatedProfileDetails()
+    }
+
     val savedDetailsId = viewModel.savedProfileDetailsId
     LaunchedEffect(savedDetailsId) {
         if (savedDetailsId == null) return@LaunchedEffect
-        if (editing?.id == savedDetailsId) editing = null
+        if (editingId == savedDetailsId) {
+            editingId = null
+            detailsViewModel.discard()
+        }
         viewModel.consumeSavedProfileDetails()
     }
     editing?.let { profile ->
@@ -315,10 +311,13 @@ fun ProfileSwitcherTitle() {
             initialName = profile.name,
             initialDescription = profile.description,
             initialPackLabel = profile.packLabel,
-            onConfirm = { name, description, packLabel ->
-                viewModel.updateProfileDetails(profile.id, name, description, packLabel)
+            initialCustomPackageName = profile.customPackageName,
+            initialPackIcon = profile.packIcon,
+            automaticPackageName = automaticPackPackageName(profile.id),
+            onConfirm = { name, description, packLabel, customPackageName, packIcon ->
+                viewModel.updateProfileDetails(profile.id, name, description, packLabel, customPackageName, packIcon)
             },
-            onDismiss = { editing = null }
+            onDismiss = { editingId = null }
         )
     }
 
@@ -331,27 +330,20 @@ fun ProfileSwitcherTitle() {
                 val saveFirst = viewModel.hasUnsavedChanges()
                 pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = saveFirst) }
                 if (pendingCreate) {
-                    viewModel.createProfile(
-                        pendingCreateName,
-                        pendingCreateDescription,
-                        pendingCreatePackLabel,
-                        saveFirst = saveFirst
-                    )
-                    // The form did its job — close it only once the profile is on its way.
-                    createOpen = false
+                    detailsViewModel.pendingSubmission?.let { details ->
+                        viewModel.createProfile(details.name, details.description, details.packLabel,
+                            saveFirst = saveFirst, customPackageName = details.customPackageName, packIcon = details.packIcon)
+                    }
                 }
                 pendingSwitch = null; pendingCreate = false
             },
             onDiscard = {
                 pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = false) }
                 if (pendingCreate) {
-                    viewModel.createProfile(
-                        pendingCreateName,
-                        pendingCreateDescription,
-                        pendingCreatePackLabel,
-                        saveFirst = false
-                    )
-                    createOpen = false
+                    detailsViewModel.pendingSubmission?.let { details ->
+                        viewModel.createProfile(details.name, details.description, details.packLabel,
+                            saveFirst = false, customPackageName = details.customPackageName, packIcon = details.packIcon)
+                    }
                 }
                 pendingSwitch = null; pendingCreate = false
             },
@@ -435,14 +427,14 @@ internal fun ProfileActionsMenu(
         enabled = shareEnabled,
         onClick = onShare
     )
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.editProfile)) },
+        leadingIcon = {
+            Icon(Icons.Filled.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        },
+        onClick = onEdit
+    )
     if (profile.id != DEFAULT_PROFILE_ID) {
-        DropdownMenuItem(
-            text = { Text(stringResource(R.string.editProfile)) },
-            leadingIcon = {
-                Icon(Icons.Filled.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            },
-            onClick = onEdit
-        )
         DropdownMenuItem(
             text = { Text(stringResource(R.string.deleteProfile), color = MaterialTheme.colorScheme.error) },
             leadingIcon = {
@@ -450,72 +442,6 @@ internal fun ProfileActionsMenu(
             },
             onClick = onDelete
         )
-    }
-}
-
-/**
- * Shared create/edit form: name + optional description + the launcher label of the profile's
- * built pack. Name and pack label are required (the label is what the launcher lists the pack
- * under — an empty one would install an unnamed pack); all fields are length-capped because
- * the name becomes the top-bar title and the label the pack's launcher name.
- */
-@Composable
-internal fun ProfileDetailsDialog(
-    title: String,
-    confirmLabel: String,
-    onConfirm: (name: String, description: String, packLabel: String) -> Unit,
-    onDismiss: () -> Unit,
-    initialName: String = "",
-    initialDescription: String = "",
-    initialPackLabel: String = ""
-) {
-    var name by rememberSaveable { mutableStateOf(initialName) }
-    var description by rememberSaveable { mutableStateOf(initialDescription) }
-    var packLabel by rememberSaveable { mutableStateOf(initialPackLabel) }
-    val editing = initialName.isNotEmpty()
-
-    MessageDialog(
-        onDismissRequest = onDismiss,
-        badge = { DialogBadge(if (editing) Icons.Filled.Edit else Icons.Filled.PersonAdd) },
-        title = title,
-        actions = {
-            DialogPrimaryAction(
-                confirmLabel,
-                onClick = { onConfirm(name.trim(), description.trim(), packLabel.trim()) },
-                enabled = name.isNotBlank() && packLabel.isNotBlank()
-            )
-            DialogSecondaryAction(stringResource(R.string.dismiss), onDismiss)
-        }
-    ) {
-        Column(Modifier.padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it.take(MAX_PROFILE_NAME) },
-                label = { Text(stringResource(R.string.profileName) + " *") },
-                supportingText = if (name.isBlank()) {
-                    { Text(stringResource(R.string.requiredField)) }
-                } else null,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = description,
-                onValueChange = { description = it.take(MAX_PROFILE_DESCRIPTION) },
-                label = { Text(stringResource(R.string.profileDescription)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = packLabel,
-                onValueChange = { packLabel = it.take(MAX_PACK_LABEL) },
-                label = { Text(stringResource(R.string.profilePackLabel) + " *") },
-                supportingText = {
-                    Text(stringResource(if (packLabel.isBlank()) R.string.requiredField else R.string.profilePackLabelHint))
-                },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
     }
 }
 

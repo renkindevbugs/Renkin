@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.data.transfer
 import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.Profile
+import dev.renkinProject.renkin.data.ProfilePackIconCodec
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
 import dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe
@@ -143,6 +144,8 @@ object BackupCodec {
                 .put("name", bp.profile.name)
                 .put("description", bp.profile.description)
                 .put("packLabel", bp.profile.packLabel)
+                .put("customPackageName", bp.profile.customPackageName)
+                .put("packIcon", ProfilePackIconCodec.normalize(bp.profile.packIcon))
                 .put("prefsSnapshot", bp.profile.prefsSnapshot)
                 .put("hasUnbuiltChanges", bp.profile.hasUnbuiltChanges)
                 .put("hideMissingPackWarning", bp.profile.hideMissingPackWarning)
@@ -344,7 +347,9 @@ object BackupCodec {
                 hasUnbuiltChanges = p.optBoolean("hasUnbuiltChanges"),
                 hideMissingPackWarning = p.optBoolean("hideMissingPackWarning"),
                 profileStyle = ProfileStyleBackup.readDocument(p, formatVersion),
-                appTargets = AppTargetCodec.normalize(p.optString("appTargets"))
+                appTargets = AppTargetCodec.normalize(p.optString("appTargets")),
+                customPackageName = p.optString("customPackageName"),
+                packIcon = ProfilePackIconCodec.normalize(p.optString("packIcon"))
             )
 
             val icons = mutableListOf<DbApplication>()

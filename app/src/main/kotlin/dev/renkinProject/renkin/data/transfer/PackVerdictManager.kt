@@ -62,7 +62,7 @@ class PackVerdictManager(
 
     /** Of [packs], those whose stored icons must stay locked on this device right now. */
     suspend fun lockedPacksAmong(packs: Set<String>): Set<String> = withContext(Dispatchers.Default) {
-        val candidates = packs.filter { it.isNotEmpty() && !IconPackBuilder.isOwnPack(it) }
+        val candidates = packs.filter { it.isNotEmpty() && !IconPackBuilder.isLegacyOwnPack(it) }
         if (candidates.isEmpty()) return@withContext emptySet()
         val verdicts = repo.verdicts(candidates)
         candidates.filter { pack ->
@@ -90,7 +90,7 @@ class PackVerdictManager(
      */
     suspend fun verifyPendingVerdicts(): Boolean = withContext(Dispatchers.Default) {
         val packs = repo.distinctSourcePacks().toSet()
-            .filter { it.isNotEmpty() && !IconPackBuilder.isOwnPack(it) }
+            .filter { it.isNotEmpty() && !IconPackBuilder.isLegacyOwnPack(it) }
         if (packs.isEmpty()) return@withContext false
         val before = repo.verdicts(packs)
         val undecidedBefore = packs.filter {
@@ -108,7 +108,7 @@ class PackVerdictManager(
      * set is a hint for callers that want to warn about install-required packs.
      */
     suspend fun ensureVerdicts(packs: Set<String>): Set<String> = withContext(Dispatchers.Default) {
-        val candidates = packs.filter { it.isNotEmpty() && !IconPackBuilder.isOwnPack(it) }
+        val candidates = packs.filter { it.isNotEmpty() && !IconPackBuilder.isLegacyOwnPack(it) }
         if (candidates.isEmpty()) return@withContext emptySet()
         val verdicts = repo.verdicts(candidates).toMutableMap()
         val now = System.currentTimeMillis()

@@ -48,6 +48,8 @@ import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
+import dev.renkinProject.renkin.apk.ProfilePackIdentityException
+import dev.renkinProject.renkin.apk.ProfilePackIdentityError
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.AppFilterNoIconKey
@@ -278,6 +280,13 @@ class MainViewModel @Inject constructor(
             suspend fun execute() {
                 try {
                     operation(expected)
+                } catch (error: ProfilePackIdentityException) {
+                    _toastEvents.trySend(when (error.reason) {
+                        ProfilePackIdentityError.INVALID_PACKAGE -> R.string.profilePackageInvalid
+                        ProfilePackIdentityError.RESERVED_PACKAGE -> R.string.profilePackageReserved
+                        ProfilePackIdentityError.PROFILE_COLLISION -> R.string.profilePackageProfileCollision
+                        ProfilePackIdentityError.INSTALLED_COLLISION -> R.string.profilePackageInstalledCollision
+                    })
                 } catch (error: ProfileSessionChangedException) {
                     _toastEvents.trySend(error.userMessage())
                 } catch (error: ProfileOperationBusyException) {
@@ -881,7 +890,8 @@ class MainViewModel @Inject constructor(
         if (snapshot.rule.rule.profileId != expected.profileId || !snapshot.rule.rule.completed ||
             candidate !in snapshot.candidates || candidate.suggestionId != suggestion.id ||
             app.key != suggestion.packageName + "/" + suggestion.activityName ||
-            IconPackBuilder.isOwnPack(candidate.iconPackPackage) || !appProvider.isCurrentSession(expected)) return false
+            IconPackBuilder.isOwnPack(candidate.iconPackPackage) ||
+            !appProvider.isCurrentSession(expected)) return false
         return watchApplyOwner.submit(WatchApplyRequest(++nextWatchApply, expected, snapshot, candidate, app, icon))
     }
 
@@ -1208,6 +1218,15 @@ class MainViewModel @Inject constructor(
     /** All profiles for the switcher (default first). */
     val profiles = appProvider.profilesFlow()
 
+    suspend fun nextProfilePackPackageName(): String? = try {
+        appProvider.nextProfilePackPackageName()
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        Log.error("MainViewModel", "Could not read the next profile package name", error)
+        null
+    }
+
     /** Action-time snapshot only; composables collect [runtimeState]. */
     val activeProfileId: Long get() = appProvider.activeProfileId
 
@@ -1316,15 +1335,31 @@ class MainViewModel @Inject constructor(
     }
 
     /** Creates a profile and switches straight to it, optionally saving the current one first. */
-    fun createProfile(name: String, description: String, packLabel: String, saveFirst: Boolean = false) {
-        launchVisibleProfileOperation(
-            if (saveFirst) R.string.profileSaveAndSwitchInProgress else R.string.profileSwitchInProgress,
-            serialize = false
-        ) {
-            baselineRefreshJob?.cancel()
-            performSwitch(appProvider.createProfile(name, description, packLabel), saveFirst)
+    fun createProfile(
+        name: String, description: String, packLabel: String, saveFirst: Boolean = false,
+        customPackageName: String = "", packIcon: String = ""
+    ) {
+        if (profileDetailsSaving) return
+        profileDetailsSaving = true
+        launchProfileOperation(serialize = false) {
+            try {
+                val id = appProvider.createProfile(name, description, packLabel, customPackageName.trim(), packIcon)
+                createdProfileDetailsId = id
+                baselineRefreshJob?.cancel()
+                performSwitch(id, saveFirst)
+            } finally {
+                profileDetailsSaving = false
+            }
         }
     }
+
+    var profileDetailsSaving by mutableStateOf(false)
+        private set
+
+    var createdProfileDetailsId by mutableStateOf<Long?>(null)
+        private set
+
+    fun consumeCreatedProfileDetails() { createdProfileDetailsId = null }
 
     // The edit dialog stays open (keeping the typed text) until this names its profile, so a failed
     // write can be retried instead of being lost behind an already closed dialog.
@@ -1334,11 +1369,20 @@ class MainViewModel @Inject constructor(
     fun consumeSavedProfileDetails() { savedProfileDetailsId = null }
 
     /** Updates a profile's user-facing details (name, description, built-pack label). */
-    fun updateProfileDetails(id: Long, name: String, description: String, packLabel: String) {
-        launchUserAction(R.string.profileOperationFailed) {
-            appProvider.updateProfileDetails(id, name, description, packLabel)
-            savedProfileDetailsId = id
-            _toastEvents.trySend(R.string.profileUpdated)
+    fun updateProfileDetails(
+        id: Long, name: String, description: String, packLabel: String,
+        customPackageName: String? = null, packIcon: String? = null
+    ) {
+        if (profileDetailsSaving) return
+        profileDetailsSaving = true
+        launchProfileOperation {
+            try {
+                appProvider.updateProfileDetails(id, name, description, packLabel, customPackageName?.trim(), packIcon)
+                savedProfileDetailsId = id
+                _toastEvents.trySend(R.string.profileUpdated)
+            } finally {
+                profileDetailsSaving = false
+            }
         }
     }
 

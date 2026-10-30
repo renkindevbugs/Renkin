@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.apk
 
 import android.content.Context
+import dev.renkinProject.renkin.data.readUtf8TextLimited
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import org.json.JSONObject
 
@@ -14,25 +15,35 @@ import org.json.JSONObject
  */
 object PackProvenance {
     const val ASSET_NAME = "renkin_sources.json"
+    private const val MAX_PROVENANCE_BYTES = 4 * 1024 * 1024
 
     /**
      * The [ASSET_NAME] content for the apps being built. Only real foreign-pack sources are
      * recorded — uploads, text icons and hand-edited vectors are Renkin's own output, and an
      * (untranslated legacy) own-pack source can't attest a genuine origin.
      */
-    fun encode(apps: List<PackageInfoStruct>): String {
+    fun encode(
+        apps: List<PackageInfoStruct>,
+        appIconComponent: String? = null,
+        appIconSource: String? = null
+    ): String {
         val json = JSONObject()
         for (app in apps) {
             val source = app.sourcePackName
-            if (app.createdIcon != null && !source.isNullOrEmpty() && !IconPackBuilder.isOwnPack(source)) {
+            if (app.createdIcon != null && !source.isNullOrEmpty() && !IconPackBuilder.isLegacyOwnPack(source)) {
                 json.put(app.key, source)
             }
+        }
+        if (!appIconComponent.isNullOrEmpty() && !appIconSource.isNullOrEmpty() &&
+            !IconPackBuilder.isLegacyOwnPack(appIconSource)) {
+            json.put(appIconComponent, appIconSource)
         }
         return json.toString()
     }
 
     /** Parses [ASSET_NAME] content. Tolerant: a broken file reads as "no provenance". */
     fun parse(json: String): Map<String, String> = runCatching {
+        require(json.length <= MAX_PROVENANCE_BYTES)
         val parsed = JSONObject(json)
         buildMap {
             for (key in parsed.keys()) put(key, parsed.getString(key))
@@ -42,6 +53,6 @@ object PackProvenance {
     /** Reads the provenance an installed Renkin-built pack carries (empty for foreign packs). */
     fun read(context: Context, packPackage: String): Map<String, String> = runCatching {
         context.createPackageContext(packPackage, 0).assets.open(ASSET_NAME)
-            .bufferedReader().use { it.readText() }
+            .use { it.readUtf8TextLimited(MAX_PROVENANCE_BYTES) ?: error("Pack provenance is too large") }
     }.map { parse(it) }.getOrDefault(emptyMap())
 }
