@@ -730,9 +730,12 @@ unit tests across 149 suites and `assembleDebug` pass. The full suite uses the l
 C2 workaround described below; project runtime settings are unchanged.
 
 Launch fire (`feature/launch`): MainActivity uses `Theme.Renkin.Starting` (core-splashscreen,
-`@color/launch_plum` with the static gold symbol — the monochrome launcher glyph tinted
-`@color/launch_gold`). Measured on device, the first app frame comes ~1.2 s after the tap, so that
-static symbol is what the user sees until then. The exit listener only calls `remove()` at once: the
+`@color/launch_plum` with the static gold symbol `drawable/launch_splash_symbol`, a VectorDrawable of
+exact circles plus a hand-finished flame spike — PNG glyphs showed pixels on hdpi tablets at 288 dp). Measured on
+device, the first app frame comes ~1.2 s after the tap, so that static symbol is what the user sees
+until then (an adb-installed debug APK skips install-time verification and takes ~4.6 s on a 2019
+Tab A; `cmd package compile -m verify` brings it to ~1.4 s, as a normal install does). The overlay
+draws the same vector for the outline and tints it with a low-resolution colour field (`SrcAtop`). The exit listener only calls `remove()` at once: the
 default exit fade let plum show through and dimmed the symbol for a frame (Morphe Manager reverted a
 *custom, long* exit animation because it covered the app; an immediate remove has no such window).
 `LaunchFireOverlay` draws above the startup shell, redraws the symbol at the 288 dp splash-icon
@@ -742,7 +745,9 @@ composes only once the fire has settled (`launchFireSettled`): its ~550 ms first
 the fire mid-burn on device. The fade then waits for smooth frames. `MainViewModel` owns the
 decision (`LaunchFireGate`): full fire once per process, fade-only on a new Activity or process
 restore, nothing when the animator duration scale is 0. The mask loads on Dispatchers.IO because
-startup work saturates Default. Recovery screens end it; the crash dialog waits for it. Timeline,
+startup work saturates Default. On Android 12+ the splash icon is a no-op animated vector
+(`drawable-v31/launch_splash_live`): the system rasterised the static vector into a soft bitmap.
+Recovery screens end it; the crash dialog waits for it. Timeline,
 mask and particle engine are pure Kotlin ported from `reports/fire-splash/fire-splash-mockup.html`.
 
 Debug `ProfilePerformance` logs report ViewModel/gate waits, input preparation, encoding, Room

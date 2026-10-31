@@ -88,8 +88,6 @@ internal fun buildLaunchFireMask(argb: IntArray, sourceWidth: Int, sourceHeight:
         val nx = x.toFloat() / width
         val ny = y.toFloat() / height
         coverage[i] = gold[(y + top) * sourceWidth + x + left]
-        // Empty pixels are never painted; skipping their noise keeps the load off the launch path.
-        if (coverage[i] < 0.01f) continue
         val burn = hypot(nx - SPIKE_TIP_X, ny - SPIKE_TIP_Y) * 0.8f + fractalNoise(nx * 5.5f, ny * 5.5f) * 0.2f
         burnTime[i] = burn
         if (coverage[i] > 0.05f) {

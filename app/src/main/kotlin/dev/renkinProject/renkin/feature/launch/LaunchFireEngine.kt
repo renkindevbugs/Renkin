@@ -35,16 +35,14 @@ internal class LaunchFireEngine(private val mask: LaunchFireMask, val capacity: 
     var count = 0
         private set
 
-    /** Symbol pixels as non-premultiplied ARGB, [LaunchFireMask.width] wide. */
+    /** Colour of the symbol's metal as opaque ARGB, [LaunchFireMask.width] wide. */
     val pixels = IntArray(mask.width * mask.height)
 
-    private val covered = mask.coverage.indices.filter { mask.coverage[it] >= 0.01f }.toIntArray()
-    private val restingArgb = IntArray(covered.size) {
-        argb(mask.coverage[covered[it]], LaunchGold.red * 255f, LaunchGold.green * 255f, LaunchGold.blue * 255f)
-    }
-    private val finishArgb = IntArray(covered.size) {
-        val i = covered[it]
-        argb(mask.coverage[i], mask.finishRed[i], mask.finishGreen[i], mask.finishBlue[i])
+    // An opaque colour field over the whole crop: the vector symbol gives the shape and its sharp
+    // edges, so these pixels only need smooth colour, never coverage.
+    private val restingGold = argb(1f, LaunchGold.red * 255f, LaunchGold.green * 255f, LaunchGold.blue * 255f)
+    private val finishArgb = IntArray(pixels.size) {
+        argb(1f, mask.finishRed[it], mask.finishGreen[it], mask.finishBlue[it])
     }
 
     var elapsedMs = 0f
@@ -173,13 +171,12 @@ internal class LaunchFireEngine(private val mask: LaunchFireMask, val capacity: 
         val sheenActive = sheen > -0.2f && sheen < 1.2f
         val width = mask.width
         val height = mask.height
-        // Only the stroke pixels change; unreached and fully cooled ones take precomputed colours,
-        // so the per-pixel maths runs just for the hot band and the sheen.
-        for (n in covered.indices) {
-            val i = covered[n]
+        // Unreached and fully cooled pixels take precomputed colours, so the per-pixel maths runs
+        // just for the hot band and the sheen.
+        for (i in pixels.indices) {
             val reached = front - mask.burnTime[i]
             if (reached <= -PREHEAT_SPAN) {
-                pixels[i] = restingArgb[n]
+                pixels[i] = restingGold
                 continue
             }
             if (reached < 0f) {
@@ -187,7 +184,7 @@ internal class LaunchFireEngine(private val mask: LaunchFireMask, val capacity: 
                 // the metal rather than replacing it.
                 val warmth = (1f + reached / PREHEAT_SPAN).let { it * it } * 0.6f
                 pixels[i] = argb(
-                    mask.coverage[i],
+                    1f,
                     mix(LaunchGold.red * 255f, HotMetal.red(0.45f), warmth),
                     mix(LaunchGold.green * 255f, HotMetal.green(0.45f), warmth),
                     mix(LaunchGold.blue * 255f, HotMetal.blue(0.45f), warmth)
@@ -200,7 +197,7 @@ internal class LaunchFireEngine(private val mask: LaunchFireMask, val capacity: 
                 if (offset > SHEEN_REACH || offset < -SHEEN_REACH) 0f else exp(-(offset * offset) / 0.004f)
             } else 0f
             if (cooling >= 1f && shine == 0f) {
-                pixels[i] = finishArgb[n]
+                pixels[i] = finishArgb[i]
                 continue
             }
             val hot = clamp01(cooling)
@@ -211,7 +208,7 @@ internal class LaunchFireEngine(private val mask: LaunchFireMask, val capacity: 
             red += (255f - red) * shine * 0.65f
             green += (255f - green) * shine * 0.65f
             blue += (235f - blue) * shine * 0.5f
-            pixels[i] = argb(mask.coverage[i], red, green, blue)
+            pixels[i] = argb(1f, red, green, blue)
         }
         return true
     }

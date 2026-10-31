@@ -23,13 +23,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.VectorPainter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -109,7 +115,7 @@ fun LaunchFireOverlay(
     val symbolBitmap = remember(mask) { mask?.let { Bitmap.createBitmap(it.width, it.height, Bitmap.Config.ARGB_8888) } }
     val symbolImage = remember(symbolBitmap) { symbolBitmap?.asImageBitmap() }
     val sprites = remember { FireSprites() }
-    val splashSymbol = ImageBitmap.imageResource(R.mipmap.ic_launcher_monochrome)
+    val symbolShape = rememberVectorPainter(ImageVector.vectorResource(R.drawable.launch_splash_symbol))
 
     Canvas(
         modifier
@@ -120,13 +126,14 @@ fun LaunchFireOverlay(
         drawRect(LaunchPlum)
         // Reading the simulated time subscribes this draw to every simulation step.
         if (simulatedMs < 0f || engine == null || mask == null || symbolBitmap == null || symbolImage == null) {
-            drawSplashSymbol(splashSymbol)
+            val splashIcon = SplashIconSize.toPx()
+            drawSymbolShape(symbolShape, (size.width - splashIcon) / 2f, (size.height - splashIcon) / 2f, splashIcon)
             return@Canvas
         }
         if (engine.paintSymbol()) {
             symbolBitmap.setPixels(engine.pixels, 0, mask.width, 0, 0, mask.width, mask.height)
         }
-        drawFire(engine, mask, symbolImage, sprites)
+        drawFire(engine, mask, symbolImage, symbolShape, sprites)
     }
 }
 
@@ -148,19 +155,20 @@ private suspend fun awaitSmoothFrames() {
     }
 }
 
-/** The launch window's icon, redrawn in place while the mask loads or during a fade-only start. */
-private fun DrawScope.drawSplashSymbol(symbol: ImageBitmap) {
-    val splashIcon = SplashIconSize.toPx()
-    drawImage(
-        symbol,
-        dstOffset = IntOffset(((size.width - splashIcon) / 2f).roundToInt(), ((size.height - splashIcon) / 2f).roundToInt()),
-        dstSize = IntSize(splashIcon.roundToInt(), splashIcon.roundToInt()),
-        colorFilter = ColorFilter.tint(LaunchGold),
-        filterQuality = FilterQuality.Medium
-    )
+/** The vector symbol (the splash icon's drawable) over a square launcher-layer area. */
+private fun DrawScope.drawSymbolShape(shape: VectorPainter, layerLeft: Float, layerTop: Float, layerSize: Float) {
+    translate(layerLeft, layerTop) {
+        with(shape) { draw(Size(layerSize, layerSize)) }
+    }
 }
 
-private fun DrawScope.drawFire(engine: LaunchFireEngine, mask: LaunchFireMask, symbol: ImageBitmap, sprites: FireSprites) {
+private fun DrawScope.drawFire(
+    engine: LaunchFireEngine,
+    mask: LaunchFireMask,
+    colors: ImageBitmap,
+    shape: VectorPainter,
+    sprites: FireSprites
+) {
     val p = engine.progress
     val splashIcon = SplashIconSize.toPx()
     val splashScale = splashIcon / mask.sourceSize
@@ -191,12 +199,20 @@ private fun DrawScope.drawFire(engine: LaunchFireEngine, mask: LaunchFireMask, s
         )
     }
 
-    drawImage(
-        symbol,
-        dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
-        dstSize = IntSize(symbolWidth.roundToInt(), symbolHeight.roundToInt()),
-        filterQuality = FilterQuality.Medium
-    )
+    // The vector gives the sharp outline; the low-resolution colour field only tints it (SrcAtop),
+    // so upscaling it never shows pixels on the edges.
+    drawIntoCanvas { canvas ->
+        canvas.saveLayer(Rect(left, top, left + symbolWidth, top + symbolHeight), androidx.compose.ui.graphics.Paint())
+        drawSymbolShape(shape, left - mask.cropLeft * toScreen, top - mask.cropTop * toScreen, mask.sourceSize * toScreen)
+        drawImage(
+            colors,
+            dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
+            dstSize = IntSize(symbolWidth.roundToInt(), symbolHeight.roundToInt()),
+            blendMode = BlendMode.SrcAtop,
+            filterQuality = FilterQuality.Medium
+        )
+        canvas.restore()
+    }
 
     for (i in 0 until engine.count) {
         val age = engine.ageFraction(i)
