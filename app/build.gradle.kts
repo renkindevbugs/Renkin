@@ -23,7 +23,12 @@ val sourceRevision = revisionOverride.orElse(
 require(sourceRevision.matches(Regex("[A-Za-z0-9._-]+"))) { "Invalid renkin.revision" }
 val sourceDirty = if (revisionOverride.isPresent) false else providers.exec {
     workingDir(rootDir)
-    commandLine("git", "status", "--porcelain", "--untracked-files=no", "--ignore-submodules=untracked")
+    // fdroidserver strips the signingConfigs block from this file before every build, so an edit
+    // here must not mark an otherwise clean F-Droid checkout as dirty.
+    commandLine(
+        "git", "status", "--porcelain", "--untracked-files=no", "--ignore-submodules=untracked",
+        "--", ".", ":(exclude)app/build.gradle.kts"
+    )
     isIgnoreExitValue = true
 }.standardOutput.asText.map { it.isNotBlank() }.get()
 val buildRevision = sourceRevision + if (sourceDirty) "-dirty" else ""
