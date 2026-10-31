@@ -59,9 +59,10 @@ internal suspend fun installOrReportConflict(
 
 internal suspend fun replaceAfterConflict(
     uninstall: suspend () -> Boolean,
-    install: suspend () -> ApkInstallOutcome
+    install: suspend () -> ApkInstallOutcome,
+    uninstallFailed: () -> ApkInstallOutcome = { ApkInstallOutcome(ApkInstallResult.ABORTED) }
 ): ApkInstallOutcome =
-    if (uninstall()) install() else ApkInstallOutcome(ApkInstallResult.ABORTED)
+    if (uninstall()) install() else uninstallFailed()
 
 internal fun excludeLockedSources(
     profileApps: List<PackageInfoStruct>,
@@ -253,8 +254,14 @@ class IconPackBuildService internal constructor(
             try {
                 if (hasForeignCustomTarget(iconPack)) return@withContext occupiedPackageOutcome()
                 replaceAfterConflict(
-                    uninstall = { ApkUninstaller(context).uninstall(iconPack.packageName) },
-                    install = { runInstall(iconPack, resolveInstaller(iconPack, selectionOverride), onRoute) }
+                    uninstall = { ApkUninstaller(context).uninstall(iconPack.packageName, allUsers = true) },
+                    install = { runInstall(iconPack, resolveInstaller(iconPack, selectionOverride), onRoute) },
+                    // A pack this app cannot see was not cancelled by the user: Android keeps a record
+                    // of it that only an all-users uninstall (Shizuku or adb) removes.
+                    uninstallFailed = {
+                        if (iconPackCatalog.packageInfo(iconPack.packageName) != null) ApkInstallOutcome(ApkInstallResult.ABORTED)
+                        else unseenPackRecordOutcome(iconPack.packageName)
+                    }
                 )
             } catch (error: Throwable) {
                 withContext(NonCancellable) { releaseArtifacts(iconPack, completed = false) }
@@ -265,6 +272,10 @@ class IconPackBuildService internal constructor(
     private fun hasForeignCustomTarget(iconPack: BuiltIconPack): Boolean =
         iconPack.packageName != automaticPackPackageName(iconPack.profileId) &&
             GeneratedPackIdentity.hasForeignInstalledPackage(context, iconPack.packageName)
+
+    private fun unseenPackRecordOutcome(packageName: String) = ApkInstallOutcome(
+        ApkInstallResult.FAILED, context.getString(R.string.packRecordBlocksReplace, packageName)
+    )
 
     private fun occupiedPackageOutcome() = ApkInstallOutcome(
         ApkInstallResult.BLOCKED, context.getString(R.string.profilePackageOccupied)

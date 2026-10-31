@@ -118,6 +118,23 @@ class InstallFallbackTest {
     }
 
     @Test
+    fun failedUninstall_reportsTheCallersOutcomeWithoutInstalling() = runBlocking {
+        var installerCalled = false
+
+        val outcome = replaceAfterConflict(
+            uninstall = { false },
+            install = {
+                installerCalled = true
+                ApkInstallOutcome(ApkInstallResult.SUCCESS)
+            },
+            uninstallFailed = { ApkInstallOutcome(ApkInstallResult.FAILED, "record") }
+        )
+
+        assertEquals(ApkInstallOutcome(ApkInstallResult.FAILED, "record"), outcome)
+        assertFalse(installerCalled)
+    }
+
+    @Test
     fun approvedSuccessfulUninstall_startsNewInstall() = runBlocking {
         var installerCalled = false
 

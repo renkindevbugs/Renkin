@@ -642,6 +642,7 @@
     <string name="installFailureApkSaveFailed">The APK could not be saved. Build the pack again to create a new one.</string>
     <string name="installFailureCopied">Installation details copied</string>
     <string name="installFallbackTitle">Replace existing icon pack?</string>
+    <string name="packRecordBlocksReplace">Android still keeps an older copy of %1$s that Renkin can’t see or remove, for example in another user, a work profile or a private space. Allow Shizuku and tap Replace pack again, or connect a computer and run: adb shell pm uninstall %1$s</string>
     <string name="installFallbackText">Android can’t update the installed pack in place.</string>
     <string name="installFallbackSignatureText">The installed pack was signed with a different key, so Android can’t update it in place.</string>
     <string name="installFallbackStepsTitle">What happens</string>
