@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin
 
+import android.app.ActivityManager
 import android.app.Application
 import androidx.annotation.StringRes
 import androidx.lifecycle.SavedStateHandle
@@ -80,6 +81,10 @@ import dev.renkinProject.renkin.data.transfer.isIconPackStudioExport
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchApplySnapshot
 import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
+import dev.renkinProject.renkin.feature.launch.LaunchFireGate
+import dev.renkinProject.renkin.feature.launch.LaunchFireMask
+import dev.renkinProject.renkin.feature.launch.LaunchFirePlayback
+import dev.renkinProject.renkin.feature.launch.loadLaunchFireMask
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.feature.language.AppLocales
 import dev.renkinProject.renkin.feature.watch.WatchApplyOwner
@@ -192,6 +197,48 @@ class MainViewModel @Inject constructor(
 
     var startupFailed by mutableStateOf(false)
         private set
+
+    var launchFirePlayback by mutableStateOf(
+        LaunchFireGate.decide(
+            firstInProcess = LaunchFireGate.claimFirstLaunch(),
+            restoredAfterProcessDeath = savedStateHandle.get<Boolean>(LAUNCH_FIRE_SHOWN_KEY) == true,
+            animatorScale = LaunchFireGate.animatorScale(application)
+        )
+    )
+        private set
+
+    private val launchFireLowEnd = application.getSystemService(ActivityManager::class.java)?.isLowRamDevice == true
+    val launchFireParticleCapacity = if (launchFireLowEnd) 64 else 160
+
+    private val mutableLaunchFireMask = MutableStateFlow<LaunchFireMask?>(null)
+    val launchFireMask: StateFlow<LaunchFireMask?> = mutableLaunchFireMask.asStateFlow()
+
+    init {
+        savedStateHandle[LAUNCH_FIRE_SHOWN_KEY] = true
+        if (launchFirePlayback == LaunchFirePlayback.Play) {
+            // Not Dispatchers.Default: startup loading saturates it. On IO the mask is usually
+            // ready by the first frame; until then the overlay shows the splash symbol.
+            viewModelScope.launch(Dispatchers.IO) {
+                val workingSize = if (launchFireLowEnd) 288 else 432
+                val mask = runCatching { loadLaunchFireMask(application.resources, workingSize) }.getOrNull()
+                if (mask == null) withContext(Dispatchers.Main) { finishLaunchFire() } else mutableLaunchFireMask.value = mask
+            }
+        }
+    }
+
+    /** False while the fire moves: the home screen waits so its first composition can't stall it. */
+    var launchFireSettled by mutableStateOf(launchFirePlayback != LaunchFirePlayback.Play)
+        private set
+
+    fun settleLaunchFire() {
+        launchFireSettled = true
+    }
+
+    fun finishLaunchFire() {
+        launchFireSettled = true
+        launchFirePlayback = LaunchFirePlayback.None
+        mutableLaunchFireMask.value = null
+    }
 
     // Keys ("package/activity") of the apps already in the last built/saved pack.
     // An app with an icon whose key is NOT here is "added" (pending build); a key here
@@ -1689,6 +1736,7 @@ class MainViewModel @Inject constructor(
 }
 
 private const val MAX_BASELINE_READ_ATTEMPTS = 3
+private const val LAUNCH_FIRE_SHOWN_KEY = "launchFireShown"
 
 // A row that scrolled away never acknowledges its result, so only the latest few are kept.
 internal fun Map<Long, IconApplyOutcome>.withIconApply(

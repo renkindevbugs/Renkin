@@ -2,4 +2,8 @@
 <resources>
     <color name="icon_color">#FFFFFFFF</color>
     <color name="icon_background_color">#FF000000</color>
+    <!-- Must equal LaunchPlum in LaunchFireTimeline.kt: the overlay continues this window. -->
+    <color name="launch_plum">#FF1E1228</color>
+    <!-- Must equal LaunchGold in LaunchFireTimeline.kt: the static symbol in splash and overlay. -->
+    <color name="launch_gold">#FFD5B15B</color>
 </resources>

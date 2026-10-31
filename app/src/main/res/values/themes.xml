@@ -14,4 +14,13 @@
         <item name="android:colorBackgroundCacheHint">@null</item>
         <item name="android:backgroundDimEnabled">false</item>
     </style>
+
+    <!-- Launch window: plum with the static gold symbol from the first moment. The first
+         frame of LaunchFireOverlay redraws that symbol at the same 288dp icon geometry and
+         ignites it. -->
+    <style name="Theme.Renkin.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/launch_plum</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/launch_splash_symbol</item>
+        <item name="postSplashScreenTheme">@style/Theme.Material3.DayNight.NoActionBar</item>
+    </style>
 </resources>

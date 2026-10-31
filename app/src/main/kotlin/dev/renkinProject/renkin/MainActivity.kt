@@ -4,6 +4,9 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Bundle
 import dev.renkinProject.renkin.feature.language.LocalizedActivity
+import dev.renkinProject.renkin.feature.launch.LaunchFireOverlay
+import dev.renkinProject.renkin.feature.launch.LaunchFirePlayback
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -63,6 +66,9 @@ class MainActivity : LocalizedActivity() {
     private val toaster = Toaster()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Removed at once: the overlay already shows the same symbol in the same place, while the
+        // default exit fade let the plum show through and dimmed the symbol for a frame.
+        installSplashScreen().setOnExitAnimationListener { it.remove() }
         super.onCreate(savedInstanceState)
 
         // Start loading before handling launch intents or composing the startup shell.
@@ -91,6 +97,7 @@ class MainActivity : LocalizedActivity() {
             val recoveryFailureReason by StorageOperationGate.recoveryFailureReason.collectAsStateWithLifecycle()
             if (recoveryState == StorageRecoveryState.RECOVERING || recoveryState == StorageRecoveryState.FAILED ||
                 (recoveryState == StorageRecoveryState.CHECKING && viewModel.storageRecoveryRetryRunning)) {
+                LaunchedEffect(Unit) { viewModel.finishLaunchFire() }
                 RenkinTheme {
                     BackupRecoveryScreen(
                         state = recoveryState,
@@ -106,7 +113,10 @@ class MainActivity : LocalizedActivity() {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
             val startupLoading = recoveryState == StorageRecoveryState.CHECKING ||
                 (!runtimeState.startupComplete && !viewModel.startupFailed)
-            edgeToEdge(darkMode)
+            val launchFireMask by viewModel.launchFireMask.collectAsStateWithLifecycle()
+            val launchFireVisible = viewModel.launchFirePlayback != LaunchFirePlayback.None
+            // Light bar icons while the plum launch overlay covers the screen.
+            edgeToEdge(darkMode || launchFireVisible)
             // Pack resources must resolve values-night the way the UI displays, not the way
             // the system is set — mode-dependent pack colours are invisible otherwise.
             SideEffect { ApplicationManager.displayedNightMode = darkMode }
@@ -146,14 +156,30 @@ class MainActivity : LocalizedActivity() {
                                     color = MaterialTheme.colorScheme.background
                                 ) {
                                     ToastHost(toaster)
-                                    if (startupLoading) MainStartupScreen() else MainColumn(iconPackState.packs)
+                                    // The overlay hides the home screen until the fire settles; composing
+                                    // it earlier stalled the animation mid-burn.
+                                    if (startupLoading || !viewModel.launchFireSettled) {
+                                        MainStartupScreen()
+                                    } else {
+                                        MainColumn(iconPackState.packs)
+                                    }
 
-                                    if (crashPending && !startupLoading) {
+                                    if (crashPending && !startupLoading && !launchFireVisible) {
                                         CrashReportDialog(
                                             onDismiss = {
                                                 CrashReporter.markCrashesSeen(this@MainActivity)
                                                 crashPending = false
                                             }
+                                        )
+                                    }
+
+                                    if (launchFireVisible) {
+                                        LaunchFireOverlay(
+                                            playback = viewModel.launchFirePlayback,
+                                            mask = launchFireMask,
+                                            particleCapacity = viewModel.launchFireParticleCapacity,
+                                            onSettled = viewModel::settleLaunchFire,
+                                            onFinished = viewModel::finishLaunchFire
                                         )
                                     }
                                 }
