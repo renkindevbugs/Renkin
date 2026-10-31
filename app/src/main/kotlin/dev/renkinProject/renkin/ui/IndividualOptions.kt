@@ -124,6 +124,8 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.produceState
 import dev.renkinProject.renkin.apk.EditorGlobalLayer
+import dev.renkinProject.renkin.util.Log
+import dev.renkinProject.renkin.util.runCatchingCancellable
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -164,6 +166,12 @@ internal fun confirmedSourcePack(
 private fun topFraction(firstVisibleItemIndex: Int, firstVisibleItemScrollOffset: Int): Float =
     if (firstVisibleItemIndex > 0) 0f
     else (1f - firstVisibleItemScrollOffset / 120f).coerceIn(0f, 1f)
+
+internal class KeptGlobalPreview(val draft: IconPackDrawable, val layer: EditorGlobalLayer, val icon: IconPackDrawable)
+
+// The layer is compared by value: the editor builds a fresh EditorGlobalLayer per read.
+internal fun KeptGlobalPreview?.isPendingFor(draft: IconPackDrawable?, layer: EditorGlobalLayer?): Boolean =
+    draft != null && layer != null && (this == null || this.draft !== draft || this.layer != layer)
 
 @Composable
 internal fun OptionsDialog(
@@ -466,13 +474,16 @@ internal fun OptionsDialog(
     // The applied Global style drawn over the draft, as Apply with "Keep Global style" stores it.
     val keptGlobalLayer = globalLayer?.takeIf { session.keepGlobalStyle }
     val draftIcon = draft.iconToConfirm
-    val globalPreview by produceState<Pair<IconPackDrawable, IconPackDrawable>?>(null, draftIcon, keptGlobalLayer) {
+    val globalPreview by produceState<KeptGlobalPreview?>(null, draftIcon, keptGlobalLayer) {
         if (draftIcon != null && keptGlobalLayer != null) {
-            value = draftIcon to (runCatching { viewModel.applyModifier(draftIcon, keptGlobalLayer.options) }.getOrNull() ?: draftIcon)
+            val styled = runCatchingCancellable { viewModel.applyModifier(draftIcon, keptGlobalLayer.options) }
+                .onFailure { Log.error("OptionsDialog", "Rendering the kept Global style preview failed", it) }
+                .getOrNull() ?: draftIcon
+            value = KeptGlobalPreview(draftIcon, keptGlobalLayer, styled)
         }
     }
-    val globalPreviewPending = keptGlobalLayer != null && draftIcon != null && globalPreview?.first !== draftIcon
-    val previewIcon = if (keptGlobalLayer == null) draftIcon else globalPreview?.second ?: draftIcon
+    val globalPreviewPending = globalPreview.isPendingFor(draftIcon, keptGlobalLayer)
+    val previewIcon = if (keptGlobalLayer == null) draftIcon else globalPreview?.icon ?: draftIcon
 
     // The snackbar surface exists only for the upload gallery's Undo action; plain hints go
     // through the shared Toaster like everywhere else in the app.
