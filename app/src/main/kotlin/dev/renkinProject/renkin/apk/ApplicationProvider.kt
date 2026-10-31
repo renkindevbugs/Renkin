@@ -991,7 +991,7 @@ class ApplicationProvider internal constructor(
             }
             val candidates = plan.original.filter { it.createdIcon != null && it.key !in plan.lockedKeys }
             val bakedByKey = mutableMapOf<String, PackageInfoStruct>()
-            val originals = mutableListOf<GlobalStyleBakeStore.Original>()
+            val replaced = mutableListOf<BakedOriginal>()
             onProgress(0, candidates.size)
             for ((index, app) in candidates.withIndex()) {
                 currentCoroutineContext().ensureActive()
@@ -999,10 +999,7 @@ class ApplicationProvider internal constructor(
                 val base = app.baseIcon ?: rendered
                 if (base !== rendered && looksDifferent(base, rendered)) {
                     renkinPackStore.detachedCopy(rendered)?.let { newBase ->
-                        originals += GlobalStyleBakeStore.Original(
-                            app.packageName, app.activityName, base.toDbString(), base !is BitmapIconDrawable,
-                            base.isAdaptiveIcon(), GlobalStyleBakeStore.fingerprint(newBase.toDbString())
-                        )
+                        replaced += BakedOriginal(app, base, GlobalStyleBakeStore.fingerprint(newBase.toDbString()))
                         bakedByKey[app.key] = app.changeBaseAndRender(newBase, rendered)
                     }
                 }
@@ -1017,6 +1014,9 @@ class ApplicationProvider internal constructor(
                 currentCoroutineContext().ensureActive()
                 bakeStore.discardPending()
                 val pending = withContext(Dispatchers.IO) {
+                    // Each base is encoded only as it is written: holding every payload at once is what
+                    // made large bakes run close to the heap limit.
+                    val originals = replaced.asSequence().map { it.toStored() }.asIterable()
                     bakeStore.writePending(GlobalStyleBakeStore.Header(expected.profileId, appliedAt, bakedStyle), originals)
                 }
                 withContext(NonCancellable) {
@@ -1034,6 +1034,14 @@ class ApplicationProvider internal constructor(
             }
             bakedByKey.size
         }
+    }
+
+    // The base a bake replaced, still a live drawable; plan.original keeps it alive anyway.
+    private class BakedOriginal(val app: PackageInfoStruct, val base: IconPackDrawable, val bakedFingerprint: String) {
+        fun toStored() = GlobalStyleBakeStore.Original(
+            app.packageName, app.activityName, base.toDbString(), base !is BitmapIconDrawable,
+            base.isAdaptiveIcon(), bakedFingerprint
+        )
     }
 
     data class GlobalStyleBakeUndo(val restored: Int, val skipped: Int)
@@ -1056,18 +1064,16 @@ class ApplicationProvider internal constructor(
     ): GlobalStyleBakeUndo = withContext(Dispatchers.Default) {
         val entry = packRepo.globalStyleHistoryEntry(id)?.takeIf { it.profileId == expected.profileId }
             ?: throw ProfileOperationSupersededException()
-        val (header, originals) = withContext(Dispatchers.IO) {
-            bakeStore.header(entry) to bakeStore.originals(entry)
+        val (header, total) = withContext(Dispatchers.IO) {
+            bakeStore.header(entry) to bakeStore.count(entry)
         }
         val bakedRecipe = header?.let { decodeGlobalStyle(it.bakedStyle) }
-        if (bakedRecipe == null || originals == null) throw IllegalStateException("The bake originals are gone")
+        if (bakedRecipe == null || total == null) throw IllegalStateException("The bake originals are gone")
         runLongProfileOperation(expected) {
             val plan = runProfileOperation(expected) {
                 val original = applicationList.toList()
                 val unsaved = unsavedIconKeys
-                val stored = packRepo.getAll(expected.profileId)
-                    .filter { "${it.packageName}/${it.activityName}" !in unsaved }
-                    .associate { "${it.packageName}/${it.activityName}" to GlobalStyleBakeStore.fingerprint(it.baseDrawable.ifEmpty { it.drawable }) }
+                val stored = packRepo.storedBaseDigests(expected.profileId, GlobalStyleBakeStore::fingerprint) - unsaved
                 BakeUndoPlan(
                     context.dataStore.getPreferencesAfterPendingWrites(), original,
                     original.map { renderTracker.observe(it.key) }, stored
@@ -1077,8 +1083,9 @@ class ApplicationProvider internal constructor(
             val defaultColor = plan.preferences.getDefaultIconColor(context)
             val appsByKey = plan.original.associateBy { it.key }
             val restoredByKey = mutableMapOf<String, PackageInfoStruct>()
-            onProgress(0, originals.size)
-            for ((index, original) in originals.withIndex()) {
+            var done = 0
+            onProgress(0, total)
+            val complete = bakeStore.forEachOriginal(entry) { original ->
                 currentCoroutineContext().ensureActive()
                 val key = "${original.packageName}/${original.activityName}"
                 val app = appsByKey[key]
@@ -1088,8 +1095,10 @@ class ApplicationProvider internal constructor(
                 if (app != null && base != null) {
                     restoredByKey[key] = app.changeBaseAndRender(base, renderGlobal(base, layer))
                 }
-                onProgress(index + 1, originals.size)
+                onProgress(++done, total)
             }
+            // Nothing is committed yet, so a file that breaks mid-read leaves the icons as they are.
+            if (!complete) throw IllegalStateException("The bake originals are gone")
             val restoredStyle = plan.preferences.withGlobalStyle(bakedRecipe)
             runProfileOperation(expected) {
                 requireUnchangedSince(plan.preferences, plan.original, plan.tickets)
@@ -1105,7 +1114,7 @@ class ApplicationProvider internal constructor(
                     }
                 }
             }
-            GlobalStyleBakeUndo(restoredByKey.size, originals.size - restoredByKey.size)
+            GlobalStyleBakeUndo(restoredByKey.size, done - restoredByKey.size)
         }
     }
 
