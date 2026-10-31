@@ -729,6 +729,22 @@ ownership unchanged. Its on-device appearance is confirmed; the startup-shell te
 unit tests across 149 suites and `assembleDebug` pass. The full suite uses the local test-JVM
 C2 workaround described below; project runtime settings are unchanged.
 
+Launch fire (`feature/launch`): MainActivity uses `Theme.Renkin.Starting` (core-splashscreen,
+`@color/launch_plum` with the static gold symbol — the monochrome launcher glyph tinted
+`@color/launch_gold`). Measured on device, the first app frame comes ~1.2 s after the tap, so that
+static symbol is what the user sees until then. The exit listener only calls `remove()` at once: the
+default exit fade let plum show through and dimmed the symbol for a frame (Morphe Manager reverted a
+*custom, long* exit animation because it covered the app; an immediate remove has no such window).
+`LaunchFireOverlay` draws above the startup shell, redraws the symbol at the 288 dp splash-icon
+geometry, then forges it by fire while it grows to full size (spike ignition, copper-to-gold finish;
+~1.2 s, tap to skip, 3.5 s hard cap). It never gates readiness, but the home screen (`MainColumn`)
+composes only once the fire has settled (`launchFireSettled`): its ~550 ms first composition froze
+the fire mid-burn on device. The fade then waits for smooth frames. `MainViewModel` owns the
+decision (`LaunchFireGate`): full fire once per process, fade-only on a new Activity or process
+restore, nothing when the animator duration scale is 0. The mask loads on Dispatchers.IO because
+startup work saturates Default. Recovery screens end it; the crash dialog waits for it. Timeline,
+mask and particle engine are pure Kotlin ported from `reports/fire-splash/fire-splash-mockup.html`.
+
 Debug `ProfilePerformance` logs report ViewModel/gate waits, input preparation, encoding, Room
 write, target-profile load, baseline loading, missing-pack summary and startup recovery/bootstrap.
 These diagnostics contain only phase names, profile ids, counts and durations. Device timings
