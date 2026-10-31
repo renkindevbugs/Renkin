@@ -915,7 +915,10 @@ class ApplicationProvider internal constructor(
         withContext(Dispatchers.IO) {
             val entries = packRepo.globalStyleHistory(expected.profileId)
             try {
-                bakeStore.prune(packRepo.globalStyleHistoryIds())
+                // Under the gate so a bake committing its originals file is never pruned mid-write.
+                profileOperations.runWithBoundedWait { bakeStore.prune(packRepo.globalStyleHistoryIds()) }
+            } catch (_: ProfileOperationBusyException) {
+                // A Global operation holds the gate; the next listing prunes.
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 Log.error("ApplicationProvider", "Pruning Global style bake originals failed", error)
@@ -1540,6 +1543,7 @@ class ApplicationProvider internal constructor(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            Log.error("ApplicationProvider", "Rendering a Global style layer failed", error)
             base
         }
     }
