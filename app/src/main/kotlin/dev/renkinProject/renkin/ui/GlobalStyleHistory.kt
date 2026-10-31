@@ -56,6 +56,8 @@ import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.ui.modifier.shapeLabel
+import dev.renkinProject.renkin.ui.modifier.matchingPreset
+import dev.renkinProject.renkin.ui.modifier.shadowUiPresets
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
@@ -353,6 +355,13 @@ private fun historyChips(look: GlobalModifierState): List<String> = buildList {
         R.string.globalHistoryChip,
         stringResource(R.string.outlineTitle),
         stringResource(R.string.globalOutlineSummary, look.outline.width.roundToInt())
+    ))
+    if (look.shadow.enabled) add(stringResource(
+        R.string.globalHistoryChip,
+        stringResource(R.string.shadowTitle),
+        look.shadow.matchingPreset(shadowUiPresets())?.label ?: stringResource(
+            R.string.shadowCardSummary, look.shadow.blur.roundToInt(), (look.shadow.opacity * 100).roundToInt()
+        )
     ))
     if (look.modifiers.effect.imageEdit == ImageEdit.COLORIZE) add(stringResource(
         R.string.globalHistoryChip,
