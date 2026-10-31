@@ -219,7 +219,7 @@ existing subscription timeout. Build/install, backup, preview and worker jobs ke
 scopes, cancellation and session checks; stopping UI collection does not cancel those operations.
 One-shot toast/event collectors and operation-time preference snapshots retain their contracts.
 Code holding the storage gate continues reading the owner directly rather than awaiting UI flows.
-Room remains v21, portable backup format 4 and recovery preferences format 3.
+Room was v21, portable backup format 4 and recovery preferences format 3.
 `PreferencesLifecycleComposeTest` exercises both production preference helpers: initial defaults
 before STARTED, zero source subscriptions while stopped, retained displayed values, latest values
 and absent-key defaults after restarting. It also restarts UI during failed recovery, verifying
@@ -303,7 +303,7 @@ Device checks must assess brief loader flashes during rapid profile switches, sc
 progress visibility during import and correct rows/counts once the transition completes.
 
 Profile/startup scalar flags and ViewModel baseline bookkeeping remain Compose state for a later
-7B checkpoint. This is not a migration of every provider field. Room remains 21, portable backups
+7B checkpoint. This is not a migration of every provider field. Room was 21, portable backups
 4 and recovery preferences 3. The 7B4 manual checkpoint covers cold loading, sorting/filtering,
 Apply/reset/undo, refresh/cancellation, Save/Discard profile switches, Global options and lifecycle
 recreation, watch and build preview, plus locked-row reset/unlock when such a fixture is available.
@@ -382,7 +382,7 @@ Generated-pack format recognition and signed local ownership remain separate. Se
 
 Phase 7A1 isolates the existing JSON snapshot encoder, replacement rules and inactive-profile
 built-source patch in `data/LegacyProfilePreferences.kt`. The registered keys and synchronized
-DataStore operations remain in `DataPreferences.kt`; Room stays at v20 and the active profile
+DataStore operations remain in `DataPreferences.kt`; Room was at v20 and the active profile
 still uses DataStore. The [profile style migration design](profile-style-migration.md) describes
 the proposed typed model, active-profile bootstrap and portable/recovery compatibility rollout.
 
@@ -396,7 +396,7 @@ Complete/unique classification and per-key value round-trips are required test c
 shipping; schema initialization does not assert against the registry in production.
 The strict version-1 `ProfileStyleCodec` is bounded to 256 KiB in characters and UTF-8 bytes;
 it is prepared for the later storage migration and does not write new DB or backup documents.
-At that checkpoint Room remains at v20, portable backup format at 3 and DataStore owns the
+At that checkpoint Room was at v20, portable backup format at 3 and DataStore owns the
 active settings.
 
 Phase 7A3 appends `Profile.profileStyle` as TEXT NOT NULL with an empty-string default in
@@ -440,7 +440,7 @@ successful commit or rollback; startup/recovery failures keep them paused. A pro
 after a normal style commit blocks access for recovery to re-project the authoritative row. A
 failed application-only setting or profile selection that did not write Room propagates without
 requiring recovery. During restore, initialization errors remain within the existing
-rollback boundary. Room stays at v21 and portable exports at format 3, using the current legacy
+rollback boundary. Room was at v21 and portable exports at format 3, using the current legacy
 projection for every profile. Format 4 and retirement of compatibility projections are separate
 checkpoints. `ProfileStyleStoreTest` exercises the installed bridge with real Room transactions,
 all 64 setters, startup/restart, cancellation, projection failure/retry and explicit repair.
@@ -477,7 +477,7 @@ unsupported document never falls back. Known profile preference tags/primitive t
 active identity are checked before JSONObject coercion. Full import retains exact style documents;
 shared import assigns a fresh id without changing the document or the active style. Older builds
 supporting only formats 1–3 reject format 4 entirely. Manual and automatic exports use the same
-format-4 path. Room remains v21; the typed version remains 1 and no schema migration is needed.
+format-4 path. Room was v21; the typed version remains 1 and no schema migration is needed.
 
 Local recovery database snapshots and `prefs.json` are independent of the portable manifest:
 the preference-only JSON explicitly uses `RECOVERY_PREFS_FORMAT` (legacy format 3), while Room
@@ -511,7 +511,7 @@ rejects an old epoch even if resubscription races the replay reset after an impo
 A Room style update can wake readers without a DataStore write; intermediate Room/projection commits
 cannot be read across the existing storage boundary. Startup/import/recovery pause both the shared
 upstream and subscribers. The test reset closes the singleton's sharing scope. Standalone/staged
-DataStores retain their direct flow behavior. Room remains 21, portable backups 4 and local recovery
+DataStores retain their direct flow behavior. Room was 21, portable backups 4 and local recovery
 preferences 3.
 
 Observation failures never emit empty/default settings. Snapshot failures invalidate initialization
@@ -557,7 +557,7 @@ active-profile preference values: both read `getPreferencesAfterPendingWrites`, 
 Restore may temporarily write those legacy-compatible values under the paused storage gate, then
 forced bootstrap validates/converts the restored rows and removes the profile keys again before
 observers resume. Standalone/staged DataStores retain their existing full preference behavior.
-Room stays at 21, portable backups at 4 and recovery preferences at 3. The Room legacy column and
+Room was at 21, portable backups at 4 and recovery preferences at 3. The Room legacy column and
 its dual writes remain until a separate schema-retirement checkpoint. The confirmed 7A7 tests
 verify cleanup of all 64 profile keys, restart idempotence and preserved application/unknown keys,
 every owner setter and staged Global Save, style-only and built-primary updates without DataStore
@@ -633,7 +633,7 @@ Undo-only publication, session invalidation, first-generation and mixed-batch Un
 dirty state without accidental persistence, and bounded Reset/Undo contention with retry.
 Foreground-action tests cover duplicate requests, externally held mutexes, cancellation before
 entry, failed jobs, failed launch and independent renderer execution. Existing profile-gate and
-application-list lifecycle tests run alongside these cases. Room stays 21, portable backups 4
+application-list lifecycle tests run alongside these cases. Room was 21, portable backups 4
 and recovery preferences 3.
 
 Phase 7B6 moves the provider's dirty-key set and long-operation registry out of Compose state.
@@ -666,7 +666,7 @@ during a profile transition still uses its existing signal.
 The 7B6 device checkpoint is confirmed. Regression checks cover dirty-only publication on Save,
 retained dirty sets, busy-only publication before rendering, cancellation cleanup and session
 ownership when switching during a render. The targeted suites and all 924 unit tests across
-148 suites pass, with no failures or skips; `assembleDebug` also passes. Room stays 21,
+148 suites pass, with no failures or skips; `assembleDebug` also passes. Room was 21,
 portable backups 4 and recovery preferences 3.
 
 The independent `fix/profile-switch-latency` checkpoint addresses device feedback about profile
@@ -1443,6 +1443,10 @@ be assumed to open the upgraded database.
 
 ## Persistence
 
+Current schema: Room v24 (`DbApplication.kt`), portable backup format 4
+(`BackupCodec.FORMAT_VERSION`). Version numbers inside phase and checkpoint sections describe that
+checkpoint, not today.
+
 - **DataStore Preferences** (`data/DataPreferences.kt`) — persists application settings and active
   profile selection; the shared owner overlays Room profile values for readers. Typed accessors:
   Composable `DataStore.getXValue()` for reading in composition; `Preferences.getXValue()`
@@ -1465,7 +1469,7 @@ be assumed to open the upgraded database.
   references. Refresh output is not journaled (Refresh again regenerates it). Size cap 48 MiB;
   rows beyond it are counted as not kept. Room, saves and install-confirmation persistence are
   unchanged.
-- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v22) — profiles + rendered and base icons
+- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v24) — profiles + rendered and base icons
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
   rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the
   Global options UI, only unsaved refresh output is Generated; saved/built non-custom rows are
