@@ -249,6 +249,7 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                 state.shape.isEnabled,
                 !state.modifiers.transform.isIdentity,
                 state.outline.isEnabled,
+                state.shadow.enabled,
                 state.modifiers.effect.imageEdit == ImageEdit.COLORIZE
             ).count { it }
         }

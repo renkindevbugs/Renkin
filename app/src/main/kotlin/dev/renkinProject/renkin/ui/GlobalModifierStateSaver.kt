@@ -69,7 +69,7 @@ private fun restoreGlobalSnapshot(saved: Any): GlobalModifierSnapshot? = (when (
     is List<*> -> saved.toGlobalModifierSnapshot()
     is String -> restoreLegacyGlobalSnapshot(saved)
     else -> null
-})?.let { it.copy(modifiers = it.modifiers.withNormalizedGlobalColorizer()) }
+})?.let { it.copy(modifiers = it.modifiers.withGlobalDraftDefaults().withNormalizedGlobalColorizer()) }
 
 private fun List<*>.toGlobalModifierSnapshot(): GlobalModifierSnapshot? {
     if (firstOrNull() !is String) return null

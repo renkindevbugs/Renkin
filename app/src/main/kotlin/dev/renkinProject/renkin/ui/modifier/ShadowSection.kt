@@ -48,6 +48,8 @@ import dev.renkinProject.renkin.feature.presets.shadowPreset
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
+import dev.renkinProject.renkin.icon.creator.ModifierPresetShadow
+import dev.renkinProject.renkin.icon.creator.ShadowModifier
 import dev.renkinProject.renkin.icon.creator.SHADOW_BLUR_MAX
 import dev.renkinProject.renkin.icon.creator.SHADOW_BLUR_MIN
 import dev.renkinProject.renkin.icon.creator.SHADOW_DISTANCE_MAX
@@ -57,6 +59,7 @@ import dev.renkinProject.renkin.icon.creator.SHADOW_OPACITY_MIN
 import dev.renkinProject.renkin.icon.creator.decodeModifierPreset
 import dev.renkinProject.renkin.icon.creator.encodeModifierPreset
 import dev.renkinProject.renkin.ui.AdjustmentState
+import dev.renkinProject.renkin.ui.shadowModifier
 import dev.renkinProject.renkin.ui.AngleDial
 import dev.renkinProject.renkin.ui.ColorStyleCard
 import dev.renkinProject.renkin.ui.ColorStyleSheet
@@ -75,7 +78,7 @@ import dev.renkinProject.renkin.ui.theme.DialogShape
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private data class ShadowUiPreset(
+internal data class ShadowUiPreset(
     val label: String,
     val blur: Float,
     val distance: Float,
@@ -84,6 +87,53 @@ private data class ShadowUiPreset(
 )
 
 private enum class ShadowControl { BLUR, DISTANCE, DIRECTION, OPACITY }
+
+@Composable
+internal fun shadowUiPresets(): List<ShadowUiPreset> = listOf(
+    ShadowUiPreset(stringResource(R.string.shadowPresetSubtle), 4f, 2f, 0.2f),
+    ShadowUiPreset(stringResource(R.string.shadowPresetSoft), 14f, 7f, 0.32f),
+    ShadowUiPreset(stringResource(R.string.shadowPresetHard), 1f, 12f, 0.65f),
+    ShadowUiPreset(
+        stringResource(R.string.shadowPresetGlow),
+        blur = 24f,
+        distance = 20f,
+        opacity = 0.7f,
+        allDirections = true
+    )
+)
+
+internal fun ShadowModifier.matchingPreset(presets: List<ShadowUiPreset>): ShadowUiPreset? = presets.firstOrNull {
+    abs(blur - it.blur) < 0.01f &&
+        abs(distance - it.distance) < 0.01f &&
+        abs(opacity - it.opacity) < 0.001f &&
+        allDirections == it.allDirections
+}
+
+private fun ShadowModifier.withPreset(preset: ShadowUiPreset): ShadowModifier = copy(
+    blur = preset.blur,
+    distance = preset.distance,
+    opacity = preset.opacity,
+    allDirections = preset.allDirections
+)
+
+// Cancel snapshots travel encoded so they survive process death together with the open sheet.
+internal fun ShadowModifier.encodeForCancel(): String = encodeModifierPreset(
+    ModifierPresetPayload(shadow = ModifierPresetShadow(enabled, blur, distance, angle, allDirections, style, opacity))
+)
+
+internal fun decodeShadowForCancel(encoded: String): ShadowModifier? = decodeModifierPreset(encoded)?.shadow?.let {
+    ShadowModifier(it.blur, it.distance, it.angle, it.allDirections, it.style, it.opacity, it.enabled)
+}
+
+private fun AdjustmentState.setShadow(shadow: ShadowModifier) {
+    shadowBlur = shadow.blur
+    shadowDistance = shadow.distance
+    shadowAngle = shadow.angle
+    shadowAllDirections = shadow.allDirections
+    shadowStyle = shadow.style
+    shadowOpacity = shadow.opacity
+    shadowEnabled = shadow.enabled
+}
 
 @Composable
 internal fun ShadowSection(
@@ -117,18 +167,7 @@ internal fun ShadowSection(
         editorOpen = true
     }
 
-    val presets = listOf(
-        ShadowUiPreset(stringResource(R.string.shadowPresetSubtle), 4f, 2f, 0.2f),
-        ShadowUiPreset(stringResource(R.string.shadowPresetSoft), 14f, 7f, 0.32f),
-        ShadowUiPreset(stringResource(R.string.shadowPresetHard), 1f, 12f, 0.65f),
-        ShadowUiPreset(
-            stringResource(R.string.shadowPresetGlow),
-            blur = 24f,
-            distance = 20f,
-            opacity = 0.7f,
-            allDirections = true
-        )
-    )
+    val presets = shadowUiPresets()
 
     Text(
         text = stringResource(R.string.shadowTitle),
@@ -139,7 +178,8 @@ internal fun ShadowSection(
         if (adjustments.shadowEnabled) {
             OptionGroup {
                 ShadowEditorControls(
-                    adjustments = adjustments,
+                    shadow = adjustments.shadowModifier(),
+                    onShadowChange = adjustments::setShadow,
                     presets = presets,
                     renderPreview = renderPreview
                 )
@@ -188,7 +228,8 @@ internal fun ShadowSection(
 
     if (editorOpen) {
         ShadowEditorSheet(
-            adjustments = adjustments,
+            shadow = adjustments.shadowModifier(),
+            onShadowChange = adjustments::setShadow,
             presets = presets,
             preview = preview,
             previewGenerating = previewGenerating,
@@ -213,8 +254,9 @@ internal fun ShadowSection(
 }
 
 @Composable
-private fun ShadowEditorSheet(
-    adjustments: AdjustmentState,
+internal fun ShadowEditorSheet(
+    shadow: ShadowModifier,
+    onShadowChange: (ShadowModifier) -> Unit,
     presets: List<ShadowUiPreset>,
     preview: Bitmap?,
     previewGenerating: Boolean,
@@ -249,7 +291,8 @@ private fun ShadowEditorSheet(
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
-                    Surface(
+                    // Global Style has no single icon to show; its live grid stays the preview.
+                    if (preview != null || previewGenerating) Surface(
                         shape = CardShape,
                         color = MaterialTheme.colorScheme.surfaceContainerHighest,
                         border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
@@ -283,7 +326,8 @@ private fun ShadowEditorSheet(
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     ShadowEditorControls(
-                        adjustments = adjustments,
+                        shadow = shadow,
+                        onShadowChange = onShadowChange,
                         presets = presets,
                         renderPreview = renderPreview
                     )
@@ -317,9 +361,34 @@ private fun ShadowEditorSheet(
     }
 }
 
+
+@Composable
+internal fun ShadowPresetChips(
+    shadow: ShadowModifier,
+    presets: List<ShadowUiPreset>,
+    onShadowChange: (ShadowModifier) -> Unit
+) {
+    val selectedPreset = shadow.matchingPreset(presets)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        presets.forEach { preset ->
+            FilterChip(
+                selected = selectedPreset == preset,
+                onClick = { onShadowChange(shadow.withPreset(preset)) },
+                label = { Text(preset.label) }
+            )
+        }
+    }
+}
+
 @Composable
 private fun ShadowEditorControls(
-    adjustments: AdjustmentState,
+    shadow: ShadowModifier,
+    onShadowChange: (ShadowModifier) -> Unit,
     presets: List<ShadowUiPreset>,
     renderPreview: (suspend (ColorizerStyle) -> Bitmap?)?,
     // The host rasterises [preview] only while the editor that shows it is open.
@@ -328,12 +397,6 @@ private fun ShadowEditorControls(
     var selectedControlOrdinal by rememberSaveable { mutableIntStateOf(ShadowControl.BLUR.ordinal) }
     var colorSheetOpen by rememberSaveable { mutableStateOf(false) }
     val selectedControl = ShadowControl.entries.getOrElse(selectedControlOrdinal) { ShadowControl.BLUR }
-    val selectedPreset = presets.indexOfFirst {
-        abs(adjustments.shadowBlur - it.blur) < 0.01f &&
-        abs(adjustments.shadowDistance - it.distance) < 0.01f &&
-            abs(adjustments.shadowOpacity - it.opacity) < 0.001f &&
-            adjustments.shadowAllDirections == it.allDirections
-    }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -341,25 +404,7 @@ private fun ShadowEditorControls(
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            presets.forEachIndexed { index, preset ->
-                FilterChip(
-                    selected = selectedPreset == index,
-                    onClick = {
-                        adjustments.shadowBlur = preset.blur
-                        adjustments.shadowDistance = preset.distance
-                        adjustments.shadowOpacity = preset.opacity
-                        adjustments.shadowAllDirections = preset.allDirections
-                    },
-                    label = { Text(preset.label) }
-                )
-            }
-        }
+        ShadowPresetChips(shadow, presets, onShadowChange)
         Text(
             text = stringResource(R.string.shadowFineTune),
             style = MaterialTheme.typography.labelLarge,
@@ -394,15 +439,15 @@ private fun ShadowEditorControls(
         when (selectedControl) {
             ShadowControl.BLUR -> LabeledSlider(
                 label = stringResource(R.string.shadowBlur),
-                value = adjustments.shadowBlur,
-                onValueChange = { adjustments.shadowBlur = it },
+                value = shadow.blur,
+                onValueChange = { onShadowChange(shadow.copy(blur = it)) },
                 valueRange = SHADOW_BLUR_MIN..SHADOW_BLUR_MAX,
                 ruler = pixelRuler()
             )
             ShadowControl.DISTANCE -> LabeledSlider(
                 label = stringResource(R.string.shadowDistance),
-                value = adjustments.shadowDistance,
-                onValueChange = { adjustments.shadowDistance = it },
+                value = shadow.distance,
+                onValueChange = { onShadowChange(shadow.copy(distance = it)) },
                 valueRange = SHADOW_DISTANCE_MIN..SHADOW_DISTANCE_MAX,
                 ruler = pixelRuler()
             )
@@ -412,38 +457,37 @@ private fun ShadowEditorControls(
                 SegmentedRow {
                     SegmentCell(
                         label = stringResource(R.string.shadowDirectional),
-                        selected = !adjustments.shadowAllDirections,
+                        selected = !shadow.allDirections,
                         modifier = Modifier.weight(1f),
-                        onClick = { adjustments.shadowAllDirections = false }
+                        onClick = { onShadowChange(shadow.copy(allDirections = false)) }
                     )
                     SegmentCell(
                         label = stringResource(R.string.shadowAllDirections),
-                        selected = adjustments.shadowAllDirections,
+                        selected = shadow.allDirections,
                         modifier = Modifier.weight(1f),
-                        onClick = { adjustments.shadowAllDirections = true }
+                        onClick = { onShadowChange(shadow.copy(allDirections = true)) }
                     )
                 }
-                if (!adjustments.shadowAllDirections) {
+                if (!shadow.allDirections) {
                     AngleDial(
-                        angle = adjustments.shadowAngle,
+                        angle = shadow.angle,
                         contentDescription = stringResource(R.string.shadowDirection),
-                        onAngleChange = { adjustments.shadowAngle = it },
+                        onAngleChange = { onShadowChange(shadow.copy(angle = it)) },
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
                 }
             }
             ShadowControl.OPACITY -> LabeledSlider(
                 label = stringResource(R.string.shadowOpacity),
-                value = adjustments.shadowOpacity,
-                onValueChange = { adjustments.shadowOpacity = it },
+                value = shadow.opacity,
+                onValueChange = { onShadowChange(shadow.copy(opacity = it)) },
                 valueRange = SHADOW_OPACITY_MIN..SHADOW_OPACITY_MAX,
                 ruler = percentRuler()
             )
         }
-        val shadowStyle = adjustments.shadowStyle
         ColorStyleCard(
             label = stringResource(R.string.shadowColor),
-            style = shadowStyle,
+            style = shadow.style,
             onClick = { colorSheetOpen = true }
         )
     }
@@ -451,13 +495,13 @@ private fun ShadowEditorControls(
     if (colorSheetOpen) {
         ColorStyleSheet(
             title = stringResource(R.string.shadowColor),
-            initialStyle = adjustments.shadowStyle,
+            initialStyle = shadow.style,
             sampleBitmap = null,
             showSingleColorEffects = false,
             renderPreview = renderPreview,
             onDismiss = { colorSheetOpen = false },
             onApply = {
-                adjustments.shadowStyle = it
+                onShadowChange(shadow.copy(style = it))
                 colorSheetOpen = false
             }
         )

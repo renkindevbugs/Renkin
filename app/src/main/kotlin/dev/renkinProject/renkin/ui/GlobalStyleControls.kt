@@ -55,14 +55,101 @@ import dev.renkinProject.renkin.data.getSourceLabels
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.ui.modifier.ShadowEditorSheet
+import dev.renkinProject.renkin.ui.modifier.ShadowPresetChips
 import dev.renkinProject.renkin.ui.modifier.ShapeSwatch
+import dev.renkinProject.renkin.ui.modifier.decodeShadowForCancel
+import dev.renkinProject.renkin.ui.modifier.encodeForCancel
+import dev.renkinProject.renkin.ui.modifier.matchingPreset
 import dev.renkinProject.renkin.ui.modifier.shapeLabel
+import dev.renkinProject.renkin.ui.modifier.shadowUiPresets
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import kotlin.math.roundToInt
 
-private enum class GlobalStyleEffect { SHAPE, SCALE, OUTLINE, COLORIZE }
+private enum class GlobalStyleEffect { SHAPE, SCALE, OUTLINE, SHADOW, COLORIZE }
+
+@Composable
+private fun GlobalShadowCard(state: GlobalModifierState, expanded: Boolean, onExpand: () -> Unit) {
+    var editorOpen by rememberSaveable { mutableStateOf(false) }
+    var cancelSnapshot by rememberSaveable { mutableStateOf<String?>(null) }
+    val presets = shadowUiPresets()
+    val shadow = state.shadow
+    val summary = when {
+        !shadow.enabled -> stringResource(R.string.globalEffectOff)
+        else -> shadow.matchingPreset(presets)?.label ?: stringResource(
+            R.string.shadowCardSummary, shadow.blur.roundToInt(), (shadow.opacity * 100).roundToInt()
+        )
+    }
+
+    GlobalEffectCard(
+        title = stringResource(R.string.shadowTitle),
+        summary = summary,
+        active = shadow.enabled,
+        expanded = expanded,
+        onExpand = onExpand
+    ) {
+        ControlledGlobalSwitchRow(
+            label = stringResource(R.string.shadowEnabled),
+            checked = shadow.enabled
+        ) { state.updateShadow(shadow.copy(enabled = it)) }
+        AnimatedVisibility(visible = shadow.enabled) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ShadowPresetChips(shadow, presets, state::updateShadow)
+                OptionCard(
+                    label = stringResource(R.string.globalShadowCustomize),
+                    onClick = {
+                        cancelSnapshot = shadow.encodeForCancel()
+                        editorOpen = true
+                    },
+                    trailing = {
+                        Text(
+                            text = stringResource(
+                                R.string.shadowCardSummary,
+                                shadow.blur.roundToInt(),
+                                (shadow.opacity * 100).roundToInt()
+                            ),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                )
+                Text(
+                    text = stringResource(R.string.globalShadowFlattenHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+
+    if (editorOpen) {
+        ShadowEditorSheet(
+            shadow = shadow,
+            onShadowChange = state::updateShadow,
+            presets = presets,
+            preview = null,
+            previewGenerating = false,
+            renderPreview = null,
+            showRemove = true,
+            onDismiss = {
+                cancelSnapshot?.let(::decodeShadowForCancel)?.let(state::updateShadow)
+                cancelSnapshot = null
+                editorOpen = false
+            },
+            onApply = {
+                cancelSnapshot = null
+                editorOpen = false
+            },
+            onRemove = {
+                state.updateShadow(shadow.copy(enabled = false))
+                cancelSnapshot = null
+                editorOpen = false
+            }
+        )
+    }
+}
 
 /** Native indeterminate progress, inset so its rounded caps remain visible on the dock edge. */
 @Composable
@@ -530,6 +617,15 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
                 }
             }
         }
+
+        GlobalShadowCard(
+            state = state,
+            expanded = expanded == GlobalStyleEffect.SHADOW,
+            onExpand = {
+                expandedName = if (expanded == GlobalStyleEffect.SHADOW) ""
+                else GlobalStyleEffect.SHADOW.name
+            }
+        )
 
         GlobalEffectCard(
             title = stringResource(R.string.globalColorize),

@@ -89,6 +89,35 @@ class GlobalModifierStateSaverTest {
     }
 
     @Test
+    fun shadowSurvivesSavedStateWithItsWholeConfiguration() {
+        val original = populatedState().apply {
+            updateShadow(shadow.copy(
+                enabled = true, blur = 1f, distance = 12f, angle = 200f, allDirections = true, opacity = 0.65f,
+                style = ColorizerStyle(firstColor = Color.Red.toArgb())
+            ))
+        }
+
+        val saved = with(GlobalModifierState.Saver) { saveableScope.save(original) }
+        val restored = requireNotNull(GlobalModifierState.Saver.restore(requireNotNull(saved)))
+
+        assertEquals(original.snapshot(), restored.snapshot())
+        assertTrue(restored.shadow.enabled)
+        assertEquals(0.65f, restored.shadow.opacity)
+        assertEquals(Color.Red.toArgb(), restored.shadow.style.firstColor)
+    }
+
+    @Test
+    fun stateSavedBeforeShadowExistedRestoresTheDisabledDefaultWithoutFalseDirtyState() {
+        val saved = legacyValues().joinToString("|")
+        val state = requireNotNull(GlobalModifierState.Saver.restore(saved))
+        val baseline = requireNotNull(GlobalModifierState.BaselineSaver.restore(saved))
+
+        assertEquals(state.snapshot(), baseline.value)
+        assertFalse(state.shadow.enabled)
+        assertFalse(state.shadow.isVisible)
+    }
+
+    @Test
     fun partialRecipeRestoresConfiguredDefaultsAndPreservesFlatFillColor() {
         val original = populatedState().modifiers
         val partial = original.copy(shape = null,

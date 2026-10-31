@@ -52,7 +52,8 @@ internal data class ProfileGlobalStyle(
     val shape: ProfileShapeStyle = ProfileShapeStyle(),
     val iconScalePercent: Int? = null,
     val colorize: ProfileColorizeStyle = ProfileColorizeStyle(),
-    val outline: ProfileOutlineStyle = ProfileOutlineStyle()
+    val outline: ProfileOutlineStyle = ProfileOutlineStyle(),
+    val shadow: ProfileShadowStyle = ProfileShadowStyle()
 )
 
 internal data class ProfileShapeStyle(
@@ -74,6 +75,16 @@ internal data class ProfileColorizeStyle(
 internal data class ProfileOutlineStyle(
     val add: Boolean? = null,
     val widthPx: Int? = null,
+    val color: ProfileColorStyle = ProfileColorStyle()
+)
+
+internal data class ProfileShadowStyle(
+    val enabled: Boolean? = null,
+    val blurPx: Int? = null,
+    val distancePx: Int? = null,
+    val angleDegrees: Int? = null,
+    val allDirections: Boolean? = null,
+    val opacityPercent: Int? = null,
     val color: ProfileColorStyle = ProfileColorStyle()
 )
 
