@@ -65,6 +65,16 @@ import java.util.UUID
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
+private const val PACK_VERSION_EPOCH_MILLIS = 1_577_836_800_000L // 2020-01-01T00:00Z
+
+/**
+ * Never below the last build, even one this app can no longer see: Android checks a new pack
+ * against a record kept after a kept-data uninstall, archive or another user's copy, and a
+ * restart at 1 then fails as a downgrade (issue #23). Minutes since 2020 fit an Int until 6000.
+ */
+internal fun nextPackVersionCode(installedVersionCode: Long, nowMillis: Long = System.currentTimeMillis()): Long =
+    maxOf(installedVersionCode + 1, (nowMillis - PACK_VERSION_EPOCH_MILLIS) / 60_000L)
+
 class IconPackBuilder(
     private val ctx: Context,
     private val apps: List<PackageInfoStruct>,
@@ -192,7 +202,7 @@ class IconPackBuilder(
         val installedVersion = getInstalledVersion()
         val installedVersionCode = installedVersion?.versionCode ?: 0L
 
-        val newVersion = Version(installedVersionCode + 1, newInternalVersionCode)
+        val newVersion = Version(nextPackVersionCode(installedVersionCode), newInternalVersionCode)
 
         textMethod(ctx.resources.getString(R.string.generateManifest))
         manifest.packageName = iconPackName
