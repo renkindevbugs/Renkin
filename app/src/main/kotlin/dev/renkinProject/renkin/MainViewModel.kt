@@ -219,7 +219,7 @@ class MainViewModel @Inject constructor(
             // Not Dispatchers.Default: startup loading saturates it. On IO the mask is usually
             // ready by the first frame; until then the overlay shows the splash symbol.
             viewModelScope.launch(Dispatchers.IO) {
-                val workingSize = if (launchFireLowEnd) 288 else 432
+                val workingSize = if (launchFireLowEnd) 192 else 256
                 val mask = runCatching { loadLaunchFireMask(application.resources, workingSize) }.getOrNull()
                 if (mask == null) withContext(Dispatchers.Main) { finishLaunchFire() } else mutableLaunchFireMask.value = mask
             }
