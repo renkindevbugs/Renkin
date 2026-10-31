@@ -1,9 +1,12 @@
 package dev.renkinProject.renkin.data
 
 import android.app.Application
+import java.util.zip.GZIPOutputStream
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -23,6 +26,11 @@ class GlobalStyleBakeStoreTest {
     private fun entry(id: Long, profileId: Long = 1, appliedAt: Long = 10) =
         GlobalStyleHistoryEntry(id = id, profileId = profileId, appliedAt = appliedAt, style = "{}")
 
+    private fun GlobalStyleBakeStore.originals(entry: GlobalStyleHistoryEntry): List<GlobalStyleBakeStore.Original>? {
+        val read = mutableListOf<GlobalStyleBakeStore.Original>()
+        return if (runBlocking { forEachOriginal(entry) { read += it } }) read else null
+    }
+
     @Test
     fun committedOriginalsReadBackWithTheirHeader() {
         val store = GlobalStyleBakeStore(folder.root)
@@ -30,6 +38,42 @@ class GlobalStyleBakeStoreTest {
 
         assertEquals(GlobalStyleBakeStore.Header(1, 10, "baked"), store.header(entry(7)))
         assertEquals(listOf(original), store.originals(entry(7)))
+        assertEquals(1, store.count(entry(7)))
+    }
+
+    @Test
+    fun originalsAreTakenFromTheSourceOnlyWhileWriting() {
+        val store = GlobalStyleBakeStore(folder.root)
+        var taken = 0
+        val source = sequenceOf(original, original.copy(packageName = "other")).onEach { taken++ }.asIterable()
+
+        store.commitPending(store.writePending(GlobalStyleBakeStore.Header(1, 10, "baked"), source), 7)
+
+        assertEquals(2, taken)
+        assertEquals(2, store.count(entry(7)))
+        assertEquals(listOf("pkg", "other"), store.originals(entry(7))?.map { it.packageName })
+    }
+
+    @Test
+    fun aFileCutOffMidwayIsNotReadAsComplete() {
+        val store = GlobalStyleBakeStore(folder.root)
+        GZIPOutputStream(folder.root.resolve("4.json.gz").outputStream()).bufferedWriter().use {
+            it.write("""{"version":1,"profileId":1,"appliedAt":10,"bakedStyle":"baked","icons":[{"packageName":"pkg","activityName":"a"},{"packa""")
+        }
+
+        assertEquals("baked", store.header(entry(4))?.bakedStyle)
+        assertNull(store.count(entry(4)))
+        assertNull(store.originals(entry(4)))
+    }
+
+    @Test
+    fun failuresOfTheActionAreNotTakenForAnUnreadableFile() {
+        val store = GlobalStyleBakeStore(folder.root)
+        store.commitPending(store.writePending(GlobalStyleBakeStore.Header(1, 10, "baked"), listOf(original)), 7)
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { store.forEachOriginal(entry(7)) { throw IllegalStateException("superseded") } }
+        }
     }
 
     @Test

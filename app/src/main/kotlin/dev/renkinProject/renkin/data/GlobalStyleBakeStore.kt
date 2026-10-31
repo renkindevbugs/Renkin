@@ -31,8 +31,11 @@ internal class GlobalStyleBakeStore(private val directory: File) {
         val bakedFingerprint: String
     )
 
-    /** Written before the bake touches any icon, so a failed write leaves nothing to undo. */
-    fun writePending(header: Header, originals: List<Original>): File {
+    /**
+     * Written before the bake touches any icon, so a failed write leaves nothing to undo. Each
+     * original is taken from [originals] only as it is written, so a lazy source never holds them all.
+     */
+    fun writePending(header: Header, originals: Iterable<Original>): File {
         directory.mkdirs()
         val pending = File(directory, "$PENDING_PREFIX${header.appliedAt}$SUFFIX")
         JsonWriter(OutputStreamWriter(GZIPOutputStream(pending.outputStream().buffered()), Charsets.UTF_8)).use { writer ->
@@ -69,13 +72,40 @@ internal class GlobalStyleBakeStore(private val directory: File) {
         directory.listFiles { file -> file.name.startsWith(PENDING_PREFIX) }?.forEach { it.delete() }
     }
 
-    fun header(entry: GlobalStyleHistoryEntry): Header? = read(entry) { _, header -> header }
+    fun header(entry: GlobalStyleHistoryEntry): Header? = openAtIcons(entry)?.let { (reader, header) ->
+        reader.close()
+        header
+    }
 
-    fun originals(entry: GlobalStyleHistoryEntry): List<Original>? = read(entry) { reader, _ ->
-        buildList {
-            reader.beginArray()
-            while (reader.hasNext()) add(reader.readOriginal())
-            reader.endArray()
+    /** How many originals the bake kept, or null when its file is gone or unreadable. */
+    fun count(entry: GlobalStyleHistoryEntry): Int? {
+        val (reader, _) = openAtIcons(entry) ?: return null
+        return reader.use {
+            var count = 0
+            parsed {
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    reader.skipValue()
+                    count++
+                }
+                reader.endArray()
+            }.takeIf { it }?.let { count }
+        }
+    }
+
+    /**
+     * Hands each original to [action] as it is read, so only one payload is in memory at a time.
+     * Returns false when the file is gone or turns out unreadable; failures of [action] propagate.
+     */
+    suspend fun forEachOriginal(entry: GlobalStyleHistoryEntry, action: suspend (Original) -> Unit): Boolean {
+        val (reader, _) = openAtIcons(entry) ?: return false
+        reader.use {
+            if (!parsed { reader.beginArray() }) return false
+            while (true) {
+                var original: Original? = null
+                if (!parsed { if (reader.hasNext()) original = reader.readOriginal() }) return false
+                action(original ?: return true)
+            }
         }
     }
 
@@ -92,38 +122,53 @@ internal class GlobalStyleBakeStore(private val directory: File) {
 
     private fun file(entryId: Long) = File(directory, "$entryId$SUFFIX")
 
-    // Reads the header, then hands the reader positioned at the icons array to [body].
-    private fun <T> read(entry: GlobalStyleHistoryEntry, body: (JsonReader, Header) -> T): T? {
+    // Reads the header and returns the reader positioned at the icons array; the caller closes it.
+    private fun openAtIcons(entry: GlobalStyleHistoryEntry): Pair<JsonReader, Header>? {
         val file = file(entry.id)
         if (!file.isFile) return null
-        return try {
-            JsonReader(InputStreamReader(GZIPInputStream(file.inputStream().buffered()), Charsets.UTF_8)).use { reader ->
-                var version = 0
-                var profileId = -1L
-                var appliedAt = -1L
-                var bakedStyle: String? = null
-                reader.beginObject()
-                while (reader.hasNext()) {
-                    when (reader.nextName()) {
-                        "version" -> version = reader.nextInt()
-                        "profileId" -> profileId = reader.nextLong()
-                        "appliedAt" -> appliedAt = reader.nextLong()
-                        "bakedStyle" -> bakedStyle = reader.nextString()
-                        "icons" -> {
-                            val header = Header(profileId, appliedAt, bakedStyle ?: return null)
-                            if (version != VERSION || profileId != entry.profileId || appliedAt != entry.appliedAt) return null
-                            return body(reader, header)
-                        }
-                        else -> reader.skipValue()
-                    }
-                }
-                null
-            }
+        val reader = try {
+            JsonReader(InputStreamReader(GZIPInputStream(file.inputStream().buffered()), Charsets.UTF_8))
         } catch (error: IOException) {
-            null
-        } catch (error: IllegalStateException) {
-            null
+            return null
         }
+        var header: Header? = null
+        val positioned = parsed {
+            var version = 0
+            var profileId = -1L
+            var appliedAt = -1L
+            var bakedStyle: String? = null
+            reader.beginObject()
+            while (header == null && reader.hasNext()) {
+                when (reader.nextName()) {
+                    "version" -> version = reader.nextInt()
+                    "profileId" -> profileId = reader.nextLong()
+                    "appliedAt" -> appliedAt = reader.nextLong()
+                    "bakedStyle" -> bakedStyle = reader.nextString()
+                    "icons" -> {
+                        val style = bakedStyle ?: return@parsed
+                        if (version != VERSION || profileId != entry.profileId || appliedAt != entry.appliedAt) return@parsed
+                        header = Header(profileId, appliedAt, style)
+                    }
+                    else -> reader.skipValue()
+                }
+            }
+        }
+        val found = header
+        if (!positioned || found == null) {
+            reader.close()
+            return null
+        }
+        return reader to found
+    }
+
+    // Only reading the file may fail quietly; errors of the code around it must still propagate.
+    private inline fun parsed(block: () -> Unit): Boolean = try {
+        block()
+        true
+    } catch (error: IOException) {
+        false
+    } catch (error: IllegalStateException) {
+        false
     }
 
     private fun JsonReader.readOriginal(): Original {

@@ -74,6 +74,21 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         }
     }
 
+    /**
+     * [digest] of each stored icon's base (its drawable when it has none), keyed "package/activity".
+     * Rows are read one at a time so only one icon's artwork is in memory, unlike [getAll].
+     */
+    internal suspend fun storedBaseDigests(profileId: Long, digest: (String) -> String): Map<String, String> = access {
+        consistentRead {
+            val oversized = dao.oversizedArtwork(profileId).associateBy { it.packageName to it.activityName }
+            dao.exportKeys().filter { it.profileId == profileId }.mapNotNull { key ->
+                val inline = dao.editorBaselineInline(profileId, key.packageName, key.activityName) ?: return@mapNotNull null
+                val row = withFullArtwork(listOf(inline), listOfNotNull(oversized[key.packageName to key.activityName])).single()
+                "${key.packageName}/${key.activityName}" to digest(row.baseDrawable.ifEmpty { row.drawable })
+            }.toMap()
+        }
+    }
+
     // The inline rows and the chunked artwork must describe the same stored state.
     private fun <T> consistentRead(block: () -> T): T = db.runInTransaction(Callable { block() })
 
