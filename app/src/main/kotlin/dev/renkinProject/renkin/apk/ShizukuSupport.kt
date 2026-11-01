@@ -23,8 +23,13 @@ enum class ShizukuState {
 /** Owns the Shizuku binder/permission checks that Ackpine deliberately leaves to its host app. */
 object ShizukuSupport {
     private const val PERMISSION_REQUEST_CODE = 0x524B
+    private const val SHEVERY_PERMISSION = "com.hamondev.shevery.permission.PRIVILEGED_API"
 
-    private val MANAGER_PACKAGES = listOf("moe.shizuku.privileged.api", "af.shizuku.plus.api")
+    private val MANAGER_PACKAGES = listOf(
+        "moe.shizuku.privileged.api",
+        "af.shizuku.plus.api",
+        "com.hamondev.shevery"
+    )
 
     fun state(context: Context): ShizukuState {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return ShizukuState.UNSUPPORTED
@@ -55,16 +60,20 @@ object ShizukuSupport {
         }.getOrDefault(false)
     }
 
-    // The package declaring the Shizuku permission is the one serving it, whatever its name;
-    // the known manager names cover a stopped server whose permission owner is still installed.
+    // Permission owners include renamed managers; a launchable manager takes priority over a
+    // compatibility stub, which can own the legacy permission without having a UI.
     fun managerPackage(context: Context): String? {
         val packageManager = context.packageManager
-        val declaring = runCatching {
-            packageManager.getPermissionInfo(ShizukuProvider.PERMISSION, 0).packageName
-        }.getOrNull()
-        return declaring ?: MANAGER_PACKAGES.firstOrNull { name ->
+        val permissionOwners = listOf(ShizukuProvider.PERMISSION, SHEVERY_PERMISSION).mapNotNull { permission ->
+            runCatching { packageManager.getPermissionInfo(permission, 0).packageName }.getOrNull()
+        }
+        val installedManagers = MANAGER_PACKAGES.filter { name ->
             runCatching { packageManager.getApplicationInfo(name, 0) }.isSuccess
         }
+        val candidates = (permissionOwners + installedManagers).distinct()
+        return candidates.firstOrNull { name ->
+            runCatching { packageManager.getLaunchIntentForPackage(name) != null }.getOrDefault(false)
+        } ?: candidates.firstOrNull()
     }
 
     fun openManager(context: Context): Boolean {

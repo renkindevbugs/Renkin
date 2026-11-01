@@ -130,6 +130,11 @@ KTX and Shizuku retain their published versions. The adapter replaces transitive
 as well. Its provenance, verification and removal conditions are recorded in
 [installer-confirmation-guard-checkpoint.md](installer-confirmation-guard-checkpoint.md).
 
+Shevery 14.6 uses its native `com.hamondev.shevery.permission.PRIVILEGED_API` declaration to
+deliver the server binder to Renkin's existing Shizuku provider without a compatibility stub.
+Ackpine still uses the Shizuku SDK/backend. `ShizukuSupport` discovers both native and legacy
+permission owners, including renamed managers, and prefers a launchable manager over a stub.
+
 `shouldTryNextRoute` is the single fallback table: a system session or external installer moves on
 only after a technical FAILED, Shizuku also after BLOCKED (a user restriction that a confirmed
 system install can pass); cancellation, conflict, incompatible/invalid APK, storage, policy and
