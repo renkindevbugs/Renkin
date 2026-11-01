@@ -75,6 +75,7 @@ import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.OptionsViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.DisabledExplanation
+import dev.renkinProject.renkin.ui.KeepScreenOn
 import dev.renkinProject.renkin.ui.LocalToaster
 import dev.renkinProject.renkin.ui.RenkinAlertDialog
 import dev.renkinProject.renkin.ui.drawVerticalScrollbar
@@ -202,7 +203,10 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer
     )
 
-    if (buildStep != null) BuildProgressDialog(buildStep, viewModel.buildProgress)
+    if (buildStep != null) {
+        KeepScreenOn()
+        BuildProgressDialog(buildStep, viewModel.buildProgress)
+    }
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)

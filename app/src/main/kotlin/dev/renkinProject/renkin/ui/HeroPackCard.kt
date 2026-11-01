@@ -75,6 +75,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -303,10 +305,16 @@ fun HeroPackCard(
             // The progress reflects the stored icons, which exist independently of the current
             // source pick — so it stays visible even with None selected.
             if (totalCount > 0) {
+                val spokenProgress = listOfNotNull(
+                    pluralStringResource(R.plurals.completionProgressSpoken, totalCount, themedCount, totalCount),
+                    if (addedCount > 0) pluralStringResource(R.plurals.pendingAddedSpoken, addedCount, addedCount) else null,
+                    if (removedCount > 0) pluralStringResource(R.plurals.pendingRemovedSpoken, removedCount, removedCount) else null
+                ).joinToString(", ")
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 10.dp),
+                        .padding(top = 10.dp)
+                        .clearAndSetSemantics { contentDescription = spokenProgress },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(

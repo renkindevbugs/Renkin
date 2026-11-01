@@ -67,6 +67,16 @@ internal data class PackInstallRequest(
     val failedMessage: Int get() = if (wasUpdate) R.string.iconPackUpdateFailed else R.string.iconPackInstallFailed
 }
 
+private val exceptionPackagePrefix = Regex("""^(?:[a-z_][\w$]*\.)+(?=[A-Z])""")
+
+// Installers often return a whole stack trace; its innermost cause usually names the real problem.
+internal fun installFailureHeadline(detail: String): String {
+    val lines = detail.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+    val headline = lines.lastOrNull { it.startsWith("Caused by:") }?.removePrefix("Caused by:")?.trim()
+        ?: lines.firstOrNull().orEmpty()
+    return headline.replace(exceptionPackagePrefix, "").take(300)
+}
+
 internal sealed interface BuildInstallState {
     data object Idle : BuildInstallState
     data class Building(val step: String = "", val progress: Pair<Int, Int>? = null) : BuildInstallState
@@ -390,7 +400,7 @@ internal class BuildInstallCoordinator(
             append(detail)
         }
         if (publish(owner, BuildInstallState.Failed(request.failedMessage,
-            "${outcome.result.name}: ${detail.lineSequence().first().take(300)}", report, outcome.result, request.pack))) notify(request.failedMessage)
+            "${outcome.result.name}: ${installFailureHeadline(detail)}", report, outcome.result, request.pack))) notify(request.failedMessage)
     }
 
     private fun fail(owner: Long, @StringRes message: Int) {
