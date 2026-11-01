@@ -26,7 +26,8 @@ internal data class GlobalIconApplyRequest(
     val app: PackageInfoStruct,
     val options: GenerationOptions,
     val icon: IconPackDrawable,
-    val sourcePackName: String?
+    val sourcePackName: String?,
+    val presetId: Long? = null
 )
 
 internal sealed interface GlobalIconApplyState {

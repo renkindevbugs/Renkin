@@ -129,7 +129,7 @@ fun PackIconsRow(
     onLoadingChange: (Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var moreCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
@@ -249,7 +249,7 @@ fun PackDetailGrid(
     onLoadingChange: (Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
@@ -357,7 +357,7 @@ private fun String.inCalendarGroup(prefix: String?): Boolean =
  */
 @Composable
 private fun rememberCalendarPrefixes(iconPack: IconPack, iconPairs: List<PackIconPreview>): Set<String> {
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     var prefixes by remember(iconPack.packageName) { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(iconPack.packageName, iconPairs) {
         val candidates = iconPairs.mapNotNull { it.drawableName.calendarPrefixOrNull() }.distinct()
@@ -372,7 +372,7 @@ private fun rememberCalendarPrefixes(iconPack: IconPack, iconPairs: List<PackIco
  */
 @Composable
 private fun rememberDynamicClockDrawables(iconPack: IconPack): Set<String> {
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     var drawables by remember(iconPack.packageName) { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(iconPack.packageName) {
         drawables = viewModel.dynamicClockDrawables(iconPack.packageName)

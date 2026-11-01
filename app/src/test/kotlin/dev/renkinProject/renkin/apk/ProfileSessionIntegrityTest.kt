@@ -436,7 +436,8 @@ class ProfileSessionIntegrityTest {
     private val viewModelStores = mutableListOf<ViewModelStore>()
 
     private fun globalOptionsViewModel(handle: SavedStateHandle = SavedStateHandle()) =
-        GlobalOptionsViewModel(RuntimeEnvironment.getApplication(), provider, handle).also { vm ->
+        GlobalOptionsViewModel(RuntimeEnvironment.getApplication(), provider,
+            dev.renkinProject.renkin.feature.presets.ModifierShortcutStore(context, repository), handle).also { vm ->
             viewModelStores += ViewModelStore().also { it.put("global", vm) }
         }
 

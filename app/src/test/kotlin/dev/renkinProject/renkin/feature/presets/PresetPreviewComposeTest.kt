@@ -50,11 +50,10 @@ class PresetPreviewComposeTest {
         var previews by mutableStateOf(previews(key = 1) { awaitCancellation() })
         compose.mainClock.autoAdvance = false
         compose.setContent {
-            ProvideModifierPresets(listOf(preset), { _, _, _ -> }, { _, _, _ -> }, { _, _ -> }, {}, {}) {
-                ModifierPresetsSection(
+            ProvideModifierPresets(listOf(preset), { _, _, _ -> }, { _, _, _ -> }, { _, _ -> }, {}, {},
+                shortcutUsage = ModifierShortcutUsage(profileId = 1, recentIds = listOf(preset.id))) {
+                RecentModifierPresetsSection(
                     adjustments = AdjustmentState(),
-                    imageEdit = ImageEdit.NONE,
-                    iconColor = Color.Black,
                     previews = previews,
                     onPresetLoaded = {}
                 )

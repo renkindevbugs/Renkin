@@ -356,6 +356,11 @@ current activity. A new activity must extend `LocalizedActivity`.
   The launch intent and successful result carry the original `ProfileSessionToken`; the preview
   and build both reject a changed session, including reload/clear and returning to the same
   profile. This guards session ownership, not an immutable revision of every icon edit.
+  Icon tiles open the normal editor over the preview. `PackPreviewEditorOwners` lends a weak
+  reference to the existing home ViewModel; editor composables read `LocalIconEditorOwner`
+  instead of constructing another home owner. Preview editor/session recovery owners remain
+  activity-scoped. Apply waits for the matching receipt before closing, while the grid keeps its
+  opening order and scroll state. Home pauses its shared toast collector while preview owns it.
 
 ## Profiles
 
@@ -1984,6 +1989,25 @@ follow-ups; CRC verifies transport integrity only.
   connection that swallows fling leftovers at the list edges — workaround for the M3
   ModalBottomSheet jitter bug (issuetracker.google.com/issues/486562294); the connection can
   go once material3 ships the fix.
+- **Icon sources**: the hero sheet stages primary and secondary in compact 56dp role buttons.
+  Secondary is available only with a selected installed primary pack. Secondary row counts are
+  shown after an explicit switch to Secondary; selecting Primary keeps that tab open. Configured
+  sources show their names in primary with a moving light glint. A primary outline and
+  secondaryContainer fill mark only the tab currently being edited. Empty and disabled source
+  names do not shimmer. Counts represent component mappings absent from Primary, not total pack
+  coverage. Done writes both sources in one preference transaction under the opening profile
+  session, then refreshes once. Source
+  selectors moved out of Advanced; its modifiers remain there.
+- **Editor shortcuts**: two recently confirmed presets per profile appear above the Modifier
+  controls. `ModifierShortcutStore` keeps device-local hints in separate shared preferences,
+  outside profile recipes and portable backups. A committed modifier Apply reopens dismissed
+  shortcuts; four committed per-icon Applies without modifiers hide them. Loading/canceling does
+  not record usage. Manage and Save remain at the bottom even when the shortcuts are hidden.
+- **New enlargement**: a square canvas frame/grid and four preview-only launcher masks. Adaptive
+  previews compose their original layers in the same 72dp viewport before masking; applying a
+  different preview mask never changes the exported icon. The editor remembers the chosen mask.
+- **Filter indicator**: the existing search-field sort/filter control shows the active icon-filter
+  count at its bottom-right; zero hides it. Sorting does not contribute to this count.
 - No pull-to-refresh on the home list **on purpose**: its nested-scroll handler fought the
   collapsing large top bar (glitches, ghost taps). The app list reloads from Settings.
 - **Global style grid sections** are `LazyGridScope.stickyHeader`s: a section title stays pinned

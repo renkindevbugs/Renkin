@@ -45,6 +45,7 @@ internal class EditorSession(
     }
 
     var selectedTab by mutableIntStateOf(0)
+    internal var confirmedModifierUse = false
     var applicationIcon by mutableStateOf<EditorApplicationIcon?>(null)
         internal set
     // Not part of draft recovery: a recovered editor offers the applied layer again, switched on.

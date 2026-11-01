@@ -130,6 +130,7 @@ class MainActivity : LocalizedActivity() {
 
             val colorPresets by presetsViewModel.colorPresets.collectAsStateWithLifecycle()
             val modifierPresets by presetsViewModel.modifierPresets.collectAsStateWithLifecycle()
+            val modifierShortcutUsage by presetsViewModel.modifierShortcutUsage.collectAsStateWithLifecycle()
             CollectToasts(toaster, presetsViewModel.toastEvents, sharedImageImporter.toastEvents)
 
             ProvideAdaptiveLayoutInfo(this@MainActivity) {
@@ -148,7 +149,9 @@ class MainActivity : LocalizedActivity() {
                             onUpdate = presetsViewModel::updateModifierPreset,
                             onRename = presetsViewModel::renameModifierPreset,
                             onMarkUsed = presetsViewModel::markModifierPresetUsed,
-                            onDelete = presetsViewModel::deleteModifierPreset
+                            onDelete = presetsViewModel::deleteModifierPreset,
+                            shortcutUsage = modifierShortcutUsage,
+                            onDismissShortcuts = presetsViewModel::dismissModifierShortcuts
                         ) {
                             RenkinTheme(darkMode) {
                                 Surface(

@@ -674,6 +674,19 @@ suspend fun DataStore<Preferences>.setPrimarySource(source: Source, packageName:
     }
 }
 
+suspend fun DataStore<Preferences>.setIconSources(
+    primary: Source, primaryPackage: String, secondary: Source, secondaryPackage: String
+) {
+    withPreferenceAccess {
+        editOwnedPreferences { target ->
+            target[PrimarySourceKey] = primary.ordinal
+            target[PrimaryIconPackKey] = primaryPackage
+            target[SecondarySourceKey] = secondary.ordinal
+            target[SecondaryIconPackKey] = secondaryPackage
+        }
+    }
+}
+
 /** Startup restore of the last BUILT source/pack — same atomicity requirement. */
 suspend fun DataStore<Preferences>.restoreBuiltPrimarySource(snapshot: Preferences) {
     withPreferenceAccess {

@@ -70,6 +70,15 @@ class AdaptiveIconPackDrawable internal constructor(
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     override fun isAdaptiveIcon(): Boolean = true
     override fun toBitmap(): Bitmap = render(PREVIEW_SIZE)
+
+    /** The same 72dp viewport before the device's mask, for trying other launcher masks. */
+    internal fun maskPreviewBitmap(size: Int): Bitmap = newArgbBitmap(size, size) { canvas ->
+        val layerSize = (size * ADAPTIVE_ICON_SCALE).toInt().coerceAtLeast(1)
+        val inset = size * (ADAPTIVE_ICON_SCALE - 1f) / 2f
+        val target = RectF(-inset, -inset, size + inset, size + inset)
+        canvas.drawBitmap(decodeLayer(backgroundPng, layerSize), null, target, paint)
+        canvas.drawBitmap(decodeLayer(foregroundPng, layerSize), null, target, paint)
+    }
     // Flattening modifiers start from the masked 72dp frame the launcher shows for these layers,
     // so a flattened icon keeps the glyph size of its unmodified adaptive export.
     override fun toModifierBitmap(size: Int): Bitmap =

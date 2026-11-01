@@ -34,6 +34,22 @@ class IconPackStateTest {
 
     private val item = RawItem("ComponentInfo{com.app/com.app.Main}", "app")
 
+    @Test fun secondaryCoverageCountsOnlyComponentsAbsentFromPrimary() = runBlocking {
+        val repo = repository()
+        val common = RawItem("ComponentInfo{com.common/com.common.Main}", "shared")
+        val secondaryOnly = RawItem("ComponentInfo{com.second/com.second.Main}", "second")
+        val apps = listOf("com.app", "com.common", "com.second").map {
+            InstalledApplication(it, "$it.Main", 0)
+        }
+        repo.load(apps, { listOf(pack, other) }) { current, _ ->
+            if (current == pack) listOf(item, common) else listOf(common, secondaryOnly, secondaryOnly)
+        }
+        assertEquals(mapOf(pack.packageName to 0, other.packageName to 1),
+            repo.additionalAppCounts(pack.packageName))
+        assertEquals(mapOf(pack.packageName to 1, other.packageName to 0),
+            repo.additionalAppCounts(other.packageName))
+    }
+
     private fun assertVisible(packs: List<IconPack>, loaded: Boolean, state: IconPackState) {
         assertEquals(packs, state.packs)
         assertEquals(loaded, state.loaded)

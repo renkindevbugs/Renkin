@@ -193,7 +193,7 @@ internal fun OptionsDialog(
     canInteract: () -> Boolean = { true },
     globalLayer: EditorGlobalLayer? = null
 ) {
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     val app = session.application
     val interactionAllowed = canInteract()
 
@@ -527,6 +527,7 @@ internal fun OptionsDialog(
             else -> null
         }
         if (!dialogTransition.targetState) return@confirm
+        session.confirmedModifierUse = uiOptions.modifiers.hasVisibleEffect
         onConfirm(
             draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName,
             sourcePackToPersist, sourceUrlToPersist, draft.modifierRecipeToConfirm, draft.modifierInputToConfirm

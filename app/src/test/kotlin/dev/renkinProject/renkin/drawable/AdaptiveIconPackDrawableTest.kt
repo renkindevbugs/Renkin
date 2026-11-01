@@ -84,6 +84,25 @@ class AdaptiveIconPackDrawableTest {
     }
 
     @Test
+    fun launcherMaskPreviewRetainsCornersAndViewportWithoutChangingExport() {
+        val foreground = Bitmap.createBitmap(750, 750, Bitmap.Config.ARGB_8888)
+        Canvas(foreground).drawRect(280f, 280f, 470f, 470f,
+            android.graphics.Paint().apply { color = Color.RED })
+        val icon = AdaptiveIconPackDrawable(foreground.getBytes(Bitmap.CompressFormat.PNG, 100), layer(Color.BLUE))
+        val payload = icon.toDbString()
+        val exported = icon.toBitmap()
+
+        val preview = icon.maskPreviewBitmap(500)
+
+        assertEquals(Color.BLUE, preview.getPixel(0, 0))
+        assertEquals(Color.BLUE, preview.getPixel(499, 499))
+        assertEquals(Color.RED, preview.getPixel(165, 250))
+        assertEquals(Color.BLUE, preview.getPixel(150, 250))
+        assertEquals(payload, icon.toDbString())
+        assertTrue(exported.sameAs(icon.toBitmap()))
+    }
+
+    @Test
     fun repeatedDrawUsesCachedRasterInsteadOfRetainingBitmapOnDrawable() {
         val icon = AdaptiveIconPackDrawable(layer(Color.RED), layer(Color.BLUE))
         val key = IconPreviewCacheKey(icon, 96)

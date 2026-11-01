@@ -87,6 +87,8 @@ import dev.renkinProject.renkin.feature.launch.LaunchFirePlayback
 import dev.renkinProject.renkin.feature.launch.loadLaunchFireMask
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.feature.language.AppLocales
+import dev.renkinProject.renkin.feature.presets.ModifierShortcutStore
+import dev.renkinProject.renkin.feature.presets.ModifierShortcutApply
 import dev.renkinProject.renkin.feature.watch.WatchApplyOwner
 import dev.renkinProject.renkin.feature.watch.WatchApplyRequest
 import dev.renkinProject.renkin.feature.watch.WatchApplyState
@@ -167,6 +169,7 @@ class MainViewModel @Inject constructor(
     private val backupManager: BackupManager,
     autoBackupManager: AutoBackupManager,
     private val unsavedSessionMonitor: UnsavedSessionMonitor,
+    private val modifierShortcuts: ModifierShortcutStore,
     savedStateHandle: SavedStateHandle
 ) : AndroidViewModel(application), IconPreviewBuilder {
     private val installerCatalog = InstallerCatalog(application)
@@ -181,6 +184,7 @@ class MainViewModel @Inject constructor(
     val applicationState = appProvider.applicationState
     val installedIcons = appProvider.installedIcons
     val runtimeState = appProvider.runtimeState
+    internal var packPreviewOpen by mutableStateOf(false)
     /** Action-time snapshot only; composables collect [applicationState]. */
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
 
@@ -675,6 +679,21 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun selectIconSources(
+        expected: ProfileSessionToken,
+        primary: Source,
+        primaryPackage: String,
+        secondary: Source,
+        secondaryPackage: String
+    ) {
+        launchProfileOperation(expected) {
+            val selected = appProvider.selectIconSources(
+                expected, primary, primaryPackage, secondary, secondaryPackage
+            )
+            if (primary != Source.NONE) refresh(selected)
+        }
+    }
+
     fun setAppSortOrder(order: AppSortOrder) = updatePreferences {
         setEnumValue(AppSortOrderKey, order)
     }
@@ -1025,8 +1044,9 @@ class MainViewModel @Inject constructor(
         modifierRecipe: String? = null,
         modifierInput: IconModifierInput? = null,
         requestId: Long? = null,
-        keepGlobalStyle: Boolean = false
-    ) = applyPickedIcon(expected, app, icon, sourcePackName, requestId, keepGlobalStyle) { live, origin, rendered ->
+        keepGlobalStyle: Boolean = false,
+        modifierUsage: ModifierShortcutApply? = null
+    ) = applyPickedIcon(expected, app, icon, sourcePackName, requestId, keepGlobalStyle, modifierUsage) { live, origin, rendered ->
         live.changeExport(
             rendered, sourcePackName = origin, isRefreshMade = false, isCustom = true,
             isLegacy = false, baseIcon = icon, sourceUrl = sourceUrl,
@@ -1045,6 +1065,7 @@ class MainViewModel @Inject constructor(
         sourcePackName: String?,
         requestId: Long?,
         keepGlobalStyle: Boolean = false,
+        modifierUsage: ModifierShortcutApply? = null,
         edit: (live: PackageInfoStruct, origin: String?, rendered: IconPackDrawable?) -> PackageInfoStruct
     ) {
         launchProfileOperation(expected, serialize = false) {
@@ -1052,7 +1073,18 @@ class MainViewModel @Inject constructor(
             try {
                 outcome = appProvider.applyPickedIcon(expected, app, icon, sourcePackName, keepGlobalStyle = keepGlobalStyle, edit = edit)
                 when (outcome) {
-                    IconApplyOutcome.APPLIED -> markUpdated(expected, app, icon)
+                    IconApplyOutcome.APPLIED -> {
+                        markUpdated(expected, app, icon)
+                        if (modifierUsage != null) viewModelScope.launch {
+                            try {
+                                modifierShortcuts.recordApply(expected.profileId, modifierUsage)
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (error: Exception) {
+                                Log.error("MainViewModel", "Recording modifier shortcut use failed", error)
+                            }
+                        }
+                    }
                     IconApplyOutcome.LOCKED -> _toastEvents.trySend(R.string.iconOriginLocked)
                     IconApplyOutcome.PROFILE_CHANGED -> _toastEvents.trySend(expected.expiredSessionMessage(sessionToken))
                     IconApplyOutcome.TARGET_GONE -> _toastEvents.trySend(R.string.iconEditTargetGone)
@@ -1128,6 +1160,9 @@ class MainViewModel @Inject constructor(
 
     /** How many installed apps each pack has an icon for — the pack picker's coverage line. */
     fun packMatchedAppCounts(): Map<String, Int> = appProvider.packMatchedAppCounts()
+
+    fun packAdditionalAppCounts(primaryPackage: String): Map<String, Int> =
+        appProvider.packAdditionalAppCounts(primaryPackage)
 
     /** Per-pack usage by TRUE origin (locked icons included) for the stats dialog. */
     suspend fun packUsageEntries(): List<ApplicationProvider.PackUsage> = appProvider.packUsageEntries()

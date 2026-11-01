@@ -273,6 +273,14 @@ class IconPackRepository(
     fun matchedAppCounts(): Map<String, Int> =
         state.value.index.drawableNamesByPackage.mapValues { (_, drawables) -> drawables.size }
 
+    fun additionalAppCounts(primaryPackage: String): Map<String, Int> {
+        val index = state.value.index
+        val primary = index.drawableNamesByPackage[primaryPackage].orEmpty()
+        return index.drawableNamesByPackage.mapValues { (_, drawables) ->
+            drawables.keys.count { it !in primary }
+        }
+    }
+
     internal fun captureAppDrawables(iconPack: String): () -> Map<InstalledApplication, ResourceDrawable> {
         val index = state.value.index
         val elements = index.elementsByPackage[iconPack].orEmpty()

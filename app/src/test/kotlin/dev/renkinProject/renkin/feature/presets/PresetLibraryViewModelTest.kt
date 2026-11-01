@@ -8,6 +8,14 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.di.AppModule
+import dev.renkinProject.renkin.data.watch.WatchDatabase
+import dev.renkinProject.renkin.data.watch.WatchRepository
+import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
+import dev.renkinProject.renkin.data.editor.EditorDraftStore
+import dev.renkinProject.renkin.data.UnsavedIconJournalStore
+import dev.renkinProject.renkin.packages.InstalledIconLoader
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -33,6 +41,9 @@ import java.io.IOException
 class PresetLibraryViewModelTest {
     private lateinit var db: RenkinPackDatabase
     private lateinit var repository: RenkinPackRepository
+    private lateinit var watchDb: WatchDatabase
+    private lateinit var provider: ApplicationProvider
+    private lateinit var shortcuts: ModifierShortcutStore
     private val stores = mutableListOf<ViewModelStore>()
 
     @Before
@@ -41,6 +52,19 @@ class PresetLibraryViewModelTest {
         db = Room.inMemoryDatabaseBuilder(RuntimeEnvironment.getApplication(), RenkinPackDatabase::class.java)
             .allowMainThreadQueries().build()
         repository = RenkinPackRepository(db)
+        val context = RuntimeEnvironment.getApplication()
+        watchDb = Room.inMemoryDatabaseBuilder(context, WatchDatabase::class.java).allowMainThreadQueries().build()
+        val catalog = AppModule.provideIconPackCatalog(context)
+        val icons = AppModule.provideIconPackRepository(context, catalog)
+        val locks = AppModule.provideIconLockManager(context, repository)
+        val profiles = AppModule.provideProfileManager(context, repository, WatchRepository(watchDb))
+        val installed = InstalledIconLoader(context)
+        provider = AppModule.provideApplicationProvider(context,
+            AppModule.provideRenkinPackStore(context, repository), repository, icons, locks, profiles,
+            AppModule.provideIconGenerationService(context, icons, catalog, installed),
+            AppModule.provideIconPackBuildService(context, icons, repository, locks, profiles, catalog),
+            EditorDraftInvalidation(EditorDraftStore(context), UnsavedIconJournalStore(context)), installed)
+        shortcuts = ModifierShortcutStore(context, repository)
     }
 
     @After
@@ -48,10 +72,11 @@ class PresetLibraryViewModelTest {
         stores.forEach { it.clear() }
         shadowOf(Looper.getMainLooper()).idle()
         db.close()
+        watchDb.close()
         StorageOperationGate.resetForTests()
     }
 
-    private fun owner(): PresetLibraryViewModel = PresetLibraryViewModel(repository).also { vm ->
+    private fun owner(): PresetLibraryViewModel = PresetLibraryViewModel(repository, shortcuts, provider).also { vm ->
         stores += ViewModelStore().also { it.put("presets", vm) }
     }
 

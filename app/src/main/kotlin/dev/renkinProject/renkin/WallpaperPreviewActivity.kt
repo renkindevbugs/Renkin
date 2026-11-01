@@ -10,6 +10,20 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.feature.buildinstall.PackPreviewEditorOwners
+import dev.renkinProject.renkin.feature.buildinstall.LocalIconEditorOwner
+import dev.renkinProject.renkin.feature.presets.PresetLibraryViewModel
+import dev.renkinProject.renkin.feature.presets.ProvideModifierPresets
+import dev.renkinProject.renkin.feature.presets.ProvideColorPresets
+import dev.renkinProject.renkin.ui.ProvideAdaptiveLayoutInfo
+import dev.renkinProject.renkin.ui.OpenAppOptions
+import dev.renkinProject.renkin.ui.CollectToasts
+import dev.renkinProject.renkin.data.ExportThemedKey
+import dev.renkinProject.renkin.data.getBooleanValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -33,10 +47,9 @@ import javax.inject.Inject
  * since Android 13). This must be an activity: WindowManager doesn't reliably make dialog windows
  * the wallpaper target.
  *
- * Reads shared state from the ApplicationProvider singleton directly — deliberately NOT through a
- * new MainViewModel, whose init would re-run the provider initialisation and drop unsaved icons.
- * The session-scoped built/updated key sets travel in via intent extras; RESULT_OK means the user
- * pressed Build, and the launching side starts the actual build.
+ * Reads the provider's live state and borrows the existing home ViewModel for per-icon edits.
+ * A new MainViewModel would re-run initialization and drop unsaved icons. The opening built/updated
+ * keys travel in intent extras; RESULT_OK asks the home owner to build the reviewed live state.
  */
 @AndroidEntryPoint
 class WallpaperPreviewActivity : LocalizedActivity() {
@@ -49,6 +62,7 @@ class WallpaperPreviewActivity : LocalizedActivity() {
         const val EXTRA_BUILT_KEYS = "builtKeys"
         const val EXTRA_UPDATED_KEYS = "updatedKeys"
         const val EXTRA_SESSION_CHANGED = "sessionChanged"
+        const val EXTRA_EDITOR_OWNER = "editorOwner"
 
         /** Set on a CANCELED result when the process died under the preview (see onCreate). */
         const val EXTRA_SESSION_LOST = "sessionLost"
@@ -87,47 +101,94 @@ class WallpaperPreviewActivity : LocalizedActivity() {
             cancelExpiredPreview(expected)
             return
         }
+        val editorOwner = PackPreviewEditorOwners.find(intent.getStringExtra(EXTRA_EDITOR_OWNER))
+        if (editorOwner == null) {
+            setResult(RESULT_CANCELED, Intent().putExtra(EXTRA_SESSION_LOST, true))
+            finish()
+            return
+        }
 
         setContent {
             val applicationState by appProvider.applicationState.collectAsStateWithLifecycle()
             val runtimeState by appProvider.runtimeState.collectAsStateWithLifecycle()
+            val iconPacks by editorOwner.iconPackState.collectAsStateWithLifecycle()
+            val library: PresetLibraryViewModel = hiltViewModel()
+            val options: OptionsViewModel = hiltViewModel()
+            val preferences by options.preferenceSnapshot.collectAsStateWithLifecycle()
+            val colorPresets by library.colorPresets.collectAsStateWithLifecycle()
+            val modifierPresets by library.modifierPresets.collectAsStateWithLifecycle()
+            val shortcutUsage by library.modifierShortcutUsage.collectAsStateWithLifecycle()
+            var editingKey by rememberSaveable { mutableStateOf<String?>(null) }
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
             val style = SystemBarStyle.auto(Color.Transparent.toArgb(), Color.Transparent.toArgb()) { darkMode }
             enableEdgeToEdge(style, style)
 
             // Own Toaster: the preview content (DisabledExplanation) reads LocalToaster, which is
             // otherwise only provided by MainActivity's composition.
-            CompositionLocalProvider(LocalToaster provides toaster) {
-                RenkinTheme(darkMode) {
-                    LaunchedEffect(
-                        runtimeState.sessionToken,
-                        runtimeState.isProfileSwitching
-                    ) {
-                        // The reviewed icons must stay tied to one profile. A watch deep link can
-                        // otherwise switch the singleton provider underneath this activity.
-                        if (!appProvider.isCurrentSession(expected)) {
-                            cancelExpiredPreview(expected)
-                        }
-                    }
-                    BuildPackPreviewContent(
-                        applications = applicationState.applications,
-                        builtKeys = builtKeys,
-                        updatedKeys = updatedKeys,
-                        loadCalendarWarnings = { preferences -> appProvider.calendarWarnings(preferences) },
-                        onDismiss = { finish() },
-                        onBuild = {
-                            if (appProvider.isCurrentSession(expected)) {
-                                setResult(RESULT_OK, Intent().withProfileSession(expected))
-                                finish()
-                            } else {
-                                cancelExpiredPreview(expected)
+            ProvideAdaptiveLayoutInfo(this@WallpaperPreviewActivity) {
+                CompositionLocalProvider(LocalToaster provides toaster, LocalIconEditorOwner provides editorOwner) {
+                    ProvideColorPresets(colorPresets, library::saveColorPreset, library::deleteColorPreset) {
+                        ProvideModifierPresets(
+                            presets = modifierPresets,
+                            onSave = library::saveModifierPreset,
+                            onUpdate = library::updateModifierPreset,
+                            onRename = library::renameModifierPreset,
+                            onMarkUsed = library::markModifierPresetUsed,
+                            onDelete = library::deleteModifierPreset,
+                            shortcutUsage = shortcutUsage,
+                            onDismissShortcuts = library::dismissModifierShortcuts
+                        ) {
+                            RenkinTheme(darkMode) {
+                                CollectToasts(toaster, editorOwner.toastEvents, options.toastEvents, library.toastEvents)
+                                LaunchedEffect(
+                                    runtimeState.sessionToken,
+                                    runtimeState.isProfileSwitching
+                                ) {
+                                    // The reviewed icons must stay tied to one profile. A watch deep link can
+                                    // otherwise switch the singleton provider underneath this activity.
+                                    if (!appProvider.isCurrentSession(expected)) {
+                                        cancelExpiredPreview(expected)
+                                    }
+                                }
+                                BuildPackPreviewContent(
+                                    applications = applicationState.applications,
+                                    builtKeys = builtKeys,
+                                    updatedKeys = updatedKeys + editorOwner.updatedKeys,
+                                    loadCalendarWarnings = { preferences -> appProvider.calendarWarnings(preferences) },
+                                    onEditIcon = { editingKey = it.key },
+                                    onDismiss = { finish() },
+                                    onBuild = {
+                                        if (appProvider.isCurrentSession(expected)) {
+                                            setResult(RESULT_OK, Intent().withProfileSession(expected))
+                                            finish()
+                                        } else {
+                                            cancelExpiredPreview(expected)
+                                        }
+                                    }
+                                )
+                                editingKey?.let { key ->
+                                    val app = applicationState.applications.firstOrNull { it.key == key }
+                                    if (app != null) OpenAppOptions(
+                                        iconPacks = iconPacks.packs,
+                                        app = app,
+                                        themed = preferences.getBooleanValue(ExportThemedKey),
+                                        sourceSession = expected,
+                                        awaitApply = true,
+                                        onDismiss = { editingKey = null }
+                                    ) else LaunchedEffect(key) { editingKey = null }
+                                }
+                                ToastHost(toaster)
                             }
                         }
-                    )
-                    ToastHost(toaster)
+                    }
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        if (!isChangingConfigurations) PackPreviewEditorOwners.release(intent.getStringExtra(EXTRA_EDITOR_OWNER))
+        super.onDestroy()
     }
 
     private fun cancelExpiredPreview(expected: ProfileSessionToken) {
