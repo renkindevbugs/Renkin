@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.feature.presets.ModifierPresetsSection
+import dev.renkinProject.renkin.feature.presets.RecentModifierPresetsSection
 import dev.renkinProject.renkin.feature.presets.colorizerStyleWith
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.AppBackgroundColor
@@ -159,6 +160,10 @@ internal fun ModifierTab(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         leadingContent()
+        RecentModifierPresetsSection(adjustments, previews) { applied ->
+            applied.imageEdit?.let(onImageEditChange)
+            applied.iconColor?.let(onColorChange)
+        }
         materialYouPackAdjustments?.let {
             MaterialYouPackSection(
                 adjustments = it,

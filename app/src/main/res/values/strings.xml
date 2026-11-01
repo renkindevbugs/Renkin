@@ -1022,4 +1022,20 @@
         <item quantity="one">Keeps the last %1$d apply of this profile.</item>
         <item quantity="other">Keeps the last %1$d applies of this profile.</item>
     </plurals>
+    <string name="sourceSelectPrimaryFirst">Select Primary first</string>
+    <string name="sourceSecondaryHint">Only where Primary has no match</string>
+    <string name="sourceRemoveSecondary">Remove Secondary</string>
+    <string name="sourceUsedAsPrimary">Already used as Primary</string>
+    <plurals name="sourceAddsMissingIcons">
+        <item quantity="one">Adds %1$d missing icon</item>
+        <item quantity="other">Adds %1$d missing icons</item>
+    </plurals>
+    <string name="previewMaskSquare">Square</string>
+    <string name="previewMaskRounded">Rounded square</string>
+    <string name="recentModifierPresets">Recent presets</string>
+    <string name="dismissRecentModifierPresets">Hide recent presets until modifiers are used again</string>
+    <string name="sourceNoAdditionalIcons">No additional icons</string>
+    <string name="sortAppsWithFilters">Sort and filter apps. Active filters: %1$d</string>
+    <string name="sourceSecondaryOptional">Optional</string>
+    <string name="sourceSecondaryNotNeeded">Not needed</string>
 </resources>

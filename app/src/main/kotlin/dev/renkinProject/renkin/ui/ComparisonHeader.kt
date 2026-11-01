@@ -6,6 +6,21 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import dev.renkinProject.renkin.ui.theme.InnerShape
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +52,10 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
+import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -498,6 +517,7 @@ private fun NewSlot(
     val borderColor = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     // Tapping the preview blows it up, so the result is judgeable before applying.
     var enlarged by remember { mutableStateOf(false) }
+    var previewMask by rememberSaveable { mutableStateOf(LauncherPreviewMask.ROUNDED) }
     var showLoading by remember { mutableStateOf(false) }
     LaunchedEffect(previewLoading) {
         if (previewLoading) {
@@ -571,28 +591,78 @@ private fun NewSlot(
     }
 
     if (enlarged && previewIcon != null) {
-        EnlargedIconDialog(previewIcon) { enlarged = false }
+        EnlargedIconDialog(previewIcon, previewMask, { previewMask = it }) { enlarged = false }
     }
 }
 
 /** Blown-up look at the new icon — the 56dp slot hides detail the launcher will show. */
 @Composable
-internal fun EnlargedIconDialog(icon: IconPackDrawable, onDismiss: () -> Unit) {
+internal fun EnlargedIconDialog(
+    icon: IconPackDrawable,
+    mask: LauncherPreviewMask? = null,
+    onMaskChange: ((LauncherPreviewMask) -> Unit)? = null,
+    onDismiss: () -> Unit
+) {
+    var localMask by rememberSaveable { mutableStateOf(LauncherPreviewMask.ROUNDED) }
+    val selectedMask = mask ?: localMask
+    val unmaskedBitmap by produceState<Bitmap?>(null, icon) {
+        value = if (icon is AdaptiveIconPackDrawable) withContext(Dispatchers.Default) {
+            icon.maskPreviewBitmap(AdaptiveIconPackDrawable.PREVIEW_SIZE)
+        } else null
+    }
+    val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
+    val outline = MaterialTheme.colorScheme.outline
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = DialogShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            // Tapping the blown-up icon closes it again — no chrome needed.
-            modifier = Modifier.clickable(onClick = onDismiss)
+            color = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
-            Box(Modifier.padding(32.dp), contentAlignment = Alignment.Center) {
-                // No clip on purpose: rounding here would misrepresent shaped/full-bleed
-                // icons — the preview must show exactly the pixels the pack will carry.
-                Image(
-                    painter = icon.getPainter(),
-                    contentDescription = stringResource(R.string.iconNew),
-                    modifier = Modifier.size(240.dp)
-                )
+            Column(
+                Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    Modifier.widthIn(max = 240.dp).fillMaxWidth().aspectRatio(1f)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .drawBehind { drawBlueprintGrid(gridColor) }
+                        .border(1.dp, outline)
+                        .clickable(onClick = onDismiss)
+                ) {
+                    Image(
+                        painter = unmaskedBitmap?.let { BitmapPainter(it.asImageBitmap()) } ?: icon.getPainter(),
+                        contentDescription = stringResource(R.string.iconNew),
+                        modifier = Modifier.fillMaxSize().clip(selectedMask.shape)
+                            .border(1.dp, outline, selectedMask.shape)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.Center) {
+                    LauncherPreviewMask.entries.forEach { candidate ->
+                        val selected = candidate == selectedMask
+                        val maskLabel = stringResource(candidate.label)
+                        val fill by animateColorAsState(
+                            if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                            MaterialTheme.motionScheme.fastEffectsSpec(), label = "previewMaskSelection"
+                        )
+                        val ink = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        RenkinTooltipBox(maskLabel) {
+                            Box(
+                                Modifier.size(48.dp).clip(InnerShape).background(fill)
+                                    .selectable(selected, role = Role.RadioButton) {
+                                        localMask = candidate
+                                        onMaskChange?.invoke(candidate)
+                                    }.semantics { contentDescription = maskLabel },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Canvas(Modifier.size(24.dp)) {
+                                    drawOutline(candidate.shape.createOutline(size, layoutDirection, this),
+                                        ink, style = Stroke(1.5.dp.toPx()))
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

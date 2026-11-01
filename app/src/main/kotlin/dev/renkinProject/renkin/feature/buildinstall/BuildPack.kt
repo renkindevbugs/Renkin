@@ -45,6 +45,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import dev.renkinProject.renkin.ui.tappableIcon
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -148,7 +150,10 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
     // Lets a confirmation reach the user if they leave Renkin while the pack builds; the build
     // never waits for the answer.
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    var previewOwnerId by rememberSaveable { mutableStateOf<String?>(null) }
     val previewLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        PackPreviewEditorOwners.release(previewOwnerId)
+        previewOwnerId = null
         if (result.resultCode == Activity.RESULT_OK) {
             val expected = result.data?.profileSession() ?: return@rememberLauncherForActivityResult
             view.performConfirmHaptic()
@@ -168,6 +173,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
 
     ExtendedFloatingActionButton(
         onClick = {
+            if (viewModel.packPreviewOpen) return@ExtendedFloatingActionButton
             if (viewModel.buildBusy) {
                 toaster.show(context.getString(R.string.buildOperationPending))
                 return@ExtendedFloatingActionButton
@@ -183,8 +189,11 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
 
             // Review the whole pack before committing to a build
             view.performTapHaptic()
+            val editorOwner = PackPreviewEditorOwners.register(viewModel)
+            previewOwnerId = editorOwner
             previewLauncher.launch(
                 Intent(context, WallpaperPreviewActivity::class.java)
+                    .putExtra(WallpaperPreviewActivity.EXTRA_EDITOR_OWNER, editorOwner)
                     .withProfileSession(viewModel.sessionToken)
                     .putStringArrayListExtra(WallpaperPreviewActivity.EXTRA_BUILT_KEYS, ArrayList(viewModel.builtKeys))
                     .putStringArrayListExtra(WallpaperPreviewActivity.EXTRA_UPDATED_KEYS, ArrayList(viewModel.updatedKeys))
@@ -271,6 +280,7 @@ fun BuildPackPreviewContent(
     builtKeys: Set<String>,
     updatedKeys: Set<String>,
     loadCalendarWarnings: suspend (Preferences) -> List<ApplicationProvider.CalendarWarning>,
+    onEditIcon: ((PackageInfoStruct) -> Unit)? = null,
     onDismiss: () -> Unit,
     onBuild: () -> Unit
 ) {
@@ -280,7 +290,11 @@ fun BuildPackPreviewContent(
             buildPreviewApps(applications, builtKeys, updatedKeys)
         }
     }
-    val themedApps = previewApps.applications
+    val openingKeys = rememberSaveable { previewApps.applications.map { it.key } }
+    val openingOrder = remember(openingKeys) { openingKeys.mapIndexed { index, key -> key to index }.toMap() }
+    val themedApps = remember(previewApps.applications, openingOrder) {
+        previewApps.applications.sortedBy { openingOrder[it.key] ?: Int.MAX_VALUE }
+    }
     val newCount = previewApps.newCount
 
     // Warn (before building) about calendar apps whose source pack lacks some 1..31 day
@@ -397,7 +411,8 @@ fun BuildPackPreviewContent(
                                 app = app,
                                 isNew = key !in builtKeys,
                                 isChanged = key in builtKeys && key in updatedKeys,
-                                themedBackground = themedBackground
+                                themedBackground = themedBackground,
+                                onEdit = onEditIcon?.let { edit -> { edit(app) } }
                             )
                         }
                     }
@@ -438,9 +453,13 @@ private fun BuildPreviewItem(
     app: PackageInfoStruct,
     isNew: Boolean = false,
     isChanged: Boolean = false,
-    themedBackground: Color? = null
+    themedBackground: Color? = null,
+    onEdit: (() -> Unit)? = null
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        modifier = if (onEdit == null) Modifier else Modifier.tappableIcon(onEdit),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
         Box {
             app.createdIcon?.let { icon ->
                 Image(

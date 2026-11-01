@@ -211,7 +211,7 @@ fun CreateTab(
     val busy = activeLoads > 0 || searchQuery != debouncedQuery
     LaunchedEffect(busy) { onBusyChange(busy) }
     // Pack first-install times, fetched only once the recently-installed sort is chosen.
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     val packInstallTimes by produceState(emptyMap<String, Long>(), packSort, iconPacks) {
         if (packSort == PackSortOrder.INSTALL_DATE && value.isEmpty()) {
             value = viewModel.installTimes(iconPacks.map { it.packageName })

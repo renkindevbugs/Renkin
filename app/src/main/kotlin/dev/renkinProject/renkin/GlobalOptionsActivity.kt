@@ -147,6 +147,7 @@ class GlobalOptionsActivity : LocalizedActivity() {
             val profileChanged = viewModel.hasProfileChanged(runtimeState)
             val colorPresets by presetsViewModel.colorPresets.collectAsStateWithLifecycle()
             val modifierPresets by presetsViewModel.modifierPresets.collectAsStateWithLifecycle()
+            val modifierShortcutUsage by presetsViewModel.modifierShortcutUsage.collectAsStateWithLifecycle()
 
             // The screen is bound to the profile it opened with (see GlobalOptionsViewModel):
             // if that changes underneath, close and hand back what was already applied rather
@@ -175,7 +176,9 @@ class GlobalOptionsActivity : LocalizedActivity() {
                             onUpdate = presetsViewModel::updateModifierPreset,
                             onRename = presetsViewModel::renameModifierPreset,
                             onMarkUsed = presetsViewModel::markModifierPresetUsed,
-                            onDelete = presetsViewModel::deleteModifierPreset
+                            onDelete = presetsViewModel::deleteModifierPreset,
+                            shortcutUsage = modifierShortcutUsage,
+                            onDismissShortcuts = presetsViewModel::dismissModifierShortcuts
                         ) {
                             RenkinTheme(darkMode) {
                                 GlobalOptionsScreen(onClose = { finish() })
@@ -231,6 +234,7 @@ internal class GlobalPreviewBitmapCache(maxSizeBytes: Int = DEFAULT_PREVIEW_CACH
 class GlobalOptionsViewModel @Inject constructor(
     application: Application,
     private val appProvider: ApplicationProvider,
+    private val modifierShortcuts: dev.renkinProject.renkin.feature.presets.ModifierShortcutStore,
     private val savedStateHandle: SavedStateHandle
 ) : AndroidViewModel(application), IconPreviewBuilder {
 
@@ -374,7 +378,8 @@ class GlobalOptionsViewModel @Inject constructor(
             icon === source || options == editor.openingOptions || !editor.ownsPreview(options, source)) return false
         val id = GlobalIconApplyId(editor.id, ++nextIconApply, editor.session, editor.app.key,
             editor.captureRevision(options))
-        return iconApplyOwner.submit(GlobalIconApplyRequest(id, editor.app, options, icon, editor.app.sourcePackName))
+        return iconApplyOwner.submit(GlobalIconApplyRequest(id, editor.app, options, icon,
+            editor.app.sourcePackName, editor.adjustments.loadedPresetId))
     }
 
     internal fun consumeIconApply(id: GlobalIconApplyId) {
@@ -520,6 +525,10 @@ class GlobalOptionsViewModel @Inject constructor(
             appliedGlobal = true
             baseline = savedState
             historyLoad = null
+        }
+        if (committed && stagedDraft.toModifierOptions().modifiers.hasVisibleEffect) {
+            recordModifierUse(expected.profileId,
+                dev.renkinProject.renkin.feature.presets.ModifierShortcutApply(true, null))
         }
         if (committed) R.string.globalOptionsApplied else expiredSessionNotice
     }
@@ -693,6 +702,9 @@ class GlobalOptionsViewModel @Inject constructor(
             onCommitted = {
                 committedIconKeys.updateAndGet { it + request.id.targetKey }
                 onCommitted()
+                recordModifierUse(request.id.session.profileId,
+                    dev.renkinProject.renkin.feature.presets.ModifierShortcutApply(
+                        request.options.modifiers.hasVisibleEffect, request.presetId))
             }
         ) { live, origin, rendered ->
             live.changeExport(
@@ -710,5 +722,19 @@ class GlobalOptionsViewModel @Inject constructor(
             IconApplyOutcome.TARGET_GONE -> R.string.iconEditTargetGone
             else -> R.string.profileOperationFailed
         })
+    }
+
+    private fun recordModifierUse(
+        profileId: Long, apply: dev.renkinProject.renkin.feature.presets.ModifierShortcutApply
+    ) {
+        viewModelScope.launch {
+            try {
+                modifierShortcuts.recordApply(profileId, apply)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.error("GlobalOptionsViewModel", "Recording modifier shortcut use failed", error)
+            }
+        }
     }
 }

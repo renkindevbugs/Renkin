@@ -13,14 +13,29 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.onStart
+import dev.renkinProject.renkin.apk.ApplicationProvider
 import javax.inject.Inject
 
 @HiltViewModel
 class PresetLibraryViewModel @Inject constructor(
-    private val repository: RenkinPackRepository
+    private val repository: RenkinPackRepository,
+    private val shortcuts: ModifierShortcutStore,
+    appProvider: ApplicationProvider
 ) : ViewModel() {
     val colorPresets = repository.colorPresetsFlow().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val modifierPresets = repository.modifierPresetsFlow().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val modifierShortcutUsage = appProvider.runtimeState.map { it.activeProfileId }.distinctUntilChanged()
+        .flatMapLatest { id -> shortcuts.observe(id).onStart { emit(ModifierShortcutUsage(profileId = id)) } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ModifierShortcutUsage())
+
+    fun dismissModifierShortcuts(profileId: Long) {
+        writeLibrary("Dismiss modifier shortcuts") { shortcuts.dismiss(profileId) }
+    }
 
     private val _toastEvents = Channel<Int>(Channel.BUFFERED)
     val toastEvents = _toastEvents.receiveAsFlow()

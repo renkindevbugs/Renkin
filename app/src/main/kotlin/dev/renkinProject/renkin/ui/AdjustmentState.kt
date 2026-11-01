@@ -34,6 +34,8 @@ import dev.renkinProject.renkin.icon.creator.TransformModifier
  */
 @Stable
 internal class AdjustmentState {
+    // UI attribution only: loading a preset does not mark it used until an icon Apply commits.
+    var loadedPresetId by mutableStateOf<Long?>(null)
     // The first Colorize stop is supplied by the dialog's shared iconColor at render time.
     var colorizerStyle by mutableStateOf(ColorizerStyle(firstColor = android.graphics.Color.WHITE))
     var shapeStyle by mutableStateOf(ColorizerStyle(firstColor = android.graphics.Color.WHITE))

@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -120,6 +121,9 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
@@ -196,13 +200,32 @@ fun AppSortFilterMenu(
     onLockedFilterChange: (Boolean) -> Unit = {}
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
+    val activeFilterCount = listOf(filterNoIcon, filterFallback, filterLocked).count { it }
+    val sortDescription = if (activeFilterCount == 0) stringResource(R.string.sortApps)
+        else stringResource(R.string.sortAppsWithFilters, activeFilterCount)
     Box {
-        IconButton(onClick = { showSortMenu = true }) {
-            Icon(
+        IconButton(onClick = { showSortMenu = true }, modifier = Modifier.semantics {
+            contentDescription = sortDescription
+        }) {
+            Box {
+              Icon(
                 imageVector = Icons.AutoMirrored.Filled.Sort,
-                contentDescription = stringResource(R.string.sortApps),
+                contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary
-            )
+              )
+              if (activeFilterCount > 0) {
+                  Text(
+                      activeFilterCount.toString(),
+                      style = MaterialTheme.typography.labelSmall,
+                      color = MaterialTheme.colorScheme.onPrimary,
+                      modifier = Modifier.align(Alignment.BottomEnd)
+                          .offset(x = 4.dp, y = 3.dp)
+                          .background(MaterialTheme.colorScheme.primary, CircleShape)
+                          .padding(horizontal = 4.dp)
+                          .clearAndSetSemantics { }
+                  )
+              }
+            }
         }
         DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
             CheckableDropdownItem(
@@ -362,9 +385,10 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // Watch saves and checks outlive the Watch screen and quick-action sheet, so their toasts land here.
     val watchViewModel: WatchViewModel = hiltViewModel()
     CollectToasts(
-        toaster, optionsViewModel.toastEvents, viewModel.toastEvents,
+        toaster, optionsViewModel.toastEvents,
         texts = listOf(viewModel.installToastEvents, watchViewModel.toastEvents)
     )
+    if (!viewModel.packPreviewOpen) CollectToasts(toaster, viewModel.toastEvents)
 
     // Undoable changes get a snackbar instead of a toast: a toast cannot be acted on, and the
     // whole point is the action. Only the newest offer is on screen, matching the single step
@@ -1424,15 +1448,16 @@ fun OpenAppOptions(
     recoveredSessionId: String? = null,
     onSessionInvalidated: (() -> Unit)? = null,
     flight: IconFlightState? = null,
+    awaitApply: Boolean = false,
     onDismiss: () -> Unit
 ) {
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     val editorViewModel: EditorSessionViewModel = hiltViewModel()
     val draftOwner: EditorDraftRecoveryViewModel = hiltViewModel()
     LaunchedEffect(draftOwner, editorViewModel) { draftOwner.connect(editorViewModel) }
     val autosaveState by draftOwner.autosaveState.collectAsStateWithLifecycle()
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
-    val activity = getCurrentMainActivity()
+    val activity = LocalContext.current
     val toaster = LocalToaster.current
     val sessionId = recoveredSessionId ?: rememberSaveable(app.key) { UUID.randomUUID().toString() }
     var sessionAttached by rememberSaveable(app.key) { mutableStateOf(false) }
@@ -1484,6 +1509,15 @@ fun OpenAppOptions(
         if (recoveredSessionId == null) draftOwner.closeLive(sessionId)
         onDismiss()
     }
+    var pendingApplyId by rememberSaveable(sessionId) { mutableStateOf<Long?>(null) }
+    val applyResults by viewModel.iconApplyResults.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingApplyId, applyResults) {
+        val id = pendingApplyId ?: return@LaunchedEffect
+        val outcome = applyResults[id] ?: return@LaunchedEffect
+        viewModel.acknowledgeIconApply(id)
+        pendingApplyId = null
+        if (outcome == dev.renkinProject.renkin.apk.IconApplyOutcome.APPLIED) closeEditor()
+    }
 
     val globalLayer by produceState<EditorGlobalLayer?>(null, session, expected) {
         value = try {
@@ -1497,11 +1531,17 @@ fun OpenAppOptions(
 
     OptionsDialog(iconPacks, session, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, modifierRecipe, modifierInput ->
         // Only stores the icon: the dialog closes itself through closeEditor, after any flight.
-        val requestId = flight?.let { viewModel.newIconApplyRequestId().also { id -> it.applyRequestId = id } }
+        val requestId = if (awaitApply || flight != null) viewModel.newIconApplyRequestId().also { id ->
+            flight?.applyRequestId = id
+            if (awaitApply) pendingApplyId = id
+        } else null
         viewModel.applyIcon(
             session.application, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName,
             sourceUrl, expected, modifierRecipe, modifierInput, requestId,
-            keepGlobalStyle = globalLayer != null && session.keepGlobalStyle
+            keepGlobalStyle = globalLayer != null && session.keepGlobalStyle,
+            modifierUsage = dev.renkinProject.renkin.feature.presets.ModifierShortcutApply(
+                session.confirmedModifierUse, session.adjustments.loadedPresetId
+            )
         )
     }, closeEditor, onIconClear = {
         closeEditor()
@@ -1518,6 +1558,8 @@ fun OpenAppOptions(
             }
         },
         flight = flight,
+        dismissOnConfirm = !awaitApply,
+        canInteract = { pendingApplyId == null },
         globalLayer = globalLayer)
 }
 

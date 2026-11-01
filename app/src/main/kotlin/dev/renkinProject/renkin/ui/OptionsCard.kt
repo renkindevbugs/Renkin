@@ -374,19 +374,6 @@ private fun AdvancedSourceSection(
             color = MaterialTheme.colorScheme.outlineVariant
         )
 
-        SourceDropdown(R.string.secondarySource, state.secondarySource) {
-            viewModel.setSecondarySource(it)
-        }
-
-        if (needIconPack(state.secondarySource)) {
-            IconPackDropdown(
-                labelId = R.string.secondaryIconPack,
-                iconPacks = iconPacks,
-                packageName = state.secondaryIconPack,
-                loadIcons = viewModel::iconPackDropdownIcons
-            ) { viewModel.setSecondaryIconPack(it) }
-        }
-
         if (needImageEdit(state.secondarySource)) {
             ImageEditDropdown(R.string.secondaryImageEdit, state.secondaryImageEdit) {
                 viewModel.setSecondaryImageEdit(it)

@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -41,11 +43,18 @@ import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.HideImage
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.material3.Button
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ShapeDefaults
 import androidx.compose.material3.Surface
@@ -61,6 +70,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -92,6 +106,8 @@ import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimarySourceKey
+import dev.renkinProject.renkin.data.SecondarySourceKey
+import dev.renkinProject.renkin.data.SecondaryIconPackKey
 import dev.renkinProject.renkin.data.SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getEnumValue
@@ -418,15 +434,24 @@ fun HeroPackCard(
     }
 
     if (sheetOpen) {
+        val expected = remember { runtimeState.sessionToken }
+        LaunchedEffect(runtimeState.sessionToken) {
+            if (expected != runtimeState.sessionToken) sheetOpen = false
+        }
         PackPickerSheet(
             iconPacks = iconPacks,
             selectedSource = source,
             selectedPackage = packName,
+            selectedSecondarySource = preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT),
+            selectedSecondaryPackage = preferences.getStringValue(SecondaryIconPackKey),
             onDismiss = { sheetOpen = false },
-            onPick = { newSource, newPackage ->
+            onPick = commitSources@{ newSource, newPackage, secondary, secondaryPackage ->
                 sheetOpen = false
+                if (newSource == source && newPackage == packName &&
+                    secondary == preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT) &&
+                    secondaryPackage == preferences.getStringValue(SecondaryIconPackKey)) return@commitSources
                 // The view model keeps the preference write ordered before clear/refresh.
-                viewModel.selectPrimarySource(newSource, newPackage)
+                viewModel.selectIconSources(expected, newSource, newPackage, secondary, secondaryPackage)
             }
         )
     }
@@ -479,8 +504,10 @@ private fun PackPickerSheet(
     iconPacks: List<IconPack>,
     selectedSource: Source,
     selectedPackage: String,
+    selectedSecondarySource: Source,
+    selectedSecondaryPackage: String,
     onDismiss: () -> Unit,
-    onPick: (source: Source, packPackage: String?) -> Unit
+    onPick: (Source, String, Source, String) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val usage = remember(iconPacks) { viewModel.packUsageCounts() }
@@ -491,10 +518,46 @@ private fun PackPickerSheet(
     val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
     val installedAppCount = applicationState.applications.size
 
+    var primary by rememberSaveable { mutableStateOf(selectedSource) }
+    var primaryPackage by rememberSaveable { mutableStateOf(selectedPackage) }
+    var secondary by rememberSaveable { mutableStateOf(selectedSecondarySource) }
+    var secondaryPackage by rememberSaveable { mutableStateOf(selectedSecondaryPackage) }
+    var editingSecondary by rememberSaveable { mutableStateOf(false) }
+    val secondaryEnabled = primary == Source.ICON_PACK &&
+        iconPacks.any { it.packageName == primaryPackage }
+    LaunchedEffect(secondaryEnabled) {
+        if (!secondaryEnabled) editingSecondary = false
+    }
+    val additional = remember(primaryPackage, iconPacks, applicationState.revision) {
+        viewModel.packAdditionalAppCounts(primaryPackage)
+    }
+    val activeSource = if (editingSecondary) secondary else primary
+    val activePackage = if (editingSecondary) secondaryPackage else primaryPackage
+
     var query by rememberSaveable { mutableStateOf("") }
     val trimmedQuery = query.trim()
-    val shownPacks = remember(iconPacks, matched, trimmedQuery) {
-        pickerPacks(iconPacks, matched, trimmedQuery)
+    val shownPacks = remember(iconPacks, matched, additional, editingSecondary, trimmedQuery) {
+        pickerPacks(iconPacks, if (editingSecondary) additional else matched, trimmedQuery)
+    }
+    val pick: (Source, String?) -> Unit = { source, pack ->
+        if (editingSecondary) {
+            secondary = source
+            secondaryPackage = pack.orEmpty()
+        } else {
+            primary = source
+            primaryPackage = pack.orEmpty()
+            if (source == Source.ICON_PACK) {
+                if (primaryPackage == secondaryPackage) {
+                    secondary = Source.NONE
+                    secondaryPackage = ""
+                }
+            } else {
+                editingSecondary = false
+                secondary = Source.NONE
+                secondaryPackage = ""
+            }
+        }
+        query = ""
     }
 
     // Two anchors only (open / dismissed), like Mihon's AdaptiveSheet: with the default
@@ -519,20 +582,56 @@ private fun PackPickerSheet(
     // list, where the selected pack can sit well below the fold. Only for the unfiltered list:
     // once the user types, the top of the results is the right place to be.
     val listState = rememberLazyListState()
-    val selectedIndex = remember(shownPacks, selectedSource, selectedPackage, trimmedQuery) {
-        pickerScrollIndex(shownPacks, selectedSource, selectedPackage, trimmedQuery)
+    val selectedIndex = remember(shownPacks, activeSource, activePackage, trimmedQuery) {
+        pickerScrollIndex(shownPacks, activeSource, activePackage, trimmedQuery)
     }
-    LaunchedEffect(Unit) {
-        if (selectedIndex != null) listState.scrollToItem(selectedIndex)
+    var initialScrollDone by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(editingSecondary, trimmedQuery) {
+        if (!initialScrollDone) {
+            if (selectedIndex != null) listState.scrollToItem(selectedIndex)
+            initialScrollDone = true
+        } else listState.scrollToItem(0)
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Text(
-            text = stringResource(R.string.choosePackTitle),
-            style = MaterialTheme.typography.titleMediumEmphasized,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-        )
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = {
+            Box(Modifier.fillMaxWidth()) {
+                BottomSheetDefaults.DragHandle(Modifier.align(Alignment.Center))
+                IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp)) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
+                }
+            }
+        }
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SourcePickerButton(
+                label = stringResource(R.string.primarySource),
+                value = sourcePickerName(primary, primaryPackage, iconPacks),
+                selected = !editingSecondary,
+                hasSource = primary != Source.NONE && (primary != Source.ICON_PACK || secondaryEnabled),
+                modifier = Modifier.weight(1f)
+            ) { editingSecondary = false; query = "" }
+            SourcePickerButton(
+                label = stringResource(R.string.secondarySource),
+                value = when {
+                    !secondaryEnabled && primary in listOf(Source.APPLICATION_ICON, Source.APPLICATION_NAME) ->
+                        stringResource(R.string.sourceSecondaryNotNeeded)
+                    !secondaryEnabled -> stringResource(R.string.sourceSelectPrimaryFirst)
+                    secondary == Source.NONE -> stringResource(R.string.sourceSecondaryOptional)
+                    else -> sourcePickerName(secondary, secondaryPackage, iconPacks)
+                },
+                selected = editingSecondary,
+                hasSource = secondary != Source.NONE && (secondary != Source.ICON_PACK ||
+                    iconPacks.any { it.packageName == secondaryPackage }),
+                enabled = secondaryEnabled,
+                modifier = Modifier.weight(1f)
+            ) { editingSecondary = true; query = "" }
+        }
         // Outside the list so it stays reachable while scrolling — with a couple of dozen packs
         // installed, scrolling back up to search would defeat the point.
         SearchField(
@@ -543,11 +642,28 @@ private fun PackPickerSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp, vertical = 4.dp)
         )
+        if (editingSecondary) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp).heightIn(min = 44.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    stringResource(R.string.sourceSecondaryHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                if (secondary != Source.NONE) IconButton(onClick = { pick(Source.NONE, null) }) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.sourceRemoveSecondary))
+                }
+            }
+        }
         // LazyColumn (not Column+verticalScroll): with many packs the list is taller than the
         // sheet, and the lazy list's nested-scroll handoff to the sheet is smooth at the edges.
         LazyColumn(
             state = listState,
             modifier = Modifier
+                .weight(1f, fill = false)
                 .nestedScroll(swallowFlingLeftovers)
                 .drawVerticalScrollbar(listState),
             contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp)
@@ -563,20 +679,27 @@ private fun PackPickerSheet(
                 }
             }
             items(shownPacks, key = { it.packageName }) { pack ->
-                val selected = selectedSource == Source.ICON_PACK && pack.packageName == selectedPackage
+                val selected = activeSource == Source.ICON_PACK && pack.packageName == activePackage
+                val usedAsPrimary = editingSecondary && pack.packageName == primaryPackage
                 val used = usage[pack.packageName] ?: 0
                 val coverage = matched[pack.packageName] ?: 0
                 PickerRow(
                     title = pack.applicationName,
                     subtitle = when {
+                        usedAsPrimary -> stringResource(R.string.sourceUsedAsPrimary)
+                        editingSecondary -> if ((additional[pack.packageName] ?: 0) == 0)
+                            stringResource(R.string.sourceNoAdditionalIcons)
+                        else pluralStringResource(R.plurals.sourceAddsMissingIcons,
+                            additional[pack.packageName] ?: 0, additional[pack.packageName] ?: 0)
                         used > 0 -> stringResource(
                             R.string.packCoverageUsed, coverage, installedAppCount, used
                         )
                         else -> stringResource(R.string.packCoverage, coverage, installedAppCount)
                     },
                     icon = rememberPackIcon(pack.packageName),
-                    selected = selected
-                ) { onPick(Source.ICON_PACK, pack.packageName) }
+                    selected = selected,
+                    enabled = !usedAsPrimary
+                ) { pick(Source.ICON_PACK, pack.packageName) }
             }
             item {
                 HorizontalDivider(
@@ -590,27 +713,115 @@ private fun PackPickerSheet(
                     title = stringResource(R.string.none),
                     subtitle = null,
                     icon = null,
-                    selected = selectedSource == Source.NONE
-                ) { onPick(Source.NONE, null) }
+                    selected = activeSource == Source.NONE
+                ) { pick(Source.NONE, null) }
             }
             item {
                 PickerRow(
                     title = stringResource(R.string.sourceOwnIcons),
-                    subtitle = null,
+                    subtitle = if (editingSecondary) pluralStringResource(R.plurals.sourceAddsMissingIcons,
+                        (installedAppCount - (matched[primaryPackage] ?: 0)).coerceAtLeast(0),
+                        (installedAppCount - (matched[primaryPackage] ?: 0)).coerceAtLeast(0)) else null,
                     icon = null,
-                    selected = selectedSource == Source.APPLICATION_ICON
-                ) { onPick(Source.APPLICATION_ICON, null) }
+                    selected = activeSource == Source.APPLICATION_ICON
+                ) { pick(Source.APPLICATION_ICON, null) }
             }
             item {
                 PickerRow(
                     title = stringResource(R.string.sourceTextIcons),
-                    subtitle = null,
+                    subtitle = if (editingSecondary) pluralStringResource(R.plurals.sourceAddsMissingIcons,
+                        (installedAppCount - (matched[primaryPackage] ?: 0)).coerceAtLeast(0),
+                        (installedAppCount - (matched[primaryPackage] ?: 0)).coerceAtLeast(0)) else null,
                     icon = null,
-                    selected = selectedSource == Source.APPLICATION_NAME
-                ) { onPick(Source.APPLICATION_NAME, null) }
+                    selected = activeSource == Source.APPLICATION_NAME
+                ) { pick(Source.APPLICATION_NAME, null) }
             }
         }
+        Button(
+            enabled = primary != Source.ICON_PACK || secondaryEnabled,
+            onClick = {
+                onPick(primary, primaryPackage,
+                    secondary.takeIf { secondaryEnabled } ?: Source.NONE,
+                    secondaryPackage.takeIf { secondaryEnabled }.orEmpty())
+            },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
+        ) { Text(stringResource(R.string.done)) }
     }
+}
+
+@Composable
+private fun sourcePickerName(source: Source, pack: String, iconPacks: List<IconPack>): String = when (source) {
+    Source.ICON_PACK -> iconPacks.firstOrNull { it.packageName == pack }?.applicationName ?: stringResource(R.string.chooseYourPack)
+    Source.APPLICATION_ICON -> stringResource(R.string.sourceOwnIcons)
+    Source.APPLICATION_NAME -> stringResource(R.string.sourceTextIcons)
+    Source.NONE -> stringResource(R.string.none)
+}
+
+@Composable
+private fun SourcePickerButton(
+    label: String,
+    value: String,
+    selected: Boolean,
+    hasSource: Boolean,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val color by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+        animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(), label = "sourceSelection"
+    )
+    val borderColor by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(), label = "sourceActiveBorder"
+    )
+    Surface(
+        selected = selected,
+        onClick = onClick, enabled = enabled, shape = InnerShape, color = color,
+        border = BorderStroke(1.dp, borderColor),
+        contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f),
+        modifier = modifier
+    ) {
+        Column(Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            SourcePickerValue(value, configured = enabled && hasSource, enabled = enabled)
+        }
+    }
+}
+
+@Composable
+private fun SourcePickerValue(value: String, configured: Boolean, enabled: Boolean) {
+    val primary = MaterialTheme.colorScheme.primary
+    val colors = remember(primary) { listOf(primary, lerp(primary, Color.White, 0.55f), primary) }
+    val progress = if (configured) {
+        rememberInfiniteTransition(label = "sourceNameShimmer").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)),
+            label = "sourceNameSweep"
+        )
+    } else null
+    Text(
+        text = value,
+        style = MaterialTheme.typography.bodySmall,
+        fontWeight = if (configured) FontWeight.SemiBold else FontWeight.Normal,
+        color = if (configured) primary else MaterialTheme.colorScheme.onSurfaceVariant
+            .copy(alpha = if (enabled) 1f else 0.38f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = if (progress == null) Modifier else Modifier
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                val band = size.width * 0.6f
+                val x = progress.value * (size.width + 2f * band) - band
+                drawRect(
+                    brush = Brush.horizontalGradient(colors, startX = x - band, endX = x + band),
+                    blendMode = BlendMode.SrcIn
+                )
+            }
+    )
 }
 
 // internal, not private: the selection semantics have their own compose test.
@@ -620,6 +831,7 @@ internal fun PickerRow(
     subtitle: String?,
     icon: ImageBitmap?,
     selected: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Row(
@@ -628,7 +840,7 @@ internal fun PickerRow(
             // selectable, not clickable: the row is one option out of a list, so TalkBack should
             // announce it as a radio button and say which one is picked. The check icon is
             // decoration on top of that semantic, hence its null contentDescription.
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

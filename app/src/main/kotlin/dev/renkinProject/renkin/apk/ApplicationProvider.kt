@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.data.AppTarget
+import dev.renkinProject.renkin.data.setIconSources
 import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
@@ -1751,6 +1752,19 @@ class ApplicationProvider internal constructor(
         sessionToken
     }
 
+    suspend fun selectIconSources(
+        expected: ProfileSessionToken,
+        primary: Source,
+        primaryPackage: String,
+        secondary: Source,
+        secondaryPackage: String
+    ): ProfileSessionToken = runProfileOperation(expected) {
+        requireRecipeAvailable(expected)
+        context.dataStore.setIconSources(primary, primaryPackage, secondary, secondaryPackage)
+        if (primary == Source.NONE) clearRefreshedIcons()
+        sessionToken
+    }
+
     /** Blanks every in-memory icon and calendar opt-in (profile switch, restore, clear). */
     private suspend fun resetInMemoryIcons() {
         for ((index, app) in applicationList.withIndex()) {
@@ -2177,6 +2191,9 @@ class ApplicationProvider internal constructor(
 
     /** How many installed apps each pack declares an icon for (see IconPackRepository). */
     fun packMatchedAppCounts(): Map<String, Int> = iconPackRepo.matchedAppCounts()
+
+    fun packAdditionalAppCounts(primaryPackage: String): Map<String, Int> =
+        iconPackRepo.additionalAppCounts(primaryPackage)
 
     /**
      * A few sample icons styled with [fallbackSource]'s fallback, for the Options preview so the
