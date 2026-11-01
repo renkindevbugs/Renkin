@@ -9,6 +9,11 @@
         <action android:name="org.adw.launcher.THEMES" />
         <category android:name="android.intent.category.DEFAULT" />
     </intent-filter>
+    <!-- ADW-compatible discovery queried by Lawnchair and Kvaesitso -->
+    <intent-filter>
+        <action android:name="org.adw.ActivityStarter.THEMES" />
+        <category android:name="android.intent.category.DEFAULT" />
+    </intent-filter>
     <!-- ADW Launcher Custom Icon Picker -->
     <intent-filter>
         <action android:name="org.adw.launcher.icons.ACTION_PICK_ICON" />

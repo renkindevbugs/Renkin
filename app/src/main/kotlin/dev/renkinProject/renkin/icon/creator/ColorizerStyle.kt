@@ -51,6 +51,12 @@ enum class GradientType {
     RADIAL
 }
 
+// Global preferences store one effective blend mode: monochrome takes precedence over flat and lighten.
+internal fun ColorizerStyle.normalizedFlags(): ColorizerStyle = copy(
+    flat = flat && !monochrome,
+    lighten = lighten && !flat && !monochrome
+)
+
 fun normalizeGradientAngle(angle: Float): Float = angle.coerceIn(0f, 360f)
 
 /** The even spread a positionless gradient already paints, as explicit values to drag from. */

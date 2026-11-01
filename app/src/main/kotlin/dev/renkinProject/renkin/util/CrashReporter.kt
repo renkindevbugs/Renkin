@@ -2,7 +2,6 @@ package dev.renkinProject.renkin.util
 
 import android.content.Context
 import android.os.Build
-import dev.renkinProject.renkin.BuildConfig
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -87,15 +86,22 @@ object CrashReporter {
 
     /** True when the newest crash hasn't been acknowledged yet (drives the launch dialog). */
     fun hasNewCrash(context: Context): Boolean {
-        val latest = latest(context) ?: return false
-        return latest.timestamp > seenTimestamp(context)
+        val newest = newestTimestamp(context) ?: return false
+        return newest > seenTimestamp(context)
     }
 
     /** Marks the current newest crash as acknowledged so the launch dialog won't repeat. */
     fun markCrashesSeen(context: Context) {
-        val latest = latest(context) ?: return
-        runCatching { File(crashDir(context), SEEN_FILE).writeText(latest.timestamp.toString()) }
+        val newest = newestTimestamp(context) ?: return
+        runCatching { File(crashDir(context), SEEN_FILE).writeText(newest.toString()) }
     }
+
+    // File names carry the timestamp, so the launch check never reads the logs themselves.
+    private fun newestTimestamp(context: Context): Long? =
+        crashDir(context).list()
+            ?.filter { it.startsWith(FILE_PREFIX) && it.endsWith(FILE_SUFFIX) }
+            ?.mapNotNull { it.removePrefix(FILE_PREFIX).removeSuffix(FILE_SUFFIX).toLongOrNull() }
+            ?.maxOrNull()
 
     private fun seenTimestamp(context: Context): Long =
         runCatching { File(crashDir(context), SEEN_FILE).readText().trim().toLong() }.getOrDefault(0L)
@@ -109,7 +115,7 @@ object CrashReporter {
         val report = buildString {
             appendLine("Renkin crash report")
             appendLine("Time: ${DateFormat.getDateTimeInstance().format(Date(now))}")
-            appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            AppBuildInfo.appendTo(this)
             appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
             appendLine()

@@ -65,4 +65,25 @@ class GlobalOptionsCategoriesTest {
         assertEquals(listOf(existing), result.existing)
         assertEquals(listOf(iconless), result.iconless)
     }
+
+    @Test
+    fun missingFilterHeroCountAndIconlessGroupAgree() {
+        val withIcon = app("com.with", hasIcon = true)
+        val missing = app("com.missing", hasIcon = false)
+        val locked = app("com.locked", hasIcon = false)
+        val apps = listOf(withIcon, missing, locked)
+        val lockedKeys = setOf(locked.key)
+
+        val iconless = categorizeGlobalIcons(apps, lockedKeys).iconless
+        val heroMissing = calculateHeroPackStats(apps, builtKeys = emptySet(), lockedKeys = lockedKeys).missingCount
+        val filtered = apps.sortedFilteredApps(
+            query = "", filterNoIcon = true, filterFallback = false,
+            sortOrder = dev.renkinProject.renkin.data.AppSortOrder.NAME, installTimes = emptyMap(),
+            lockedKeys = lockedKeys
+        ) { it }
+
+        assertEquals(listOf(missing), iconless)
+        assertEquals(1, heroMissing)
+        assertEquals(listOf(missing), filtered)
+    }
 }

@@ -1,5 +1,9 @@
 package dev.renkinProject.renkin.icon.creator
 
+import dev.renkinProject.renkin.packages.LoadedApplicationIcon
+import dev.renkinProject.renkin.packages.InstalledIconLoader
+import dev.renkinProject.renkin.apk.GeneratedPackIdentity
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -8,6 +12,7 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
@@ -55,6 +60,7 @@ import dev.renkinProject.renkin.packages.PackageVersion
 import dev.renkinProject.renkin.vector.PathConverter.Companion.toNodes
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyAndRemoveGroup
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.editStrokePaths
+import kotlinx.coroutines.CancellationException
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.resizeAndCenter
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.scaleAtCenter
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.scaleStrokePaths
@@ -64,7 +70,7 @@ internal fun previewScaleToBakeForShape(icon: IconPackDrawable, shaped: Boolean)
     if (shaped) (icon as? BitmapIconDrawable)?.previewScale ?: 1f else 1f
 
 internal fun effectiveMaterialYouPackStrokeScale(modifierScale: Float): Float =
-    modifierScale.coerceIn(0.5f, 2f)
+    modifierScale.coerceIn(MATERIAL_YOU_STROKE_SCALE_RANGE)
 
 internal fun shouldNormalizeAdaptiveForeground(preserveAdaptiveAppearance: Boolean): Boolean =
     !preserveAdaptiveAppearance
@@ -79,15 +85,35 @@ class IconGenerator(
     // those drawables (iconback/mask/upon) load from.
     private val primaryFallback: IconPackFallback = IconPackFallback(),
     private val fallbackPackName: String = "",
-    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(ctx)
+    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(ctx),
+    private val ownedTypeface: Typeface? = null,
+    private val installedIcons: InstalledIconLoader =
+        InstalledIconLoader(ctx)
 ) {
+    private val source = options.source
+    private val modifiers = options.modifiers
+    private val export = options.export
     private val adaptiveIconScale = ADAPTIVE_ICON_SCALE
     private val resourceResolver by lazy { PackageResourceResolver(ctx) }
     private val materialYouPackSupport = mutableMapOf<String, Boolean>()
-    private val adjustmentPipeline by lazy { IconAdjustmentPipeline(ctx.resources, options) }
-    private val imageEditPipeline by lazy {
-        IconImageEditPipeline(ctx.resources, options, adjustmentPipeline)
+    private var applicationIconLoaded = false
+    private var applicationIcon: LoadedApplicationIcon? = null
+
+    private fun applicationIcon(app: PackageInfoStruct): LoadedApplicationIcon? {
+        if (!applicationIconLoaded) {
+            applicationIcon = installedIcons.load(app.iconSource)
+            applicationIconLoaded = true
+        }
+        return applicationIcon
     }
+
+    private fun releaseApplicationIcon() {
+        applicationIcon = null
+        applicationIconLoaded = false
+    }
+    private val stageRenderer by lazy { IconModifierStageRenderer(ctx.resources, options) }
+    private val adjustmentPipeline get() = stageRenderer.adjustments
+    private val imageEditPipeline get() = stageRenderer.imageEdits
     private val fallbackBitmapCache by lazy {
         object : LruCache<String, Bitmap>(FALLBACK_BITMAP_CACHE_BYTES) {
             override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount
@@ -99,38 +125,37 @@ class IconGenerator(
         generateIcons(listOf(application)) { app, icon, _, source -> onUpdate(app, icon, source) }
     }
 
-    fun generateIcon(application: PackageInfoStruct,
-                     customIcon: ResourceDrawable?,
-                     onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?) -> Unit)  {
-        if (options.primarySource == Source.NONE) {
-            return
+    fun generatePreview(
+        application: PackageInfoStruct,
+        customIcon: ResourceDrawable?,
+        retainInput: Boolean = true
+    ): IconGenerationResult {
+        if (source.primarySource == Source.NONE || applicationShouldBeSkipped(application)) {
+            return IconGenerationResult(null)
         }
-
-        if (applicationShouldBeSkipped(application)) {
-            return
-        }
-
         // A malformed pack drawable must not crash the preview — fall back to "no icon".
-        val icon = try {
+        return try {
             generateIcon(
                 application,
-                options.primarySource,
-                options.primaryImageEdit,
-                options.primaryTextType,
+                source.primarySource,
+                modifiers.effect.imageEdit,
+                source.primaryTextType,
                 primaryIconPackApplications,
                 customIcon
-            )?.let { applyAdjustments(it) }
+            )?.render(stageRenderer, retainInput) ?: IconGenerationResult(null)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.error("IconGenerator", "Failed to generate icon for ${application.packageName}", e)
-            null
+            IconGenerationResult(null)
+        } finally {
+            releaseApplicationIcon()
         }
-
-        onUpdate(application, icon)
     }
 
     fun generateIcons(applications: List<PackageInfoStruct>
                       , onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?, isFallback: Boolean, sourcePackName: String) -> Unit) {
-        if (options.primarySource == Source.NONE) {
+        if (source.primarySource == Source.NONE) {
             return
         }
 
@@ -144,9 +169,9 @@ class IconGenerator(
             try {
                 val primary = generateIcon(
                     app,
-                    options.primarySource,
-                    options.primaryImageEdit,
-                    options.primaryTextType,
+                    source.primarySource,
+                    modifiers.effect.imageEdit,
+                    source.primaryTextType,
                     primaryIconPackApplications
                 )
 
@@ -154,35 +179,41 @@ class IconGenerator(
                 // the pack-wide outline can differ from the no-op defaults, but every icon the
                 // refresh produces (fallback-styled ones included) must carry it.
                 if (primary != null) {
-                    onUpdate(app, applyAdjustments(primary), false, sourcePackNameFor(options.primarySource, primaryIconPackApplications))
+                    onUpdate(app, primary.render(stageRenderer, retainInput = false).icon, false, sourcePackNameFor(app, source.primarySource, primaryIconPackApplications))
                 } else {
                     val secondary = generateIcon(
                         app,
-                        options.secondarySource,
-                        options.secondaryImageEdit,
-                        options.secondaryTextType,
+                        source.secondarySource,
+                        source.secondaryImageEdit,
+                        source.secondaryTextType,
                         secondaryIconPackApplications
                     )
 
                     if (secondary != null) {
-                        onUpdate(app, applyAdjustments(secondary), false, sourcePackNameFor(options.secondarySource, secondaryIconPackApplications))
+                        onUpdate(app, secondary.render(stageRenderer, retainInput = false).icon, false, sourcePackNameFor(app, source.secondarySource, secondaryIconPackApplications))
                     } else {
                         // Neither pack themes this app — give it the primary pack's fallback styling.
-                        // The result isn't a real pack icon, so it carries no source pack.
+                        // Styling is local, but a generated app's own icon still carries its origin.
                         val fallback = generateFallback(app)?.let { applyAdjustments(it) }
-                        onUpdate(app, fallback, fallback != null, "")
+                        onUpdate(app, fallback, fallback != null, sourcePackNameFor(app, Source.APPLICATION_ICON, primaryIconPackApplications))
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.error("IconGenerator", "Failed to generate icon for ${app.packageName}", e)
+            } finally {
+                releaseApplicationIcon()
             }
         }
     }
 
-    // The pack an icon should be credited to: only icon-pack sources count, the others
-    // (app icon, app name) don't come from a pack and so report an empty source.
-    private fun sourcePackNameFor(source: Source, iconPack: IconPackContainer): String =
-        if (source == Source.ICON_PACK) iconPack.iconPackName else ""
+    private fun sourcePackNameFor(app: PackageInfoStruct, source: Source, iconPack: IconPackContainer): String = when {
+        source == Source.ICON_PACK -> iconPack.iconPackName
+        source == Source.APPLICATION_ICON &&
+            GeneratedPackIdentity.isKnownGenerated(app.packageName) -> app.packageName
+        else -> ""
+    }
 
     /**
      * Composites the primary pack's classic fallback styling onto [app]'s own icon so an app
@@ -192,7 +223,9 @@ class IconGenerator(
      * doesn't re-mask legacy icons). Returns null when the pack declares no fallback.
      */
     /** Public entry for previewing the fallback styling on a sample app (Options card). */
-    fun fallbackIcon(app: PackageInfoStruct): IconPackDrawable? = generateFallback(app)
+    fun fallbackIcon(app: PackageInfoStruct): IconPackDrawable? = try {
+        generateFallback(app)
+    } finally { releaseApplicationIcon() }
 
     private fun generateFallback(app: PackageInfoStruct): IconPackDrawable? {
         if (primaryFallback.isEmpty) return null
@@ -215,7 +248,7 @@ class IconGenerator(
             ?.let { load(it) }
         val mask = load(primaryFallback.mask)
         val upon = load(primaryFallback.upon)
-        val original = getIconBitmap(app.icon) ?: return null
+        val original = applicationIcon(app)?.drawable?.let { getIconBitmap(it.copyForRendering()) } ?: return null
 
         val size = back?.width ?: original.width
         val full = Rect(0, 0, size, size)
@@ -253,8 +286,8 @@ class IconGenerator(
 
     fun colorizeFromIconPack(iconPackName: String, icon: ResourceDrawable): IconPackDrawable? {
         preservePackLayers(iconPackName, icon)?.let {
-            return when (options.primaryImageEdit) {
-                ImageEdit.COLORIZE, ImageEdit.COLORIZE_SEGMENTS -> imageEditPipeline.applyEdit(it, options.primaryImageEdit)
+            return when (modifiers.effect.imageEdit) {
+                ImageEdit.COLORIZE, ImageEdit.COLORIZE_SEGMENTS -> imageEditPipeline.applyEdit(it, modifiers.effect.imageEdit)
                 else -> it
             }
         }
@@ -264,10 +297,10 @@ class IconGenerator(
             if (changesWithMaterialYou) styleMaterialYouPackIcon(it) else it
         }
 
-        return if (options.primaryImageEdit == ImageEdit.COLORIZE ||
-            options.primaryImageEdit == ImageEdit.COLORIZE_SEGMENTS
+        return if (modifiers.effect.imageEdit == ImageEdit.COLORIZE ||
+            modifiers.effect.imageEdit == ImageEdit.COLORIZE_SEGMENTS
         )
-            colorizeImage(bitmapIcon, parsedIcon, options.colorizeBlendMode)
+            colorizeImage(bitmapIcon, parsedIcon, modifiers.effect.colorizer.blendMode)
         else
             getDefaultIcon(
                 bitmapIcon,
@@ -283,12 +316,14 @@ class IconGenerator(
         textType: TextType,
         iconPack: IconPackContainer,
         customIcon: ResourceDrawable? = null
-    ): IconPackDrawable? {
+    ): IconSourceStage? {
         return when (source) {
             Source.NONE -> null
             Source.ICON_PACK -> generateImageFromIconPack(application, imageEdit, iconPack, customIcon)
             Source.APPLICATION_ICON -> generateImageFromApplication(application, imageEdit)
-            Source.APPLICATION_NAME -> generateText(application.appName, textType)
+            Source.APPLICATION_NAME -> IconSourceStage(
+                generateText(application.appName, textType), ModifierInputPipeline.ADJUSTMENTS_ONLY, imageEdit
+            )
         }
     }
 
@@ -297,11 +332,14 @@ class IconGenerator(
         imageEdit: ImageEdit,
         iconPack: IconPackContainer,
         customIcon: ResourceDrawable? = null
-    ): IconPackDrawable? {
+    ): IconSourceStage? {
         val resIcon = customIcon ?: iconPack.getApplicationIcon(application.toInstalledApplication()) ?: return null
 
+        val retainable = modifiers.materialYouPack.isReplayableOn(adaptiveLayers = false)
+
         preservePackLayers(iconPack.iconPackName, resIcon)?.let {
-            return imageEditPipeline.applyEdit(it, imageEdit)
+            return IconSourceStage(it, ModifierInputPipeline.IMAGE_EDIT, imageEdit,
+                modifiers.materialYouPack.isReplayableOn(adaptiveLayers = true))
         }
 
         val bitmapIcon = getIconBitmap(resIcon.drawable) ?: return null
@@ -314,59 +352,60 @@ class IconGenerator(
             bitmapIcon,
             parsedIcon,
             imageEdit,
-            options.colorizeBlendMode,
-            preserveAdaptiveAppearance = changesWithMaterialYou
+            preserveAdaptiveAppearance = changesWithMaterialYou,
+            retainable = retainable
         )
     }
 
     private fun generateImageFromApplication(
         application: PackageInfoStruct,
-        imageEdit: ImageEdit): IconPackDrawable? {
-        val applicationIcon = application.icon.copyForRendering()
+        imageEdit: ImageEdit): IconSourceStage? {
+        val loaded = applicationIcon(application) ?: return null
+        val applicationIcon = loaded.drawable.copyForRendering()
 
         // Material You variant: recolor the app's own <monochrome> layer directly — tint it with
         // the chosen foreground over the chosen background. No path-tracing (that produces line
         // art, issue #81), so this only runs for the plain (NONE) modifier.
-        if (options.applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU &&
+        if (source.applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU &&
             imageEdit == ImageEdit.NONE && hasMonochromeLayer(applicationIcon)) {
-            return generateMaterialYou(applicationIcon)
+            return generateMaterialYou(applicationIcon)?.let {
+                IconSourceStage(it, ModifierInputPipeline.IMAGE_EDIT, imageEdit)
+            }
         }
 
-        if (options.applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU) {
+        if (source.applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU) {
             // Apps without an official layer still get a clearly-labelled Renkin-generated
             // approximation. Rasterising the complete launcher icon preserves its optical size;
             // getAppIconBitmap extracts the adaptive foreground and would enlarge it here.
-            val bitmapIcon = applicationIcon.shrinkIfBiggerThan(500) ?: return null
+            val bitmapIcon = applicationIcon.shrinkIfBiggerThan(ICON_WORK_SIZE) ?: return null
             val generated = generateMaterialYouFromOriginal(bitmapIcon)
-            return if (imageEdit == ImageEdit.NONE) generated
-            else imageEditPipeline.applyEdit(generated, imageEdit)
+            return IconSourceStage(generated, ModifierInputPipeline.IMAGE_EDIT, imageEdit)
         }
-        if (options.applicationIconVariant == ApplicationIconVariant.DEFAULT &&
-            options.useFullApplicationIcon
+        if (source.applicationIconVariant == ApplicationIconVariant.DEFAULT &&
+            source.useFullApplicationIcon
         ) {
-            val completeIcon = applicationIcon.shrinkIfBiggerThan(500) ?: return null
+            val completeIcon = applicationIcon.shrinkIfBiggerThan(ICON_WORK_SIZE) ?: return null
             return generateImage(
                 bitmapIcon = completeIcon,
                 parsedIcon = null,
-                imageEdit = imageEdit,
-                mode = options.colorizeBlendMode
+                imageEdit = imageEdit
             )
         }
         // The standard variant deliberately exports only the foreground; the complete adaptive
         // appearance is handled above so its background reaches modifiers as part of one frame.
         val bitmapIcon = getAppIconBitmap(applicationIcon) ?: return null
-        if (options.applicationIconVariant == ApplicationIconVariant.MONOCHROME) {
+        if (source.applicationIconVariant == ApplicationIconVariant.MONOCHROME) {
             // This is deliberately based on the regular launcher artwork, not the optional
             // Material You layer: every app is supported and its original design stays intact.
-            return generateImage(toMonochrome(bitmapIcon), null, imageEdit, options.colorizeBlendMode)
+            return generateImage(toMonochrome(bitmapIcon), null, imageEdit)
         }
-        val parsedIcon = parseApplicationIcon(application)
+        val parsedIcon = parseApplicationIcon(application, loaded)
 
-        return generateImage(bitmapIcon, parsedIcon, imageEdit, options.colorizeBlendMode)
+        return generateImage(bitmapIcon, parsedIcon, imageEdit)
     }
 
     private fun preservePackLayers(packName: String, resource: ResourceDrawable): AdaptiveIconPackDrawable? {
-        if (options.themed || !resource.drawable.isAdaptiveIconDrawable()) return null
+        if (export.themed || !resource.drawable.isAdaptiveIconDrawable()) return null
         val source = resource.drawable.copyForRendering() as AdaptiveIconDrawable
         val changesWithMaterialYou = packChangesWithMaterialYouColors(packName)
         // Parsed at most once: both the original and the restyled capture fall back to the same layer.
@@ -377,31 +416,31 @@ class IconGenerator(
         }
         fun monochromeOf(icon: AdaptiveIconDrawable) =
             if (icon.haveMonochrome()) icon.monochrome else packMonochrome
-        val original = if (changesWithMaterialYou) {
+        val restyle = modifiers.materialYouPack.hasRestyling
+        // Only a restyle keeps the original layers; browser tiles never restyle, so skip the encodes.
+        val original = if (changesWithMaterialYou && restyle) {
             AdaptiveIconPackDrawable.capture(source, monochromeOf(source))
         } else null
-        val restyle = options.materialYouPackForeground != null || options.materialYouPackBackground != null ||
-            options.materialYouPackStrokeScale != 1f
         val styled = if (restyle && changesWithMaterialYou) {
-            val editable = if (options.materialYouPackStrokeScale != 1f) {
+            val editable = if (modifiers.materialYouPack.strokeScale != 1f) {
                 exportIconPackXML(packName, ResourceDrawable(resource.resourceId, source)) ?: source
             } else source
             styleMaterialYouPackIcon(editable) as? AdaptiveIconDrawable ?: source
         } else source
         val editState = if (changesWithMaterialYou) MaterialYouPackEditState(
-            selectedScheme = options.materialYouPackSelectedScheme,
-            customForeground = options.materialYouPackCustomForeground
+            selectedScheme = modifiers.materialYouPack.selectedScheme,
+            customForeground = modifiers.materialYouPack.customForeground
                 ?: MaterialYouPackEditState.DEFAULT_FOREGROUND,
-            customBackground = options.materialYouPackCustomBackground
+            customBackground = modifiers.materialYouPack.customBackground
                 ?: MaterialYouPackEditState.DEFAULT_BACKGROUND,
-            strokeScale = options.materialYouPackStrokeScale
+            strokeScale = modifiers.materialYouPack.strokeScale
         ) else null
         return AdaptiveIconPackDrawable.capture(
             styled,
             monochromeOf(styled),
             editState,
-            originalForegroundPng = original?.foregroundPng.takeIf { restyle },
-            originalBackgroundPng = original?.backgroundPng.takeIf { restyle }
+            originalForegroundPng = original?.foregroundPng,
+            originalBackgroundPng = original?.backgroundPng
         )
     }
 
@@ -411,7 +450,7 @@ class IconGenerator(
     }
 
     private fun generateMaterialYou(icon: Drawable): IconPackDrawable? {
-        if (!icon.isAdaptiveIconDrawable()) return null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !icon.isAdaptiveIconDrawable()) return null
         // Read the monochrome layer directly — it may be any Drawable type (often an InsetDrawable
         // wrapping a vector), so we can't rely on getAppIconBitmap's Bitmap/Vector-only path.
         val mono = (icon as AdaptiveIconDrawable).monochrome?.mutate() ?: return null
@@ -431,45 +470,38 @@ class IconGenerator(
     }
 
     /**
-     * Paints [options.color] through the monochrome alpha mask (SRC_IN keeps the silhouette's
-     * shape, replaces its colour) and composites it over [options.bgColor]. The background is
+     * Paints [modifiers.effect.colorizer.firstColor] through the monochrome alpha mask (SRC_IN keeps the silhouette's
+     * shape, replaces its colour) and composites it over [export.background.color]. The background is
      * always applied — unlike [colorizeBitmap] — because the mask itself is transparent.
      */
     private fun recolorMaterialYouLayer(mask: Bitmap): Bitmap {
         return recolorMaterialYouMask(
             mask,
-            options.color,
-            options.bgColor,
-            options.foregroundStyle,
-            options.backgroundStyle
+            modifiers.effect.colorizer.firstColor,
+            export.background.color,
+            export.foregroundStyle,
+            export.background.style
         )
     }
 
     /**
      * Creates an unofficial two-colour Material You approximation from regular icon artwork.
-     * Transparent and light pixels become the selected background; dark artwork becomes the
-     * foreground. This keeps the simple approximation used before foreground extraction trials.
+     * The artwork's plate (its outer tone, or transparency) becomes the selected background and
+     * the contrasting tone the foreground; see [materialYouForegroundCoverage].
      */
     private fun generateMaterialYouFromOriginal(icon: Bitmap): BitmapIconDrawable {
         val pixels = IntArray(icon.width * icon.height)
         icon.getPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
 
-        val fgA = android.graphics.Color.alpha(options.color)
-        val fgR = android.graphics.Color.red(options.color)
-        val fgG = android.graphics.Color.green(options.color)
-        val fgB = android.graphics.Color.blue(options.color)
+        val fgA = android.graphics.Color.alpha(modifiers.effect.colorizer.firstColor)
+        val fgR = android.graphics.Color.red(modifiers.effect.colorizer.firstColor)
+        val fgG = android.graphics.Color.green(modifiers.effect.colorizer.firstColor)
+        val fgB = android.graphics.Color.blue(modifiers.effect.colorizer.firstColor)
 
+        val coverage = materialYouForegroundCoverage(pixels, icon.width, icon.height)
         for (i in pixels.indices) {
-            val source = pixels[i]
-            val sourceAlpha = android.graphics.Color.alpha(source) / 255f
-            val luminance = (
-                0.2126f * android.graphics.Color.red(source) +
-                    0.7152f * android.graphics.Color.green(source) +
-                    0.0722f * android.graphics.Color.blue(source)
-                ) / 255f
-            val coverage = sourceAlpha * (1f - luminance)
             pixels[i] = android.graphics.Color.argb(
-                (fgA * coverage).toInt().coerceIn(0, 255), fgR, fgG, fgB
+                (fgA * coverage[i]).toInt().coerceIn(0, 255), fgR, fgG, fgB
             )
         }
 
@@ -482,7 +514,7 @@ class IconGenerator(
         val generated = newArgbBitmap(icon.width, icon.height) { canvas ->
             val backgroundShader = options.backgroundShader(icon.width, icon.height)
             if (backgroundShader == null) {
-                canvas.drawColor(options.bgColor)
+                canvas.drawColor(export.background.color)
             } else {
                 canvas.drawRect(
                     0f,
@@ -505,7 +537,7 @@ class IconGenerator(
      * show through and replace the transparency selected by the user.
      */
     private fun materialYouDrawable(bitmap: Bitmap): BitmapIconDrawable {
-        val adaptive = android.graphics.Color.alpha(options.bgColor) == 255
+        val adaptive = android.graphics.Color.alpha(export.background.color) == 255
         return BitmapIconDrawable(
             ctx.resources,
             if (adaptive) bitmap else bitmap.scaleFromCenter(adaptiveIconScale),
@@ -515,7 +547,7 @@ class IconGenerator(
     }
 
     /** Removes hue and saturation while retaining the original icon's luminance and alpha. */
-    private fun toMonochrome(icon: Bitmap): Bitmap = monochromeBitmap(icon, options.invertMonochrome)
+    private fun toMonochrome(icon: Bitmap): Bitmap = monochromeBitmap(icon, source.invertMonochrome)
 
     /**
      * Single dispatch point for applying an [ImageEdit] to a (bitmap, parsedIcon)
@@ -526,12 +558,15 @@ class IconGenerator(
         bitmapIcon: Bitmap,
         parsedIcon: Drawable?,
         imageEdit: ImageEdit,
-        mode: PorterDuff.Mode,
-        preserveAdaptiveAppearance: Boolean = false
-    ): IconPackDrawable {
-        if (imageEdit == ImageEdit.NONE && preserveAdaptiveAppearance && !options.themed) {
+        preserveAdaptiveAppearance: Boolean = false,
+        retainable: Boolean = true
+    ): IconSourceStage {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            imageEdit == ImageEdit.NONE && preserveAdaptiveAppearance && !export.themed) {
             val adaptiveIcon = parsedIcon as? AdaptiveIconDrawable
-            renderAdaptivePackIcon(adaptiveIcon)?.let { return it }
+            renderAdaptivePackIcon(adaptiveIcon)?.let {
+                return IconSourceStage(it, ModifierInputPipeline.IMAGE_EDIT, imageEdit, retainable)
+            }
         }
 
         // Legacy adaptive sources are flattened to their foreground below, so compensate for
@@ -545,7 +580,9 @@ class IconGenerator(
             fixAdaptiveIconSize(parsedIcon as AdaptiveIconDrawable)
         }
 
-        if (imageEdit == ImageEdit.NONE) return getDefaultIcon(bitmapIcon, parsedIcon)
+        if (imageEdit == ImageEdit.NONE) return IconSourceStage(
+            getDefaultIcon(bitmapIcon, parsedIcon), ModifierInputPipeline.IMAGE_EDIT, imageEdit, retainable
+        )
 
         // Generic modifiers run on ONE canonical frame — the pixels ImageEdit.NONE would show —
         // and never see [parsedIcon] again. Handing them the parsed structure as well is what let
@@ -553,7 +590,10 @@ class IconGenerator(
         // bitmap, path tracing followed the parsed vector, and edge detection wrapped its result
         // back into the parsed inset (insetting an already-inset icon a second time).
         val canonical = canonicalArtwork(bitmapIcon, parsedIcon)
-        return imageEditPipeline.applyToBitmap(canonical, imageEdit, mode)
+        return IconSourceStage(
+            BitmapIconDrawable(ctx.resources, canonical), ModifierInputPipeline.BITMAP_IMAGE_EDIT,
+            imageEdit, retainable
+        )
     }
 
     /**
@@ -567,7 +607,7 @@ class IconGenerator(
      * they were handed. Themed export likewise inserts its own inset later.
      */
     private fun canonicalArtwork(bitmapIcon: Bitmap, parsedIcon: Drawable?): Bitmap {
-        if (options.materialYou || options.themed) return bitmapIcon
+        if (export.materialYou || export.themed) return bitmapIcon
         // Without a parsed drawable the bitmap already IS the canonical frame.
         val parsed = parsedIcon ?: return bitmapIcon
         return runCatching {
@@ -579,10 +619,10 @@ class IconGenerator(
     private fun generateText(applicationName: String, textType: TextType): IconPackDrawable {
         val size = 256
         val strokeWidth = size / 48F
-        val textGenerator = LetterGenerator(ctx, options.textFontPath)
+        val textGenerator = LetterGenerator(ctx, source.textFontPath, ownedTypeface)
 
         // Custom text only applies to the CUSTOM type; the case transform applies everywhere.
-        val text = when (options.textCase) {
+        val text = when (source.textCase) {
             TextCase.UPPER -> applicationName.uppercase()
             TextCase.LOWER -> applicationName.lowercase()
             TextCase.AS_IS -> applicationName
@@ -590,43 +630,45 @@ class IconGenerator(
 
         val newIcon = when(textType) {
             TextType.FULL_NAME -> {
-                val draw = textGenerator.generateAppName(text, options.color, size)
-                createVectorForMultiLineText(draw as BaseTextDrawable, options.color, size)
+                val draw = textGenerator.generateAppName(text, modifiers.effect.colorizer.firstColor, size)
+                createVectorForMultiLineText(draw as BaseTextDrawable, modifiers.effect.colorizer.firstColor, size)
             }
             TextType.ONE_LETTER -> {
-                val draw = textGenerator.generateFirstLetter(text, options.color, strokeWidth, size)
-                createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
+                val draw = textGenerator.generateFirstLetter(text, modifiers.effect.colorizer.firstColor, strokeWidth, size)
+                createVectorForText(draw as BaseTextDrawable, modifiers.effect.colorizer.firstColor, strokeWidth, size)
             }
             TextType.TWO_LETTERS -> {
-                val draw = textGenerator.generateTwoLetters(text, options.color, strokeWidth, size)
-                createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
+                val draw = textGenerator.generateTwoLetters(text, modifiers.effect.colorizer.firstColor, strokeWidth, size)
+                createVectorForText(draw as BaseTextDrawable, modifiers.effect.colorizer.firstColor, strokeWidth, size)
             }
             TextType.CUSTOM -> {
-                val custom = when (options.textCase) {
-                    TextCase.UPPER -> options.textCustom.uppercase()
-                    TextCase.LOWER -> options.textCustom.lowercase()
-                    TextCase.AS_IS -> options.textCustom
+                val custom = when (source.textCase) {
+                    TextCase.UPPER -> source.textCustom.uppercase()
+                    TextCase.LOWER -> source.textCustom.lowercase()
+                    TextCase.AS_IS -> source.textCustom
                 }.trim().ifEmpty { text }
                 if (custom.length <= 3) {
-                    val draw = textGenerator.generateExact(custom, options.color, strokeWidth, size)
-                    createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
+                    val draw = textGenerator.generateExact(custom, modifiers.effect.colorizer.firstColor, strokeWidth, size)
+                    createVectorForText(draw as BaseTextDrawable, modifiers.effect.colorizer.firstColor, strokeWidth, size)
                 } else {
-                    val draw = textGenerator.generateAppName(custom, options.color, size)
-                    createVectorForMultiLineText(draw as BaseTextDrawable, options.color, size)
+                    val draw = textGenerator.generateAppName(custom, modifiers.effect.colorizer.firstColor, size)
+                    createVectorForMultiLineText(draw as BaseTextDrawable, modifiers.effect.colorizer.firstColor, size)
                 }
             }
         }
 
-        if (options.themed)
+        if (export.themed)
             return vectorToInset(newIcon.toImageVectorDrawable())
 
         return newIcon.toImageVectorDrawable()
     }
 
-    private fun parseApplicationIcon(application: PackageInfoStruct): Drawable? {
-        if (isVectorDrawable(application.icon) && options.vector) {
-            val res = resourceResolver.getResources(application.packageName) ?: return null
-            return IconParser.parseDrawable(res, application.icon, application.iconID)
+    private fun parseApplicationIcon(application: PackageInfoStruct, loaded: LoadedApplicationIcon): Drawable? {
+        if (isVectorDrawable(loaded.drawable) && export.vector) {
+            val res = (loaded.applicationInfo?.let { resourceResolver.getResources(it, loaded.configuration) }
+                ?: if (loaded.applicationInfo == null) resourceResolver.getResources(application.packageName) else null)
+                ?: return null
+            return IconParser.parseDrawable(res, loaded.drawable, loaded.resourceId)
         }
 
         return null
@@ -660,17 +702,20 @@ class IconGenerator(
      */
     private fun adaptiveLayer(layer: Drawable?): Drawable? {
         val unwrapped = if (layer is InsetDrawable) layer.drawable else layer
-        return unwrapped?.takeIf { it is BitmapDrawable || it is VectorDrawable }
+        // Keep the wrapper itself: its inset places the artwork inside the 108 dp layer.
+        // ForegroundIconDrawable crops that layer to the launcher's 72 dp, so dropping an
+        // authored inset (e.g. a complete legacy icon in the safe zone) zoomed the result 1.5x.
+        return layer.takeIf { unwrapped is BitmapDrawable || unwrapped is VectorDrawable }
     }
 
-    private fun getAppIconBitmap(icon: Drawable, maxSize: Int = 500): Bitmap? {
+    private fun getAppIconBitmap(icon: Drawable, maxSize: Int = ICON_WORK_SIZE): Bitmap? {
         var newIcon = icon
 
         if (newIcon.isAdaptiveIconDrawable()) {
             val adaptiveIcon = newIcon as AdaptiveIconDrawable
             adaptiveLayer(adaptiveIcon.foreground)?.let { newIcon = ForegroundIconDrawable(it) }
 
-            if (PackageVersion.is33OrMore() && adaptiveIcon.monochrome != null && options.materialYou) {
+            if (PackageVersion.is33OrMore() && adaptiveIcon.monochrome != null && export.materialYou) {
                 adaptiveLayer(adaptiveIcon.monochrome)?.let { newIcon = ForegroundIconDrawable(it) }
             }
         }
@@ -689,13 +734,13 @@ class IconGenerator(
         if (parsedIcon != null) {
             if (parsedIcon.isAdaptiveIconDrawable()) {
                 parsedIcon as AdaptiveIconDrawable
-                if (preserveAdaptiveAppearance && !options.themed) {
+                if (preserveAdaptiveAppearance && !export.themed) {
                     renderAdaptivePackIcon(parsedIcon)?.let { return it }
                 }
                 // The bitmap path already unwraps and normalises the adaptive foreground. In
                 // themed mode, feeding the pack-authored foreground inset back into the standard
                 // themed inset applied it twice and made the comparison preview microscopic.
-                if (options.themed) return getDefaultBitmapIcon(bitmapIcon)
+                if (export.themed) return getDefaultBitmapIcon(bitmapIcon)
                 return getDefaultIcon(bitmapIcon, parsedIcon.foreground)
             }
         }
@@ -708,7 +753,7 @@ class IconGenerator(
     }
 
     private fun getDefaultBitmapIcon(bitmap: Bitmap): IconPackDrawable {
-        return if (options.themed) {
+        return if (export.themed) {
             bitmapToInset(bitmap)
         } else {
             BitmapIconDrawable(ctx.resources, bitmap)
@@ -716,7 +761,7 @@ class IconGenerator(
     }
 
     private fun getDefaultVectorIcon(vectorIcon: ImageVectorDrawable): IconPackDrawable {
-        return if (options.themed) {
+        return if (export.themed) {
             vectorToInset(vectorIcon)
         } else {
             vectorIcon
@@ -740,7 +785,7 @@ class IconGenerator(
                 }
             }
 
-            if (PackageVersion.is33OrMore() && options.materialYou) {
+            if (PackageVersion.is33OrMore() && export.materialYou) {
                 if (image.monochrome is VectorDrawable) {
                     return true
                 }
@@ -781,7 +826,7 @@ class IconGenerator(
         return builder.build()
     }
 
-    private fun getIconBitmap(icon: Drawable, maxSize: Int = 500): Bitmap? {
+    private fun getIconBitmap(icon: Drawable, maxSize: Int = ICON_WORK_SIZE): Bitmap? {
         return if (icon.isAdaptiveIconDrawable()) {
             icon as AdaptiveIconDrawable
             // An adaptive icon's foreground only fills the inner 72/108 safe zone,
@@ -817,6 +862,7 @@ class IconGenerator(
             iconPackCatalog.changesWithMaterialYouColors(iconPackName)
         }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun renderAdaptivePackIcon(icon: AdaptiveIconDrawable?): BitmapIconDrawable? {
         icon ?: return null
         val rendered = icon.toSafeBitmapOrNull(
@@ -830,17 +876,18 @@ class IconGenerator(
     }
 
     private fun styleMaterialYouPackIcon(parsedIcon: Drawable?): Drawable? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return parsedIcon
         val adaptive = parsedIcon as? AdaptiveIconDrawable ?: return parsedIcon
         val vector = adaptive.foregroundVectorOrNull()
 
-        val modifierStrokeScale = options.materialYouPackStrokeScale.coerceIn(0.5f, 2f)
+        val strokeScale = effectiveMaterialYouPackStrokeScale(modifiers.materialYouPack.strokeScale)
         // Lawnicons ships real strokes (for example _10.svg is 12 units in a 192-unit
         // viewport) inside a 32% adaptive foreground inset. Preserve that source geometry:
         // centred 100% means the pack's real stroke width. The same 500 px render is used by
         // browser tiles, the comparison header, modifiers, persistence and APK export so changing
         // a modifier cannot silently switch to a thinner preview raster.
-        vector?.root?.scaleStrokePaths(effectiveMaterialYouPackStrokeScale(modifierStrokeScale))
-        options.materialYouPackForeground?.let { foreground ->
+        vector?.root?.scaleStrokePaths(strokeScale)
+        modifiers.materialYouPack.foreground?.let { foreground ->
             if (vector != null) {
                 vector.root.setReferenceColorPaths(SolidColor(Color(foreground)))
                 vector.tintColor = Color.Unspecified
@@ -849,11 +896,11 @@ class IconGenerator(
             }
         }
 
-        val background = options.materialYouPackBackground?.let(::ColorDrawable)
+        val background = modifiers.materialYouPack.background?.let(::ColorDrawable)
             ?: adaptive.background
         val monochrome = if (adaptive.haveMonochrome()) adaptive.monochrome else null
         monochrome?.foregroundVectorOrNull()?.root
-            ?.scaleStrokePaths(effectiveMaterialYouPackStrokeScale(modifierStrokeScale))
+            ?.scaleStrokePaths(strokeScale)
         return newAdaptiveIconDrawable(adaptive.foreground, background, monochrome)
     }
 
@@ -861,7 +908,7 @@ class IconGenerator(
         if (!iconDrawable.drawable.isAdaptiveIconDrawable() && !isVectorDrawable(iconDrawable.drawable)) return null
 
         val res = resourceResolver.getResources(iconPackName) ?: return null
-        val icon = IconParser.parseDrawable(res, iconDrawable.drawable, iconDrawable.resourceId, preserveFrameworkInsets = !options.themed)
+        val icon = IconParser.parseDrawable(res, iconDrawable.drawable, iconDrawable.resourceId, preserveFrameworkInsets = !export.themed)
 
         if (!icon.isAdaptiveIconDrawable()) return null
 
@@ -869,7 +916,7 @@ class IconGenerator(
 
         // Material You packs such as Lawnicons intentionally define their own stroke widths
         // and adaptive inset. Other packs keep the established normalization behaviour.
-        if (options.themed && vectorIcon != null && !packChangesWithMaterialYouColors(iconPackName)) {
+        if (export.themed && vectorIcon != null && !packChangesWithMaterialYouColors(iconPackName)) {
             val stroke = vectorIcon.viewportHeight / 48 //1F at 48
             vectorIcon.root.editStrokePaths(stroke)
         }
@@ -880,12 +927,13 @@ class IconGenerator(
     private fun colorizeImage(bitmapIcon: Bitmap, parsedIcon: Drawable?, mode: PorterDuff.Mode): IconPackDrawable {
         // Themed export owns one standard adaptive inset. Reusing an adaptive pack's parsed inset
         // here stacks the source safe zone on top of it; use the already-normalised bitmap frame.
-        if (options.themed) return imageEditPipeline.colorize(bitmapIcon, mode)
+        if (export.themed) return imageEditPipeline.colorize(bitmapIcon, mode)
         // Segment layers are per-pixel, which the vector recolour path cannot express: bake.
-        if (options.colorizeLayers.isNotEmpty() ||
-            options.colorizeLighten ||
-            options.colorizerMode == ColorizerMode.GRADIENT ||
-            options.colorizeMonochrome ||
+        val effect = modifiers.effect
+        if (effect.segments.isNotEmpty() ||
+            effect.colorizer.lighten ||
+            effect.colorizer.mode == ColorizerMode.GRADIENT ||
+            effect.colorizer.monochrome ||
             parsedIcon == null
         ) {
             return imageEditPipeline.colorize(bitmapIcon, mode)
@@ -923,6 +971,8 @@ class IconGenerator(
     }
 
     private companion object {
+        // App icons are reduced to this raster size before generation and modifiers work on them.
+        const val ICON_WORK_SIZE = 500
         const val ADAPTIVE_PACK_RENDER_SIZE = 500
         const val FALLBACK_BITMAP_CACHE_BYTES = 8 * 1024 * 1024
     }

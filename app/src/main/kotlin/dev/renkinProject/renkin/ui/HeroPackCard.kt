@@ -9,23 +9,24 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -42,11 +43,18 @@ import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.HideImage
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.material3.Button
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ShapeDefaults
 import androidx.compose.material3.Surface
@@ -55,17 +63,18 @@ import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -74,40 +83,44 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.feature.buildinstall.PackChangesSheet
+import dev.renkinProject.renkin.apk.ApplicationListState
+import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimarySourceKey
+import dev.renkinProject.renkin.data.SecondarySourceKey
+import dev.renkinProject.renkin.data.SecondaryIconPackKey
 import dev.renkinProject.renkin.data.SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.packages.isMissingIcon
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.GoldBase
 import dev.renkinProject.renkin.ui.theme.RemovedRed
 import dev.renkinProject.renkin.ui.theme.GoldShimmer
 import dev.renkinProject.renkin.ui.theme.CardShape
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 
 private const val CHANGE_BAR_ANIMATION_MS = 900
 
@@ -159,7 +172,7 @@ internal fun calculateHeroPackStats(
             if (app.isFallback) fallbackCount++
         } else {
             if (app.key in builtKeys) removedCount++
-            if (!locked) missingCount++
+            if (app.isMissingIcon(lockedKeys)) missingCount++
         }
     }
 
@@ -186,14 +199,21 @@ internal fun calculateHeroPackStats(
 @Composable
 fun HeroPackCard(
     iconPacks: List<IconPack>,
+    applicationState: ApplicationListState,
     // The home list's active filters, so the card's toggles can drive them. A null callback
     // hides them — previews reuse this card without a list to filter.
     activeFilters: Set<AppProblemFilter> = emptySet(),
     onFilterToggle: ((AppProblemFilter) -> Unit)? = null
 ) {
     val viewModel: MainViewModel = hiltViewModel()
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
+    val profileSummaryReady = viewModel.isProfileSummaryReady(runtimeState) &&
+        applicationState.sessionToken == runtimeState.sessionToken
     val prefs = getPreferences()
     val preferences = prefs.getPreferencesValue()
+    val builtKeys = viewModel.builtKeysFor(runtimeState)
+    val pendingChanges by viewModel.pendingPackChanges.collectAsStateWithLifecycle()
+    val changes = pendingChanges.changesFor(applicationState)
 
     val source = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     val packName = preferences.getStringValue(PrimaryIconPackKey)
@@ -201,12 +221,10 @@ fun HeroPackCard(
 
     // Completion progress (moved here from the options card): blue = already built, green =
     // added since (pending build), red = removed since.
-    val stats by remember(viewModel) {
-        derivedStateOf {
-            calculateHeroPackStats(
-                viewModel.applicationList, viewModel.builtKeys, viewModel.lockedIconKeys
-            )
-        }
+    val stats = remember(applicationState.revision, builtKeys) {
+        calculateHeroPackStats(
+            applicationState.applications, builtKeys, applicationState.lockedIconKeys
+        )
     }
     val builtCount = stats.builtCount
     val addedCount = stats.addedCount
@@ -216,14 +234,17 @@ fun HeroPackCard(
     val fallbackCount = stats.fallbackCount
 
     var sheetOpen by remember { mutableStateOf(false) }
-    var changesOpen by remember { mutableStateOf(false) }
+    var changesSession by remember { mutableStateOf<ProfileSessionToken?>(null) }
+    LaunchedEffect(runtimeState.sessionToken) {
+        if (changesSession != null && changesSession != runtimeState.sessionToken) changesSession = null
+    }
 
     // Saved-but-not-built marker for the active profile (set by the save-before-switch flow).
-    val profiles by viewModel.profiles.collectAsState(initial = emptyList())
-    val activeProfile = profiles.find { it.id == viewModel.activeProfileId }
+    val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
+    val activeProfile = profiles.find { it.id == runtimeState.activeProfileId }
     val progressAnimationKey = heroProgressAnimationKey(
-        activeProfileId = viewModel.activeProfileId,
-        profileSummaryReady = viewModel.profileSummaryReady,
+        activeProfileId = runtimeState.activeProfileId,
+        profileSummaryReady = profileSummaryReady,
         hasApplications = totalCount > 0
     )
     // LazyColumn disposes this card when it is far off-screen. Save both the completed state and
@@ -236,7 +257,7 @@ fun HeroPackCard(
         }
         settledAnimationKey = progressAnimationKey
         progressAnimationSettled = false
-        if (viewModel.profileSummaryReady && totalCount > 0) {
+        if (profileSummaryReady && totalCount > 0) {
             delay(CHANGE_BAR_ANIMATION_MS.toLong())
             if (settledAnimationKey == progressAnimationKey) {
                 progressAnimationSettled = true
@@ -300,10 +321,16 @@ fun HeroPackCard(
             // The progress reflects the stored icons, which exist independently of the current
             // source pick — so it stays visible even with None selected.
             if (totalCount > 0) {
+                val spokenProgress = listOfNotNull(
+                    pluralStringResource(R.plurals.completionProgressSpoken, totalCount, themedCount, totalCount),
+                    if (addedCount > 0) pluralStringResource(R.plurals.pendingAddedSpoken, addedCount, addedCount) else null,
+                    if (removedCount > 0) pluralStringResource(R.plurals.pendingRemovedSpoken, removedCount, removedCount) else null
+                ).joinToString(", ")
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 10.dp),
+                        .padding(top = 10.dp)
+                        .clearAndSetSemantics { contentDescription = spokenProgress },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -354,9 +381,8 @@ fun HeroPackCard(
                 }
                 // Pending changes, now answerable: the badge says how many and opens the list of
                 // exactly which apps a build would add, change or drop.
-                val changes = viewModel.pendingPackChanges
                 if (shouldShowPendingChanges(
-                        profileSummaryReady = viewModel.profileSummaryReady,
+                        profileSummaryReady = profileSummaryReady,
                         progressAnimationSettled = progressAnimationSettled,
                         changeCount = changes.size,
                         hasUnbuiltChanges = activeProfile?.hasUnbuiltChanges == true
@@ -368,7 +394,7 @@ fun HeroPackCard(
                         color = MaterialTheme.colorScheme.tertiaryContainer,
                         // Always openable: an empty list is an answer too ("nothing since the
                         // last build"), and a chip that ignores taps reads as broken.
-                        onClick = { changesOpen = true }
+                        onClick = { changesSession = runtimeState.sessionToken }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -379,7 +405,7 @@ fun HeroPackCard(
                                 text = if (changes.isEmpty()) {
                                     stringResource(R.string.unbuiltChanges)
                                 } else {
-                                    stringResource(R.string.unbuiltChangesCount, changes.size)
+                                    pluralStringResource(R.plurals.unbuiltChangesCount, changes.size, changes.size)
                                 },
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer
@@ -397,25 +423,35 @@ fun HeroPackCard(
         }
     }
 
-    if (changesOpen) {
+    changesSession?.let { expected ->
         PackChangesSheet(
             iconPacks = iconPacks,
             themed = preferences.getBooleanValue(ExportThemedKey),
-            onBuild = { viewModel.build(viewModel.activeProfileId) },
-            onDismiss = { changesOpen = false }
+            sourceSession = expected,
+            onBuild = { viewModel.build(expected) },
+            onDismiss = { changesSession = null }
         )
     }
 
     if (sheetOpen) {
+        val expected = remember { runtimeState.sessionToken }
+        LaunchedEffect(runtimeState.sessionToken) {
+            if (expected != runtimeState.sessionToken) sheetOpen = false
+        }
         PackPickerSheet(
             iconPacks = iconPacks,
             selectedSource = source,
             selectedPackage = packName,
+            selectedSecondarySource = preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT),
+            selectedSecondaryPackage = preferences.getStringValue(SecondaryIconPackKey),
             onDismiss = { sheetOpen = false },
-            onPick = { newSource, newPackage ->
+            onPick = commitSources@{ newSource, newPackage, secondary, secondaryPackage ->
                 sheetOpen = false
+                if (newSource == source && newPackage == packName &&
+                    secondary == preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT) &&
+                    secondaryPackage == preferences.getStringValue(SecondaryIconPackKey)) return@commitSources
                 // The view model keeps the preference write ordered before clear/refresh.
-                viewModel.selectPrimarySource(newSource, newPackage)
+                viewModel.selectIconSources(expected, newSource, newPackage, secondary, secondaryPackage)
             }
         )
     }
@@ -468,8 +504,10 @@ private fun PackPickerSheet(
     iconPacks: List<IconPack>,
     selectedSource: Source,
     selectedPackage: String,
+    selectedSecondarySource: Source,
+    selectedSecondaryPackage: String,
     onDismiss: () -> Unit,
-    onPick: (source: Source, packPackage: String?) -> Unit
+    onPick: (Source, String, Source, String) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val usage = remember(iconPacks) { viewModel.packUsageCounts() }
@@ -477,12 +515,49 @@ private fun PackPickerSheet(
     // this device's apps. Re-read only if the installed pack list changes while the sheet is up;
     // no appfilter parsing or drawable decoding happens here.
     val matched = remember(iconPacks) { viewModel.packMatchedAppCounts() }
-    val installedAppCount = viewModel.applicationList.size
+    val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
+    val installedAppCount = applicationState.applications.size
+
+    var primary by rememberSaveable { mutableStateOf(selectedSource) }
+    var primaryPackage by rememberSaveable { mutableStateOf(selectedPackage) }
+    var secondary by rememberSaveable { mutableStateOf(selectedSecondarySource) }
+    var secondaryPackage by rememberSaveable { mutableStateOf(selectedSecondaryPackage) }
+    var editingSecondary by rememberSaveable { mutableStateOf(false) }
+    val secondaryEnabled = primary == Source.ICON_PACK &&
+        iconPacks.any { it.packageName == primaryPackage }
+    LaunchedEffect(secondaryEnabled) {
+        if (!secondaryEnabled) editingSecondary = false
+    }
+    val additional = remember(primaryPackage, iconPacks, applicationState.revision) {
+        viewModel.packAdditionalAppCounts(primaryPackage)
+    }
+    val activeSource = if (editingSecondary) secondary else primary
+    val activePackage = if (editingSecondary) secondaryPackage else primaryPackage
 
     var query by rememberSaveable { mutableStateOf("") }
     val trimmedQuery = query.trim()
-    val shownPacks = remember(iconPacks, matched, trimmedQuery) {
-        pickerPacks(iconPacks, matched, trimmedQuery)
+    val shownPacks = remember(iconPacks, matched, additional, editingSecondary, trimmedQuery) {
+        pickerPacks(iconPacks, if (editingSecondary) additional else matched, trimmedQuery)
+    }
+    val pick: (Source, String?) -> Unit = { source, pack ->
+        if (editingSecondary) {
+            secondary = source
+            secondaryPackage = pack.orEmpty()
+        } else {
+            primary = source
+            primaryPackage = pack.orEmpty()
+            if (source == Source.ICON_PACK) {
+                if (primaryPackage == secondaryPackage) {
+                    secondary = Source.NONE
+                    secondaryPackage = ""
+                }
+            } else {
+                editingSecondary = false
+                secondary = Source.NONE
+                secondaryPackage = ""
+            }
+        }
+        query = ""
     }
 
     // Two anchors only (open / dismissed), like Mihon's AdaptiveSheet: with the default
@@ -507,20 +582,56 @@ private fun PackPickerSheet(
     // list, where the selected pack can sit well below the fold. Only for the unfiltered list:
     // once the user types, the top of the results is the right place to be.
     val listState = rememberLazyListState()
-    val selectedIndex = remember(shownPacks, selectedSource, selectedPackage, trimmedQuery) {
-        pickerScrollIndex(shownPacks, selectedSource, selectedPackage, trimmedQuery)
+    val selectedIndex = remember(shownPacks, activeSource, activePackage, trimmedQuery) {
+        pickerScrollIndex(shownPacks, activeSource, activePackage, trimmedQuery)
     }
-    LaunchedEffect(Unit) {
-        if (selectedIndex != null) listState.scrollToItem(selectedIndex)
+    var initialScrollDone by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(editingSecondary, trimmedQuery) {
+        if (!initialScrollDone) {
+            if (selectedIndex != null) listState.scrollToItem(selectedIndex)
+            initialScrollDone = true
+        } else listState.scrollToItem(0)
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
-        Text(
-            text = stringResource(R.string.choosePackTitle),
-            style = MaterialTheme.typography.titleMediumEmphasized,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-        )
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        dragHandle = {
+            Box(Modifier.fillMaxWidth()) {
+                BottomSheetDefaults.DragHandle(Modifier.align(Alignment.Center))
+                IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp)) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
+                }
+            }
+        }
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SourcePickerButton(
+                label = stringResource(R.string.primarySource),
+                value = sourcePickerName(primary, primaryPackage, iconPacks),
+                selected = !editingSecondary,
+                hasSource = primary != Source.NONE && (primary != Source.ICON_PACK || secondaryEnabled),
+                modifier = Modifier.weight(1f)
+            ) { editingSecondary = false; query = "" }
+            SourcePickerButton(
+                label = stringResource(R.string.secondarySource),
+                value = when {
+                    !secondaryEnabled && primary in listOf(Source.APPLICATION_ICON, Source.APPLICATION_NAME) ->
+                        stringResource(R.string.sourceSecondaryNotNeeded)
+                    !secondaryEnabled -> stringResource(R.string.sourceSelectPrimaryFirst)
+                    secondary == Source.NONE -> stringResource(R.string.sourceSecondaryOptional)
+                    else -> sourcePickerName(secondary, secondaryPackage, iconPacks)
+                },
+                selected = editingSecondary,
+                hasSource = secondary != Source.NONE && (secondary != Source.ICON_PACK ||
+                    iconPacks.any { it.packageName == secondaryPackage }),
+                enabled = secondaryEnabled,
+                modifier = Modifier.weight(1f)
+            ) { editingSecondary = true; query = "" }
+        }
         // Outside the list so it stays reachable while scrolling — with a couple of dozen packs
         // installed, scrolling back up to search would defeat the point.
         SearchField(
@@ -531,11 +642,28 @@ private fun PackPickerSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp, vertical = 4.dp)
         )
+        if (editingSecondary) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp).heightIn(min = 44.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    stringResource(R.string.sourceSecondaryHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                if (secondary != Source.NONE) IconButton(onClick = { pick(Source.NONE, null) }) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.sourceRemoveSecondary))
+                }
+            }
+        }
         // LazyColumn (not Column+verticalScroll): with many packs the list is taller than the
         // sheet, and the lazy list's nested-scroll handoff to the sheet is smooth at the edges.
         LazyColumn(
             state = listState,
             modifier = Modifier
+                .weight(1f, fill = false)
                 .nestedScroll(swallowFlingLeftovers)
                 .drawVerticalScrollbar(listState),
             contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp)
@@ -551,20 +679,27 @@ private fun PackPickerSheet(
                 }
             }
             items(shownPacks, key = { it.packageName }) { pack ->
-                val selected = selectedSource == Source.ICON_PACK && pack.packageName == selectedPackage
+                val selected = activeSource == Source.ICON_PACK && pack.packageName == activePackage
+                val usedAsPrimary = editingSecondary && pack.packageName == primaryPackage
                 val used = usage[pack.packageName] ?: 0
                 val coverage = matched[pack.packageName] ?: 0
                 PickerRow(
                     title = pack.applicationName,
                     subtitle = when {
+                        usedAsPrimary -> stringResource(R.string.sourceUsedAsPrimary)
+                        editingSecondary -> if ((additional[pack.packageName] ?: 0) == 0)
+                            stringResource(R.string.sourceNoAdditionalIcons)
+                        else pluralStringResource(R.plurals.sourceAddsMissingIcons,
+                            additional[pack.packageName] ?: 0, additional[pack.packageName] ?: 0)
                         used > 0 -> stringResource(
                             R.string.packCoverageUsed, coverage, installedAppCount, used
                         )
                         else -> stringResource(R.string.packCoverage, coverage, installedAppCount)
                     },
                     icon = rememberPackIcon(pack.packageName),
-                    selected = selected
-                ) { onPick(Source.ICON_PACK, pack.packageName) }
+                    selected = selected,
+                    enabled = !usedAsPrimary
+                ) { pick(Source.ICON_PACK, pack.packageName) }
             }
             item {
                 HorizontalDivider(
@@ -578,27 +713,115 @@ private fun PackPickerSheet(
                     title = stringResource(R.string.none),
                     subtitle = null,
                     icon = null,
-                    selected = selectedSource == Source.NONE
-                ) { onPick(Source.NONE, null) }
+                    selected = activeSource == Source.NONE
+                ) { pick(Source.NONE, null) }
             }
             item {
                 PickerRow(
                     title = stringResource(R.string.sourceOwnIcons),
-                    subtitle = null,
+                    subtitle = if (editingSecondary) pluralStringResource(R.plurals.sourceAddsMissingIcons,
+                        (installedAppCount - (matched[primaryPackage] ?: 0)).coerceAtLeast(0),
+                        (installedAppCount - (matched[primaryPackage] ?: 0)).coerceAtLeast(0)) else null,
                     icon = null,
-                    selected = selectedSource == Source.APPLICATION_ICON
-                ) { onPick(Source.APPLICATION_ICON, null) }
+                    selected = activeSource == Source.APPLICATION_ICON
+                ) { pick(Source.APPLICATION_ICON, null) }
             }
             item {
                 PickerRow(
                     title = stringResource(R.string.sourceTextIcons),
-                    subtitle = null,
+                    subtitle = if (editingSecondary) pluralStringResource(R.plurals.sourceAddsMissingIcons,
+                        (installedAppCount - (matched[primaryPackage] ?: 0)).coerceAtLeast(0),
+                        (installedAppCount - (matched[primaryPackage] ?: 0)).coerceAtLeast(0)) else null,
                     icon = null,
-                    selected = selectedSource == Source.APPLICATION_NAME
-                ) { onPick(Source.APPLICATION_NAME, null) }
+                    selected = activeSource == Source.APPLICATION_NAME
+                ) { pick(Source.APPLICATION_NAME, null) }
             }
         }
+        Button(
+            enabled = primary != Source.ICON_PACK || secondaryEnabled,
+            onClick = {
+                onPick(primary, primaryPackage,
+                    secondary.takeIf { secondaryEnabled } ?: Source.NONE,
+                    secondaryPackage.takeIf { secondaryEnabled }.orEmpty())
+            },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
+        ) { Text(stringResource(R.string.done)) }
     }
+}
+
+@Composable
+private fun sourcePickerName(source: Source, pack: String, iconPacks: List<IconPack>): String = when (source) {
+    Source.ICON_PACK -> iconPacks.firstOrNull { it.packageName == pack }?.applicationName ?: stringResource(R.string.chooseYourPack)
+    Source.APPLICATION_ICON -> stringResource(R.string.sourceOwnIcons)
+    Source.APPLICATION_NAME -> stringResource(R.string.sourceTextIcons)
+    Source.NONE -> stringResource(R.string.none)
+}
+
+@Composable
+private fun SourcePickerButton(
+    label: String,
+    value: String,
+    selected: Boolean,
+    hasSource: Boolean,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val color by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+        animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(), label = "sourceSelection"
+    )
+    val borderColor by animateColorAsState(
+        if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(), label = "sourceActiveBorder"
+    )
+    Surface(
+        selected = selected,
+        onClick = onClick, enabled = enabled, shape = InnerShape, color = color,
+        border = BorderStroke(1.dp, borderColor),
+        contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f),
+        modifier = modifier
+    ) {
+        Column(Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            SourcePickerValue(value, configured = enabled && hasSource, enabled = enabled)
+        }
+    }
+}
+
+@Composable
+private fun SourcePickerValue(value: String, configured: Boolean, enabled: Boolean) {
+    val primary = MaterialTheme.colorScheme.primary
+    val colors = remember(primary) { listOf(primary, lerp(primary, Color.White, 0.55f), primary) }
+    val progress = if (configured) {
+        rememberInfiniteTransition(label = "sourceNameShimmer").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)),
+            label = "sourceNameSweep"
+        )
+    } else null
+    Text(
+        text = value,
+        style = MaterialTheme.typography.bodySmall,
+        fontWeight = if (configured) FontWeight.SemiBold else FontWeight.Normal,
+        color = if (configured) primary else MaterialTheme.colorScheme.onSurfaceVariant
+            .copy(alpha = if (enabled) 1f else 0.38f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = if (progress == null) Modifier else Modifier
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                val band = size.width * 0.6f
+                val x = progress.value * (size.width + 2f * band) - band
+                drawRect(
+                    brush = Brush.horizontalGradient(colors, startX = x - band, endX = x + band),
+                    blendMode = BlendMode.SrcIn
+                )
+            }
+    )
 }
 
 // internal, not private: the selection semantics have their own compose test.
@@ -608,6 +831,7 @@ internal fun PickerRow(
     subtitle: String?,
     icon: ImageBitmap?,
     selected: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Row(
@@ -616,7 +840,7 @@ internal fun PickerRow(
             // selectable, not clickable: the row is one option out of a list, so TalkBack should
             // announce it as a radio button and say which one is picked. The check icon is
             // decoration on top of that semantic, hence its null contentDescription.
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -655,21 +879,6 @@ internal fun PickerRow(
             )
         }
     }
-}
-
-/** Loads a pack's launcher icon off the main thread; null while loading or when unavailable. */
-@Composable
-private fun rememberPackIcon(packageName: String?): ImageBitmap? {
-    val context = LocalContext.current
-    return produceState<ImageBitmap?>(null, packageName) {
-        value = withContext(Dispatchers.IO) {
-            packageName?.let { pkg ->
-                runCatching {
-                    context.packageManager.getApplicationIcon(pkg).toBitmap(96, 96).asImageBitmap()
-                }.getOrNull()
-            }
-        }
-    }.value
 }
 
 /**

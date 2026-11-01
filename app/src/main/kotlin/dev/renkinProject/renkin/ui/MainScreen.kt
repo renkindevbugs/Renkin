@@ -1,9 +1,22 @@
 package dev.renkinProject.renkin.ui
 
+import android.os.SystemClock
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.ErrorOutline
 import android.content.Intent
+import dev.renkinProject.renkin.EditorSessionViewModel
+import dev.renkinProject.renkin.EditorDraftRecoveryViewModel
+import dev.renkinProject.renkin.InstallerChoiceReason
+import dev.renkinProject.renkin.expiredSessionMessage
+import dev.renkinProject.renkin.data.TextFontKey
+import dev.renkinProject.renkin.data.observePreferences
+import java.util.UUID
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -16,9 +29,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -26,10 +41,17 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Apps
+import dev.renkinProject.renkin.data.AppTargetState
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import dev.renkinProject.renkin.feature.apptargets.AddAppSheet
+import dev.renkinProject.renkin.feature.apptargets.TargetBadge
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
@@ -69,10 +91,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import dev.renkinProject.renkin.apk.EditorGlobalLayer
+import kotlinx.coroutines.CancellationException
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -85,6 +109,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
@@ -96,8 +121,12 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.supportDynamicColors
@@ -114,12 +143,36 @@ import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.apk.installerSelection
+import dev.renkinProject.renkin.apk.APK_MIME_TYPE
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.GlobalOptionsActivity
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.ProfileActionProgress
+import dev.renkinProject.renkin.apk.ApplicationListState
+import dev.renkinProject.renkin.profileSession
+import dev.renkinProject.renkin.withProfileSession
+import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.OptionsViewModel
-import dev.renkinProject.renkin.WatchViewModel
+import dev.renkinProject.renkin.feature.profiles.ProfileSwitcherTitle
+import dev.renkinProject.renkin.feature.buildinstall.BuildPackFab
+import dev.renkinProject.renkin.feature.buildinstall.InstallerPromptDialog
+import dev.renkinProject.renkin.feature.backup.BackupRestorePreviewDialog
+import dev.renkinProject.renkin.feature.backup.BackupRestoreProgress
+import dev.renkinProject.renkin.feature.help.InfoDialog
+import dev.renkinProject.renkin.feature.help.IntroShowcase
+import dev.renkinProject.renkin.feature.help.IntroTarget
+import dev.renkinProject.renkin.feature.help.IntroTargets
+import dev.renkinProject.renkin.feature.help.LocalIntroTargets
+import dev.renkinProject.renkin.feature.help.WhatsNewDialog
+import dev.renkinProject.renkin.feature.help.introTarget
+import dev.renkinProject.renkin.feature.watch.WatchApplyModal
+import dev.renkinProject.renkin.feature.watch.WatchScreen
+import dev.renkinProject.renkin.feature.watch.WatchViewModel
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 
 /**
@@ -147,13 +200,32 @@ fun AppSortFilterMenu(
     onLockedFilterChange: (Boolean) -> Unit = {}
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
+    val activeFilterCount = listOf(filterNoIcon, filterFallback, filterLocked).count { it }
+    val sortDescription = if (activeFilterCount == 0) stringResource(R.string.sortApps)
+        else stringResource(R.string.sortAppsWithFilters, activeFilterCount)
     Box {
-        IconButton(onClick = { showSortMenu = true }) {
-            Icon(
+        IconButton(onClick = { showSortMenu = true }, modifier = Modifier.semantics {
+            contentDescription = sortDescription
+        }) {
+            Box {
+              Icon(
                 imageVector = Icons.AutoMirrored.Filled.Sort,
-                contentDescription = stringResource(R.string.sortApps),
+                contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary
-            )
+              )
+              if (activeFilterCount > 0) {
+                  Text(
+                      activeFilterCount.toString(),
+                      style = MaterialTheme.typography.labelSmall,
+                      color = MaterialTheme.colorScheme.onPrimary,
+                      modifier = Modifier.align(Alignment.BottomEnd)
+                          .offset(x = 4.dp, y = 3.dp)
+                          .background(MaterialTheme.colorScheme.primary, CircleShape)
+                          .padding(horizontal = 4.dp)
+                          .clearAndSetSemantics { }
+                  )
+              }
+            }
         }
         DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
             CheckableDropdownItem(
@@ -221,6 +293,28 @@ private fun LazyGridState.isScrollingUp(): Boolean {
     }.value
 }
 
+/** The same inert home shell covers storage checking and normal catalog/icon loading. */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun MainStartupScreen() {
+    Scaffold(
+        topBar = { TitleBar(loading = true) }
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            SearchField(
+                value = "",
+                onValueChange = {},
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = stringResource(R.string.searchApps),
+                enabled = false
+            )
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainColumn(iconPacks: List<IconPack>) {
@@ -237,6 +331,9 @@ fun MainColumn(iconPacks: List<IconPack>) {
 
     val prefs = getPreferences()
     val viewModel: MainViewModel = hiltViewModel()
+    val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
+    val lockedIconKeys = applicationState.lockedIconKeys
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
     val storedFilterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
     // Mirror the persisted filter locally so switching the hero buttons updates the list in
@@ -284,27 +381,48 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // collector here covers every VM-originated toast (build installed, packs synced,
     // app list refreshed) regardless of which dialog/button triggered it.
     val toaster = LocalToaster.current
-    val clipboard = LocalClipboard.current
-    val coroutineScope = rememberCoroutineScope()
-    LaunchedEffect(Unit) {
-        viewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
-    }
+    val optionsViewModel: OptionsViewModel = hiltViewModel()
+    // Watch saves and checks outlive the Watch screen and quick-action sheet, so their toasts land here.
+    val watchViewModel: WatchViewModel = hiltViewModel()
+    CollectToasts(
+        toaster, optionsViewModel.toastEvents,
+        texts = listOf(viewModel.installToastEvents, watchViewModel.toastEvents)
+    )
+    if (!viewModel.packPreviewOpen) CollectToasts(toaster, viewModel.toastEvents)
 
     // Undoable changes get a snackbar instead of a toast: a toast cannot be acted on, and the
     // whole point is the action. Only the newest offer is on screen, matching the single step
     // the provider keeps.
     val snackbarHostState = remember { SnackbarHostState() }
+    val profileActionProgress by viewModel.profileActionProgress.collectAsStateWithLifecycle()
+    profileActionProgress?.let { ProfileActionProgressDialog(it) }
     val undoLabel = stringResource(R.string.undoAction)
     LaunchedEffect(Unit) {
-        viewModel.undoEvents.collect { prompt ->
+        viewModel.undoEvents.combine(viewModel.undoStepState) { prompt, step ->
+            prompt to step
+        }.collectLatest { (prompt, step) ->
             snackbarHostState.currentSnackbarData?.dismiss()
+            if (step == null || step.operationId != prompt.step.operationId) return@collectLatest
             val result = snackbarHostState.showSnackbar(
-                message = context.getString(prompt.messageRes, prompt.count),
+                message = context.getString(prompt.messageRes, step.rows.size),
                 actionLabel = undoLabel,
                 withDismissAction = true,
                 duration = SnackbarDuration.Long
             )
-            if (result == SnackbarResult.ActionPerformed) viewModel.undoLastIconChange()
+            if (result == SnackbarResult.ActionPerformed) viewModel.undoLastIconChange(prompt.session, prompt.step)
+        }
+    }
+    val globalStyleAppliedMessage = stringResource(R.string.globalStyleAppliedUndo)
+    LaunchedEffect(Unit) {
+        viewModel.globalStyleUndoEvents.collectLatest { prompt ->
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result = snackbarHostState.showSnackbar(
+                message = globalStyleAppliedMessage,
+                actionLabel = undoLabel,
+                withDismissAction = true,
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) viewModel.undoGlobalStyle(prompt)
         }
     }
 
@@ -325,111 +443,48 @@ fun MainColumn(iconPacks: List<IconPack>) {
     viewModel.installerPromptReason?.let { reason ->
         InstallerPromptDialog(
             selected = prefs.getPreferencesValue().installerSelection(),
-            explainSavedChoice = reason == MainViewModel.InstallerPromptReason.FIRST_CHOICE,
+            explainSavedChoice = reason == InstallerChoiceReason.FIRST_CHOICE,
             onSelect = viewModel::confirmInstallerSelection,
             onDismiss = viewModel::dismissInstallerSelection
         )
     }
 
-    val installFailure = viewModel.installFailure
-    if (installFailure != null) {
-        val copiedMessage = stringResource(R.string.installFailureCopied)
-        val reportLabel = stringResource(R.string.installFailureTitle)
-        RenkinAlertDialog(
-            onDismissRequest = { viewModel.dismissInstallFailure() },
-            icon = {
-                Icon(
-                    Icons.Filled.Warning,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
-                )
+    var chooseFailureInstaller by rememberSaveable { mutableStateOf(false) }
+    if (chooseFailureInstaller) {
+        InstallerPromptDialog(
+            selected = prefs.getPreferencesValue().installerSelection(),
+            explainSavedChoice = false,
+            onSelect = { selection ->
+                viewModel.setInstallMethod(selection.method, selection.externalComponent)
+                chooseFailureInstaller = false
             },
-            title = { Text(stringResource(R.string.installFailureTitle)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.installFailureText))
-                    Text(
-                        text = installFailure.summary,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            onDismiss = { chooseFailureInstaller = false }
+        )
+    }
+    val failedApkExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(APK_MIME_TYPE)
+    ) { target -> viewModel.finishFailedApkExport(target) }
+    viewModel.installFailure?.let { installFailure ->
+        InstallFailureDialog(
+            failure = installFailure,
+            onChooseInstaller = {
+                viewModel.dismissInstallFailure()
+                chooseFailureInstaller = true
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    coroutineScope.launch {
-                        clipboard.copyPlainText(reportLabel, installFailure.report)
-                        toaster.show(copiedMessage)
-                    }
-                }) {
-                    Icon(Icons.Filled.ContentCopy, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.installFailureCopy))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissInstallFailure() }) {
-                    Text(stringResource(R.string.dismiss))
-                }
-            }
+            onSaveApk = { viewModel.beginFailedApkExport { failedApkExport.launch(it) } },
+            onDismiss = { viewModel.dismissInstallFailure() }
         )
     }
 
     if (viewModel.installFallbackPending) {
-        RenkinAlertDialog(
-            onDismissRequest = { viewModel.dismissInstallFallback() },
-            icon = {
-                Icon(
-                    Icons.Filled.Warning,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
-                )
-            },
-            title = { Text(stringResource(R.string.installFallbackTitle)) },
-            text = { Text(boldStringResource(R.string.installFallbackText)) },
-            confirmButton = {
-                TextButton(onClick = { viewModel.confirmInstallFallback() }) {
-                    Text(stringResource(R.string.installFallbackAction))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissInstallFallback() }) {
-                    Text(stringResource(R.string.dismiss))
-                }
-            }
+        InstallFallbackDialog(
+            signatureMismatch = viewModel.installFallbackSignatureMismatch,
+            onConfirm = { viewModel.confirmInstallFallback() },
+            onDismiss = { viewModel.dismissInstallFallback() }
         )
     }
 
-    // Post-build next steps: launchers need a nudge to pick up a (re)built pack, and the nudge
-    // differs between a first install (pick the pack) and an update (switch away and back).
-    val buildOutcome = viewModel.buildOutcome
-    if (buildOutcome != null) {
-        val isUpdate = buildOutcome.outcome == MainViewModel.BuildOutcome.UPDATE
-        RenkinAlertDialog(
-            onDismissRequest = { viewModel.dismissBuildOutcome() },
-            icon = {
-                Icon(
-                    imageVector = if (isUpdate) Icons.Filled.Refresh else Icons.Filled.CheckCircle,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            },
-            title = {
-                Text(stringResource(
-                    if (isUpdate) R.string.buildUpdatedTitle else R.string.buildInstalledTitle
-                ))
-            },
-            text = {
-                Text(boldStringResource(
-                    if (isUpdate) R.string.buildUpdatedText else R.string.buildInstalledText,
-                    buildOutcome.packLabel
-                ))
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.dismissBuildOutcome() }) { Text(stringResource(R.string.ok)) }
-            }
-        )
-    }
+    viewModel.buildOutcome?.let { BuildOutcomeDialog(it, onDismiss = { viewModel.dismissBuildOutcome() }) }
 
     val pressBackMessage = stringResource(R.string.pressBackToExit)
     var lastBackPress by remember { mutableStateOf(0L) }
@@ -480,15 +535,29 @@ fun MainColumn(iconPacks: List<IconPack>) {
                     filterNoIcon = filterNoIcon,
                     filterFallback = filterFallback,
                     filterLocked = filterLocked,
-                    showLockedFilter = viewModel.lockedIconKeys.isNotEmpty() || filterLocked,
+                    showLockedFilter = lockedIconKeys.isNotEmpty() || filterLocked,
                     onSortChange = viewModel::setAppSortOrder,
                     onFilterChange = { setProblemFilter(AppProblemFilter.MISSING, it) },
                     onFallbackFilterChange = { setProblemFilter(AppProblemFilter.FALLBACK, it) },
                     onLockedFilterChange = { setProblemFilter(AppProblemFilter.LOCKED, it) },
                     onSearch = { packageFilter = it }
                 )
+                if (viewModel.isRefreshing) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        val progress = viewModel.refreshProgress
+                        if (progress == null || progress.second == 0) {
+                            WavyLoadingBar(Modifier.fillMaxWidth())
+                        } else {
+                            Text(
+                                stringResource(R.string.refreshProgress, progress.first, progress.second),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            WavyProgressBar(progress.first.toFloat() / progress.second, Modifier.fillMaxWidth())
+                        }
+                    }
+                }
                 ApplicationList(
-                    iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, filterLocked, listState,
+                    iconPacks, applicationState, packageFilter, sortOrder, filterNoIcon, filterFallback, filterLocked, listState,
                     onShowAllApps = clearProblemFilters,
                     activeProblemFilters = activeProblemFilters,
                     onProblemFilterToggle = toggleProblemFilter
@@ -501,9 +570,9 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // to bring it back. Initial=true so nothing flashes while the DataStore loads. It waits for the
     // app list because it points at a real row, and starts from the top where every target sits.
     val onboardingSeen by remember {
-        prefs.data.map { it.getBooleanValue(OnboardingSeenKey) }
-    }.collectAsState(initial = true)
-    if (!onboardingSeen && viewModel.startupComplete) {
+        prefs.observePreferences().map { it.getBooleanValue(OnboardingSeenKey) }
+    }.collectAsStateWithLifecycle(initialValue = true)
+    if (!onboardingSeen && runtimeState.startupComplete) {
         LaunchedEffect(Unit) {
             listState.scrollToItem(0)
             scrollBehavior.state.heightOffset = 0f
@@ -534,6 +603,17 @@ fun MainColumn(iconPacks: List<IconPack>) {
         )
     }
 
+    val restoreStage by viewModel.backupRestoreStage.collectAsStateWithLifecycle()
+    val snapshotStage by viewModel.backupSnapshotStage.collectAsStateWithLifecycle()
+    val restoreCancellable by viewModel.backupRestoreCancellable.collectAsStateWithLifecycle()
+    if (viewModel.backupInProgress) BackupRestoreProgress(
+        stage = restoreStage,
+        snapshotStage = snapshotStage,
+        cancellable = restoreCancellable,
+        cancelling = viewModel.backupCancellationRequested,
+        onCancel = viewModel::cancelBackupPreparation
+    )
+
     // Locked icons from a missing pack: prompted automatically once per profile per session
     // (unless the profile opted out); the top-bar badge and banner reopen it any time.
     if (viewModel.showMissingPacksDialog) {
@@ -542,21 +622,40 @@ fun MainColumn(iconPacks: List<IconPack>) {
         }
     }
 
-    // The notification pointed at a profile that no longer exists — explain instead of
-    // silently doing nothing (or worse, applying the icon to the wrong profile).
     if (viewModel.watchProfileMissing) {
-        RenkinAlertDialog(
-            onDismissRequest = { viewModel.clearWatchProfileMissing() },
-            icon = { Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-            title = { Text(stringResource(R.string.watchProfileGoneTitle)) },
-            text = { Text(boldStringResource(R.string.watchProfileGoneText)) },
-            confirmButton = {
-                TextButton(onClick = { viewModel.clearWatchProfileMissing() }) {
-                    Text(stringResource(R.string.ok))
-                }
-            }
-        )
+        WatchProfileGoneDialog(onDismiss = { viewModel.clearWatchProfileMissing() })
     }
+    val startupPromptsAllowed = onboardingSeen && !viewModel.whatsNewVisible && pendingSuggestion == null &&
+        viewModel.pendingBackupImport == null && !viewModel.backupInProgress &&
+        profileActionProgress == null && !viewModel.showMissingPacksDialog && !viewModel.watchProfileMissing
+    val lostUnsavedWork by viewModel.lostUnsavedWork.collectAsStateWithLifecycle()
+    val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
+    lostUnsavedWork?.takeIf { startupPromptsAllowed && runtimeState.ready }?.let { lost ->
+        // Journaled icons restore only into their own profile, which is active after a restart
+        // unless the user switched first; otherwise the journal waits for a later start.
+        val offer = lost.offer?.takeIf { it.entries.isNotEmpty() && it.profileId == runtimeState.activeProfileId }
+        val marker = lost.marker
+        when {
+            offer != null -> RestoreLostIconsDialog(
+                lost = lost,
+                profileName = profiles.firstOrNull { it.id == offer.profileId }?.name.orEmpty(),
+                onRestore = { viewModel.restoreLostIcons(refreshAfter = false) },
+                onRefresh = { viewModel.restoreLostIcons(refreshAfter = true) },
+                onLater = viewModel::dismissLostUnsavedWork,
+                onDiscard = viewModel::discardLostIcons
+            )
+            marker != null -> LostUnsavedSessionDialog(
+                lost = marker,
+                profileName = profiles.firstOrNull { it.id == marker.profileId }?.name,
+                canRefresh = marker.refreshedCount > 0 && marker.profileId == runtimeState.activeProfileId,
+                onRefresh = viewModel::refreshAfterLostSession,
+                onDismiss = viewModel::dismissLostUnsavedWork
+            )
+            else -> LaunchedEffect(lost) { viewModel.dismissLostUnsavedWork() }
+        }
+    }
+    // Lost or restorable icons come first; the editor-draft offer is the more specific follow-up.
+    EditorDraftRecoveryHost(iconPacks, showPrompt = startupPromptsAllowed && lostUnsavedWork == null)
 }
 
 /**
@@ -565,17 +664,161 @@ fun MainColumn(iconPacks: List<IconPack>) {
  */
 @Composable
 fun NewIconPackDialog(packLabel: String, onReload: () -> Unit, onDismiss: () -> Unit) {
-    RenkinAlertDialog(
+    MessageDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Filled.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        title = { Text(stringResource(R.string.newIconPackTitle)) },
-        text = { Text(boldStringResource(R.string.newIconPackText, packLabel)) },
-        confirmButton = {
-            TextButton(onClick = onReload) { Text(stringResource(R.string.reload)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
+        badge = { DialogBadge(Icons.Filled.Extension) },
+        eyebrow = stringResource(R.string.newIconPackTitle),
+        title = packLabel,
+        body = boldStringResource(R.string.newIconPackText, packLabel),
+        actions = {
+            DialogPrimaryAction(stringResource(R.string.reload), onReload)
+            DialogSecondaryAction(stringResource(R.string.dismiss), onDismiss)
         }
+    )
+}
+
+@Composable
+internal fun ProfileActionProgressDialog(
+    progress: ProfileActionProgress,
+    // Only the debug dialog gallery passes this; the real progress dialog blocks back.
+    onPreviewDismiss: (() -> Unit)? = null
+) {
+    MessageDialog(
+        onDismissRequest = onPreviewDismiss ?: {},
+        properties = DialogProperties(dismissOnBackPress = onPreviewDismiss != null, dismissOnClickOutside = false),
+        badge = { DialogProgressBadge() },
+        title = stringResource(progress.messageRes),
+        supporting = progress.applicationName,
+        actions = {}
+    )
+}
+
+@Composable
+internal fun InstallFailureDialog(
+    failure: MainViewModel.InstallFailureInfo,
+    onChooseInstaller: () -> Unit,
+    onSaveApk: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val clipboard = LocalClipboard.current
+    val toaster = LocalToaster.current
+    val coroutineScope = rememberCoroutineScope()
+    val copiedMessage = stringResource(R.string.installFailureCopied)
+    val reportLabel = stringResource(R.string.installFailureTitle)
+    val copyReport: () -> Unit = {
+        coroutineScope.launch {
+            clipboard.copyPlainText(reportLabel, failure.report)
+            toaster.show(copiedMessage)
+        }
+    }
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(Icons.Filled.ErrorOutline, DialogTone.Danger) },
+        title = stringResource(R.string.installFailureTitle),
+        body = AnnotatedString(stringResource(
+            if (failure.missingSystemInstaller) R.string.installNoSystemInstaller else R.string.installFailureText
+        )),
+        actions = {
+            if (failure.missingSystemInstaller) {
+                DialogPrimaryAction(stringResource(R.string.installerSelect), onChooseInstaller)
+            } else {
+                DialogPrimaryAction(stringResource(R.string.installFailureCopy), copyReport)
+            }
+            if (failure.canSaveApk) DialogSecondaryAction(stringResource(R.string.installFailureSaveApk), onSaveApk)
+            if (failure.missingSystemInstaller) DialogSecondaryAction(stringResource(R.string.installFailureCopy), copyReport)
+            DialogSecondaryAction(stringResource(R.string.dismiss), onDismiss)
+        }
+    ) {
+        DialogCard {
+            SelectionContainer {
+                Text(
+                    failure.summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun InstallFallbackDialog(signatureMismatch: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(Icons.Filled.SwapHoriz, DialogTone.Danger) },
+        title = stringResource(R.string.installFallbackTitle),
+        body = AnnotatedString(stringResource(
+            if (signatureMismatch) R.string.installFallbackSignatureText else R.string.installFallbackText
+        )),
+        actions = {
+            DialogPrimaryAction(stringResource(R.string.installFallbackAction), onConfirm, DialogTone.Danger)
+            DialogSecondaryAction(stringResource(R.string.dismiss), onDismiss)
+        }
+    ) {
+        DialogSteps(
+            title = stringResource(R.string.installFallbackStepsTitle),
+            steps = listOf(
+                boldStringResource(R.string.installFallbackStepUninstall),
+                boldStringResource(R.string.installFallbackStepInstall)
+            ),
+            footnote = stringResource(R.string.installFallbackConfirmBoth)
+        )
+    }
+}
+
+/** The pack name leads; first installs get setup steps, updates get the cache-refresh steps. */
+@Composable
+internal fun BuildOutcomeDialog(outcome: MainViewModel.BuildOutcomeInfo, onDismiss: () -> Unit) {
+    val isUpdate = outcome.outcome == MainViewModel.BuildOutcome.UPDATE
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(if (isUpdate) Icons.Filled.Refresh else Icons.Filled.Check) },
+        eyebrow = stringResource(if (isUpdate) R.string.buildUpdatedTitle else R.string.buildInstalledTitle),
+        title = outcome.packLabel,
+        supporting = stringResource(R.string.installDoneVia, outcome.installerLabel),
+        body = if (isUpdate) AnnotatedString(stringResource(R.string.installDoneUpdateCacheNote)) else null,
+        actions = { DialogPrimaryAction(stringResource(R.string.installDoneConfirm), onDismiss) }
+    ) {
+        if (isUpdate) {
+            DialogSteps(
+                title = stringResource(R.string.installDoneRefreshTitle),
+                steps = listOf(
+                    boldStringResource(R.string.installDoneStepSwitchAway),
+                    boldStringResource(R.string.installDoneStepSwitchBack, outcome.packLabel)
+                ),
+                footnote = stringResource(R.string.installDoneUpdateStillOld)
+            )
+        } else {
+            DialogSteps(
+                title = stringResource(R.string.installDoneNextTitle),
+                steps = listOf(
+                    boldStringResource(R.string.installDoneStepOpenSettings),
+                    boldStringResource(R.string.installDoneStepFindIconPack),
+                    boldStringResource(R.string.installDoneStepChoosePack, outcome.packLabel)
+                )
+            )
+        }
+        if (outcome.savingProfile) {
+            DialogNote(stringResource(R.string.buildSavingInstalledProfile))
+        } else if (outcome.profileSaveFailed) {
+            DialogNote(stringResource(R.string.buildInstalledProfileSaveFailed), isError = true)
+        }
+    }
+}
+
+/**
+ * The notification pointed at a profile that no longer exists — explain instead of
+ * silently doing nothing (or worse, applying the icon to the wrong profile).
+ */
+@Composable
+internal fun WatchProfileGoneDialog(onDismiss: () -> Unit) {
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(Icons.Filled.Info, DialogTone.Neutral) },
+        title = stringResource(R.string.watchProfileGoneTitle),
+        body = boldStringResource(R.string.watchProfileGoneText),
+        actions = { DialogPrimaryAction(stringResource(R.string.ok), onDismiss) }
     )
 }
 
@@ -583,6 +826,7 @@ fun NewIconPackDialog(packLabel: String, onReload: () -> Unit, onDismiss: () -> 
 @Composable
 fun ApplicationList(
     iconPacks: List<IconPack>,
+    applicationState: ApplicationListState,
     filter: String,
     sortOrder: AppSortOrder,
     filterNoIcon: Boolean,
@@ -598,42 +842,37 @@ fun ApplicationList(
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val optionsViewModel: OptionsViewModel = hiltViewModel()
-    val applications = viewModel.applicationList
+    val applications = applicationState.applications
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
+    val lockedIconKeys = applicationState.lockedIconKeys
 
     // Read preferences once for the whole list — a DataStore subscription per row
     // causes visible scroll jank
     val prefs = getPreferences()
     val bgColorValue = prefs.getBackgroundColor()
-    val preferenceSnapshot by optionsViewModel.preferenceSnapshot.collectAsState()
+    val preferenceSnapshot by optionsViewModel.preferenceSnapshot.collectAsStateWithLifecycle()
     val themed = preferenceSnapshot.getBooleanValue(ExportThemedKey)
 
     // Install times refresh whenever the set of packages changes — keying on size alone missed
     // a reinstall or list refresh that swapped apps without changing the count. Looked up off
     // the main thread via the view model — until they arrive, INSTALL_DATE sort just shows the
     // default order.
-    val packageNames by remember(applications) {
-        derivedStateOf {
-            applications.mapTo(linkedSetOf()) { it.packageName }.toList()
-        }
+    val packageNames = remember(applicationState.revision) {
+        applications.mapTo(linkedSetOf()) { it.packageName }.toList()
     }
     val installTimes by produceState(emptyMap<String, Long>(), packageNames) {
         value = viewModel.installTimes(packageNames)
     }
 
-    // Keep the original index — ApplicationItem edits the app list by position (via the VM).
-    // derivedStateOf so it recomputes when the list's contents change (applicationList is a
-    // SnapshotStateList edited in place, so its instance identity never changes) while still
-    // caching across unrelated recompositions. Recreated when the sort/filter inputs change.
-    val displayList by remember(sortOrder, filterNoIcon, filterFallback, filterLocked, filter, installTimes) {
-        derivedStateOf {
-            // withIndex() first so each app keeps its original position; the shared pipeline then
-            // filters and sorts the wrappers (selector pulls the app out of each IndexedValue).
-            applications.withIndex().toList()
-                .sortedFilteredApps(
-                    filter, filterNoIcon, filterFallback, sortOrder, installTimes,
-                    filterLocked, viewModel.lockedIconKeys
-                ) { it.value }
-        }
+    // Keep the source index for row actions and invalidate both apps and locks with one revision.
+    val displayList = remember(
+        applicationState.revision, sortOrder, filterNoIcon, filterFallback, filterLocked, filter, installTimes
+    ) {
+        applications.withIndex().toList()
+            .sortedFilteredApps(
+                filter, filterNoIcon, filterFallback, sortOrder, installTimes,
+                filterLocked, lockedIconKeys
+            ) { it.value }
     }
 
     // Keyed items make LazyColumn follow the previously visible app to its new
@@ -646,22 +885,32 @@ fun ApplicationList(
     // over the real wallpaper). Its result carries the session bookkeeping back: hand-edited
     // keys and whether a Save persisted the profile.
     val globalOptionsContext = LocalContext.current
+    val globalOptionsToaster = LocalToaster.current
     val globalOptionsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        if (result.data?.getBooleanExtra(GlobalOptionsActivity.EXTRA_SESSION_LOST, false) == true) {
+            globalOptionsToaster.show(globalOptionsContext.getString(R.string.editorSessionLost))
+            return@rememberLauncherForActivityResult
+        }
         val edited = result.data
             ?.getStringArrayListExtra(GlobalOptionsActivity.EXTRA_EDITED_KEYS)
             ?.toSet() ?: emptySet()
         val applied = result.data
             ?.getBooleanExtra(GlobalOptionsActivity.EXTRA_GLOBAL_APPLIED, false) ?: false
-        if (edited.isNotEmpty() || applied) viewModel.onGlobalOptionsClosed(edited, applied)
+        val session = result.data?.profileSession()
+        if (session != null && (edited.isNotEmpty() || applied)) {
+            viewModel.onGlobalOptionsClosed(session, edited, applied)
+        }
     }
 
     // Startup loads apps, then icon packs, then the profile's saved icons — all off the main
     // thread. Hold the spinner until ALL of it is done: revealing the list earlier shows rows
     // whose icons pop in seconds later, because the per-row bitmap decodes queue behind the
     // pack/DB loading still running on the same worker pool.
-    if (!viewModel.startupComplete) {
+    // A profile transition also hides the retained snapshot until its owner matches again.
+    if (!runtimeState.startupComplete || viewModel.startupFailed || runtimeState.isProfileSwitching ||
+        applicationState.sessionToken != runtimeState.sessionToken) {
         if (viewModel.startupFailed) {
             EmptyState(
                 icon = Icons.Filled.Warning,
@@ -677,6 +926,8 @@ fun ApplicationList(
         }
         return
     }
+    val sourceSession = applicationState.sessionToken ?: return
+    var addAppOpen by rememberSaveable { mutableStateOf(false) }
 
     // One column on a phone, more on a tablet or in landscape. The header cards describe the
     // whole profile, so each of them spans every column instead of sitting in one.
@@ -720,15 +971,20 @@ fun ApplicationList(
         // Scrolls away with the list — only the search bar stays pinned
         item(key = "hero", contentType = "hero", span = { GridItemSpan(maxLineSpan) }) {
             Box(Modifier.introTarget(IntroTarget.SOURCE)) {
-                HeroPackCard(iconPacks, activeProblemFilters, onProblemFilterToggle)
+                HeroPackCard(iconPacks, applicationState, activeProblemFilters, onProblemFilterToggle)
             }
         }
         item(key = "options", contentType = "options", span = { GridItemSpan(maxLineSpan) }) {
             Box(Modifier.introTarget(IntroTarget.ADVANCED_OPTIONS)) {
                 AdvancedOptionsCard(iconPacks) {
-                    globalOptionsLauncher.launch(
-                        Intent(globalOptionsContext, GlobalOptionsActivity::class.java)
-                    )
+                    if (viewModel.longOperationRunning) {
+                        globalOptionsToaster.show(globalOptionsContext.getString(R.string.profileRenderBusy))
+                    } else {
+                        globalOptionsLauncher.launch(
+                            Intent(globalOptionsContext, GlobalOptionsActivity::class.java)
+                                .withProfileSession(sourceSession)
+                        )
+                    }
                 }
             }
         }
@@ -749,6 +1005,12 @@ fun ApplicationList(
                     onAction = onShowAllApps.takeIf { filtered }
                 )
             }
+            // A search that finds nothing is the moment someone looks for an app the launcher hides.
+            if (filter.isNotBlank()) {
+                item(key = "missingApp", contentType = "missingApp", span = { GridItemSpan(maxLineSpan) }) {
+                    MissingAppCard(searchHint = true) { addAppOpen = true }
+                }
+            }
         } else {
             items(displayList, key = { it.value.key }, contentType = { "application" }) { indexedApp ->
                 // Only the top row is pointed at by the intro.
@@ -757,14 +1019,113 @@ fun ApplicationList(
                 } else Modifier
                 ApplicationItem(
                     iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue,
-                    Modifier.animateItem().then(introModifier)
+                    sourceSession = sourceSession,
+                    isLocked = indexedApp.value.createdIcon == null && indexedApp.value.key in lockedIconKeys,
+                    modifier = Modifier.animateItem().then(introModifier)
                 )
+            }
+            item(key = "missingApp", contentType = "missingApp", span = { GridItemSpan(maxLineSpan) }) {
+                MissingAppCard(searchHint = false) { addAppOpen = true }
+            }
+        }
+    }
+
+    if (addAppOpen) {
+        AddAppSheet(
+            initialQuery = filter,
+            sourceSession = sourceSession,
+            listedKeys = remember(applicationState.revision) { applications.mapTo(hashSetOf()) { it.key } },
+            onDismiss = { addAppOpen = false },
+            onAdded = { key, openEditor ->
+                addAppOpen = false
+                viewModel.onAppTargetAdded(key, openEditor)
+            }
+        )
+    }
+
+    // The new row may sit anywhere in the sorted list; bring it into view once.
+    val revealedKey = viewModel.revealedAppKey
+    LaunchedEffect(revealedKey, displayList) {
+        if (revealedKey == null) return@LaunchedEffect
+        val position = displayList.indexOfFirst { it.value.key == revealedKey }
+        if (position >= 0) {
+            listState.animateScrollToItem(firstAppItemIndex + position)
+            viewModel.consumeRevealedApp()
+        }
+    }
+
+    viewModel.addedAppEditorKey?.let { key ->
+        val added = applications.firstOrNull { it.key == key }
+        if (added == null) {
+            LaunchedEffect(key) { viewModel.closeAddedAppEditor() }
+        } else {
+            OpenAppOptions(iconPacks, added, themed, sourceSession = sourceSession) {
+                viewModel.closeAddedAppEditor()
             }
         }
     }
 }
 
+/**
+ * The way into the Add app sheet: at the end of the list, and under an empty search where
+ * a hidden or uninstalled app is the likely reason nothing matched.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun MissingAppCard(searchHint: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = CardShape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(40.dp)) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.missingAppTitle),
+                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    stringResource(if (searchHint) R.string.missingAppSearchHint else R.string.missingAppHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 private val EmptyStateMinHeight = 260.dp
+private const val DELIVERY_REVEAL_CAP_MS = 1000L
+
+/**
+ * A home field that keeps focus under the edit dialog gets it back, popping the keyboard, when the
+ * dialog goes. Dropping it as the editor opens leaves nothing to restore, and a field the user taps
+ * while the editor is still closing (its window already passes touches) keeps its focus. Only a real
+ * open runs this, never a keystroke that recomposes the filtered rows.
+ */
+@Composable
+internal fun DropFocusWhenEditorOpens(editorOpen: Boolean) {
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(editorOpen) {
+        if (editorOpen) focusManager.clearFocus(force = true)
+    }
+}
 
 private fun LazyGridState.isItemFullyVisible(index: Int): Boolean {
     val item = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return false
@@ -794,6 +1155,8 @@ fun ApplicationItem(
     index: Int,
     themed: Boolean,
     bgColorValue: Color,
+    sourceSession: ProfileSessionToken,
+    isLocked: Boolean,
     modifier: Modifier = Modifier
 ) {
     val viewModel: MainViewModel = hiltViewModel()
@@ -804,17 +1167,12 @@ fun ApplicationItem(
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
     var quickActionsOpen by rememberSaveable { mutableStateOf(false) }
+    // Plain remember: a flight holds a bitmap and is meaningless after recreation, so a
+    // restored editor simply opens without one.
+    val iconAnchor = remember { IconAnchor() }
+    var iconFlight by remember { mutableStateOf<IconFlightState?>(null) }
 
-    // Closing the edit dialog (whose icon-search field had keyboard focus) otherwise lets the
-    // system hand focus to the home search field, popping the keyboard. Clear focus only on the
-    // actual open→close transition — not on initial composition, or filtering the list (which
-    // recomposes rows) would clear the search field's focus after every keystroke.
-    val focusManager = LocalFocusManager.current
-    var wasOptionsOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(openAppOptions) {
-        if (wasOptionsOpen && !openAppOptions) focusManager.clearFocus(force = true)
-        wasOptionsOpen = openAppOptions
-    }
+    DropFocusWhenEditorOpens(openAppOptions)
 
     Surface(
         shape = CardShape,
@@ -827,8 +1185,11 @@ fun ApplicationItem(
             .combinedClickable(
                 role = Role.Button,
                 onClick = {
+                    // Its editor is still closing (icons flying home); let that finish first.
+                    if (openAppOptions) return@combinedClickable
                     view.performTapHaptic()
-                    if (viewModel.iconPackLoaded) {
+                    if (viewModel.iconPackState.value.loaded) {
+                        iconFlight = iconAnchor.launch()
                         openAppOptions = true
                     } else {
                         toaster.show(syncWarning)
@@ -850,8 +1211,11 @@ fun ApplicationItem(
             // Decoded once at the on-screen size (56.dp) by the shared helper, so scrolling
             // new rows in doesn't decode oversized bitmaps on the main thread (scroll jank).
             val bitmap = rememberAppBitmap(app, 56.dp)
+            SideEffect { iconAnchor.bitmap = bitmap }
             Box(
                 modifier = Modifier
+                    .iconAnchor(iconAnchor)
+                    .graphicsLayer { alpha = if (iconFlight.inFlight) 0f else 1f }
                     .size(56.dp)
                     .clip(IconShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -862,17 +1226,37 @@ fun ApplicationItem(
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize()
                     )
+                } else if (app.targetState == AppTargetState.NOT_INSTALLED) {
+                    // Nothing installed to take an icon from; say so instead of an empty tile.
+                    Icon(
+                        imageVector = Icons.Filled.Apps,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.align(Alignment.Center).size(24.dp)
+                    )
                 }
             }
 
-            Text(
-                text = app.appName,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = app.appName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                app.targetState?.let { state ->
+                    TargetBadge(
+                        stringResource(
+                            when (state) {
+                                AppTargetState.DISABLED -> R.string.appTargetDisabled
+                                AppTargetState.NOT_INSTALLED -> R.string.appTargetNotInstalled
+                                AppTargetState.NOT_IN_LAUNCHER -> R.string.appTargetNotInLauncher
+                            }
+                        )
+                    )
+                }
+            }
 
             val bgColor = if (themed) {
                 if (dynamicColor) {
@@ -886,18 +1270,58 @@ fun ApplicationItem(
 
             // Crossfade the trailing slot so assigning or clearing an icon fades
             // between the preview and the edit bubble instead of popping
-            Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
-                val isLocked = app.createdIcon == null && app.key in viewModel.lockedIconKeys
+            Box(
+                modifier = Modifier
+                    .deliveryAnchor(iconAnchor)
+                    .graphicsLayer { alpha = if (iconFlight.holdsResultSlot) 0f else 1f }
+                    .size(56.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 // Rasterised at the row's size: a vector painter grows into place over the first
                 // frames, which read as the icon jumping after it appeared.
                 val createdBitmap = rememberCreatedIconBitmap(app, 56.dp)
+                SideEffect { iconAnchor.resultBitmap = createdBitmap }
+                // An icon has landed here: a returning one shows at once; an applied one stays in
+                // the slot until the row draws it, unless its Apply failed or the reveal cap passes.
+                val landedDelivery = iconFlight?.takeIf {
+                    it.delivery != null && it.phase == IconFlightPhase.HOME
+                }
+                val landedAt = remember(landedDelivery) { SystemClock.uptimeMillis() }
+                LaunchedEffect(landedDelivery, createdBitmap) {
+                    val delivery = landedDelivery?.delivery ?: return@LaunchedEffect
+                    val rowShowsAppliedIcon = createdBitmap != null && createdBitmap !== landedDelivery.resultBefore
+                    val remaining = DELIVERY_REVEAL_CAP_MS - (SystemClock.uptimeMillis() - landedAt)
+                    // Timing out is the reveal cap: the slot then shows whatever the row has.
+                    withTimeoutOrNull(remaining.coerceAtLeast(0)) {
+                        viewModel.iconApplyResults
+                            .map { results -> delivery.applyRequestId?.let(results::get) }
+                            .first { outcome -> releasesDelivery(delivery.applied, rowShowsAppliedIcon, outcome) }
+                    }
+                    delivery.applyRequestId?.let(viewModel::acknowledgeIconApply)
+                    iconFlight = null
+                }
+                // Rasterised while the icon is still flying, so the landed picture is ready at once.
+                val deliveredBitmap = rememberIconBitmap(app, iconFlight?.delivery?.takeIf { it.applied }?.icon, 56.dp)
+                val pendingApplyIcon = iconFlight.landedApplyIcon
+                if (pendingApplyIcon != null) {
+                    Image(
+                        painter = deliveredBitmap?.let { BitmapPainter(it) } ?: pendingApplyIcon.getPainter(),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(IconShape)
+                            .background(bgColor)
+                    )
+                }
                 // Fixed frame for every state: the edit bubble is smaller than an icon, and
                 // letting Crossfade shrink the slot around it slid the bubble into place after
                 // the fade. Each branch centres itself inside the same 56.dp box instead.
                 Crossfade(
                     targetState = createdBitmap,
                     label = "iconPreview",
-                    modifier = Modifier.size(56.dp)
+                    modifier = Modifier
+                        .size(56.dp)
+                        .graphicsLayer { alpha = if (pendingApplyIcon != null) 0f else 1f }
                 ) { preview ->
                   Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (preview != null) {
@@ -1003,12 +1427,14 @@ fun ApplicationItem(
     }
 
     if (quickActionsOpen) {
-        AppQuickActionsSheet(app = app, onDismiss = { quickActionsOpen = false })
+        AppQuickActionsSheet(app = app, sourceSession = sourceSession, onDismiss = { quickActionsOpen = false })
     }
 
     if (openAppOptions) {
-        OpenAppOptions(iconPacks, app, themed) {
+        OpenAppOptions(iconPacks, app, themed, sourceSession = sourceSession, flight = iconFlight) {
             openAppOptions = false
+            // A delivered icon keeps its flight until the row draws it (see the result slot).
+            if (iconFlight?.delivery == null) iconFlight = null
         }
     }
 }
@@ -1018,28 +1444,129 @@ fun OpenAppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
+    sourceSession: ProfileSessionToken,
+    recoveredSessionId: String? = null,
+    onSessionInvalidated: (() -> Unit)? = null,
+    flight: IconFlightState? = null,
+    awaitApply: Boolean = false,
     onDismiss: () -> Unit
 ) {
-    val viewModel: MainViewModel = hiltViewModel()
-
-    OptionsDialog(iconPacks, app, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl ->
-        viewModel.applyIcon(app, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl)
-        onDismiss()
-    }, {
-        onDismiss()
-    }) {
-        onDismiss()
-        viewModel.resetIcon(app)
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
+    val editorViewModel: EditorSessionViewModel = hiltViewModel()
+    val draftOwner: EditorDraftRecoveryViewModel = hiltViewModel()
+    LaunchedEffect(draftOwner, editorViewModel) { draftOwner.connect(editorViewModel) }
+    val autosaveState by draftOwner.autosaveState.collectAsStateWithLifecycle()
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
+    val activity = LocalContext.current
+    val toaster = LocalToaster.current
+    val sessionId = recoveredSessionId ?: rememberSaveable(app.key) { UUID.randomUUID().toString() }
+    var sessionAttached by rememberSaveable(app.key) { mutableStateOf(false) }
+    val expected = if (recoveredSessionId != null) {
+        // Accepted recovery owns a fresh token; a previous process's Bundle cannot replace it.
+        sourceSession
+    } else {
+        val profileId = rememberSaveable(app.key) { sourceSession.profileId }
+        val revision = rememberSaveable(app.key) { sourceSession.revision }
+        val providerInstance = rememberSaveable(app.key) { sourceSession.providerInstanceId }
+        ProfileSessionToken(profileId, revision, providerInstance)
     }
+    val current = runtimeState.sessionToken
+
+    if (expected != current) {
+        LaunchedEffect(expected, current) {
+            editorViewModel.release(sessionId)
+            // After process death the draft offer and the lost-icons notice speak for the old
+            // editor; a toast here would contradict a Resume offer and cover its buttons.
+            if (expected.providerInstanceId == current.providerInstanceId) {
+                toaster.show(activity.getString(expected.expiredSessionMessage(current)))
+            }
+            (onSessionInvalidated ?: onDismiss)()
+        }
+        return
+    }
+
+    val preferences = getPreferences()
+    val savedFont by remember(preferences) {
+        preferences.observePreferences().map { it[TextFontKey] ?: "" }
+    }.collectAsStateWithLifecycle(initialValue = null)
+    val initialFont = savedFont ?: return
+    val session = editorViewModel.getOrCreate(
+        sessionId, expected, app, iconPacks.firstOrNull()?.packageName ?: "", initialFont,
+        allowCreate = !sessionAttached
+    )
+    if (session == null) {
+        LaunchedEffect(sessionId) {
+            editorViewModel.release(sessionId)
+            toaster.show(activity.getString(R.string.editorDraftLost))
+            (onSessionInvalidated ?: onDismiss)()
+        }
+        return
+    }
+    SideEffect { sessionAttached = true }
+    LaunchedEffect(sessionId, session) { editorViewModel.prepareApplicationIcon(sessionId, viewModel.installedIcons) }
+    val closeEditor: () -> Unit = {
+        // Close fences new captures synchronously; serialized cleanup waits for any in-flight save.
+        if (recoveredSessionId == null) draftOwner.closeLive(sessionId)
+        onDismiss()
+    }
+    var pendingApplyId by rememberSaveable(sessionId) { mutableStateOf<Long?>(null) }
+    val applyResults by viewModel.iconApplyResults.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingApplyId, applyResults) {
+        val id = pendingApplyId ?: return@LaunchedEffect
+        val outcome = applyResults[id] ?: return@LaunchedEffect
+        viewModel.acknowledgeIconApply(id)
+        pendingApplyId = null
+        if (outcome == dev.renkinProject.renkin.apk.IconApplyOutcome.APPLIED) closeEditor()
+    }
+
+    val globalLayer by produceState<EditorGlobalLayer?>(null, session, expected) {
+        value = try {
+            viewModel.editorGlobalLayer(session.application, expected)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            null
+        }
+    }
+
+    OptionsDialog(iconPacks, session, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, modifierRecipe, modifierInput ->
+        // Only stores the icon: the dialog closes itself through closeEditor, after any flight.
+        val requestId = if (awaitApply || flight != null) viewModel.newIconApplyRequestId().also { id ->
+            flight?.applyRequestId = id
+            if (awaitApply) pendingApplyId = id
+        } else null
+        viewModel.applyIcon(
+            session.application, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName,
+            sourceUrl, expected, modifierRecipe, modifierInput, requestId,
+            keepGlobalStyle = globalLayer != null && session.keepGlobalStyle,
+            modifierUsage = dev.renkinProject.renkin.feature.presets.ModifierShortcutApply(
+                session.confirmedModifierUse, session.adjustments.loadedPresetId
+            )
+        )
+    }, closeEditor, onIconClear = {
+        closeEditor()
+        viewModel.resetIcon(session.application, expected)
+    }, onRestoreModifiers = {
+        editorViewModel.restoreModifiers(sessionId) { state ->
+            viewModel.prepareModifierReplay(state.application, state.owner)
+        }
+    }, onCancelModifierRestore = { editorViewModel.cancelModifierRestore(sessionId) },
+        autosaveNotice = {
+            autosaveState?.takeIf { it.lifetime.sessionId == sessionId }?.let {
+                EditorAutosaveNotice(it, draftOwner::retryAutosave, draftOwner::discardForAutosave,
+                    onReview = { shown -> if (draftOwner.reviewSavedEdit(shown)) onDismiss() })
+            }
+        },
+        flight = flight,
+        dismissOnConfirm = !awaitApply,
+        canInteract = { pendingApplyId == null },
+        globalLayer = globalLayer)
 }
 
 @Composable
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
-fun RefreshButton() {
-    val viewModel: MainViewModel = hiltViewModel()
-    val isRefreshing = viewModel.isRefreshing
-
-    IconButton(enabled = !isRefreshing, onClick = viewModel::refresh) {
+private fun RefreshButton(isRefreshing: Boolean, enabled: Boolean, onRefresh: () -> Unit) {
+    IconButton(enabled = enabled && !isRefreshing, onClick = onRefresh) {
         if (isRefreshing) {
             LoadingIndicator(
                 modifier = Modifier.size(24.dp),
@@ -1058,77 +1585,37 @@ fun RefreshButton() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun TitleBar(
-    scrollBehavior: TopAppBarScrollBehavior? = null
+    scrollBehavior: TopAppBarScrollBehavior? = null,
+    loading: Boolean = false
 ) {
+    if (loading) {
+        TitleBarContent(
+            scrollBehavior = scrollBehavior,
+            enabled = false,
+            title = { Text(stringResource(R.string.app_name)) }
+        )
+        return
+    }
     val prefs = getPreferences()
     var openSettings by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
     var openWatch by rememberSaveable { mutableStateOf(false) }
 
     val watchViewModel: WatchViewModel = hiltViewModel()
-    val completedCount by watchViewModel.completedCount.collectAsState()
+    val completedCount by watchViewModel.completedCount.collectAsStateWithLifecycle()
     val mainViewModel: MainViewModel = hiltViewModel()
 
-    LargeFlexibleTopAppBar(
+    TitleBarContent(
         scrollBehavior = scrollBehavior,
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.background,
-            scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-            titleContentColor = MaterialTheme.colorScheme.primary,
-        ),
-        title = {
-            Box(Modifier.introTarget(IntroTarget.PROFILE)) { ProfileSwitcherTitle() }
-        },
-        actions = {
-            // Lit while any of the active profile's icons are locked behind a missing pack.
-            // Error tint on purpose: it must stand out from the primary-tinted actions.
-            if (mainViewModel.missingPackSummary.isNotEmpty()) {
-                IconButton(onClick = { mainViewModel.openMissingPacksDialog() }) {
-                    Icon(
-                        imageVector = Icons.Filled.Warning,
-                        contentDescription = stringResource(R.string.missingPacksTitle),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-            Box(Modifier.introTarget(IntroTarget.REFRESH)) { RefreshButton() }
-            IconButton(
-                onClick = { openWatch = true },
-                modifier = Modifier.introTarget(IntroTarget.WATCHED_ICONS)
-            ) {
-                BadgedBox(badge = {
-                    if (completedCount > 0) {
-                        Badge { Text(completedCount.toString()) }
-                    }
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.Notifications,
-                        contentDescription = stringResource(R.string.openWatchedIcons),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-            IconButton(
-                onClick = { openInfo = true },
-                modifier = Modifier.introTarget(IntroTarget.INFO)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Info,
-                    contentDescription = stringResource(R.string.info),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-            IconButton(
-                onClick = { openSettings = true },
-                modifier = Modifier.introTarget(IntroTarget.SETTINGS)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Settings,
-                    contentDescription = stringResource(R.string.settings),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
+        isRefreshing = mainViewModel.isRefreshing,
+        completedCount = completedCount,
+        hasMissingPacks = mainViewModel.missingPackSummary.isNotEmpty(),
+        onMissingPacks = mainViewModel::openMissingPacksDialog,
+        onRefresh = mainViewModel::refresh,
+        onWatch = { openWatch = true },
+        onInfo = { openInfo = true },
+        onSettings = { openSettings = true },
+        title = { Box(Modifier.introTarget(IntroTarget.PROFILE)) { ProfileSwitcherTitle() } }
     )
 
     if (openSettings) {
@@ -1148,6 +1635,87 @@ fun TitleBar(
             openWatch = false
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun TitleBarContent(
+    title: @Composable () -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior? = null,
+    enabled: Boolean = true,
+    isRefreshing: Boolean = false,
+    completedCount: Int = 0,
+    hasMissingPacks: Boolean = false,
+    onMissingPacks: () -> Unit = {},
+    onRefresh: () -> Unit = {},
+    onWatch: () -> Unit = {},
+    onInfo: () -> Unit = {},
+    onSettings: () -> Unit = {}
+) {
+    LargeFlexibleTopAppBar(
+        scrollBehavior = scrollBehavior,
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background,
+            scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            titleContentColor = MaterialTheme.colorScheme.primary,
+        ),
+        title = title,
+        actions = {
+            // Lit while any of the active profile's icons are locked behind a missing pack.
+            // Error tint on purpose: it must stand out from the primary-tinted actions.
+            if (hasMissingPacks) {
+                IconButton(onClick = onMissingPacks, enabled = enabled) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = stringResource(R.string.missingPacksTitle),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            Box(Modifier.introTarget(IntroTarget.REFRESH)) {
+                RefreshButton(isRefreshing, enabled, onRefresh)
+            }
+            IconButton(
+                onClick = onWatch,
+                enabled = enabled,
+                modifier = Modifier.introTarget(IntroTarget.WATCHED_ICONS)
+            ) {
+                BadgedBox(badge = {
+                    if (completedCount > 0) {
+                        Badge { Text(completedCount.toString()) }
+                    }
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.Notifications,
+                        contentDescription = stringResource(R.string.openWatchedIcons),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            IconButton(
+                onClick = onInfo,
+                enabled = enabled,
+                modifier = Modifier.introTarget(IntroTarget.INFO)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = stringResource(R.string.info),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            IconButton(
+                onClick = onSettings,
+                enabled = enabled,
+                modifier = Modifier.introTarget(IntroTarget.SETTINGS)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = stringResource(R.string.settings),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    )
 }
 
 @Composable

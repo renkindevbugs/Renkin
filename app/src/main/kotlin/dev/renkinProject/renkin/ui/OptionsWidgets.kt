@@ -1,12 +1,12 @@
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.ui.text.AnnotatedString
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.DropdownMenuItem
@@ -33,13 +33,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
-import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.data.getImageEditLabels
@@ -48,6 +45,7 @@ import dev.renkinProject.renkin.data.getTextTypeLabels
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.shrinkIfBiggerThan
+import dev.renkinProject.renkin.ui.theme.SwatchShape
 
 @Composable
 fun VectorSwitch(useVector: Boolean, onChange: (newValue: Boolean) -> Unit) {
@@ -62,11 +60,6 @@ fun MaterialYouSwitch(useMaterialYou: Boolean, onChange: (newValue: Boolean) -> 
 @Composable
 fun ThemedIconsSwitch(useThemed: Boolean, onChange: (newValue: Boolean) -> Unit) {
     DefaultSwitchLayoutWithInfo(useThemed, R.string.themedIcons, R.string.themedIconsOptionDescription) { onChange(it) }
-}
-
-@Composable
-fun OutlineAddSwitch(outlineAdd: Boolean, onChange: (newValue: Boolean) -> Unit) {
-    DefaultSwitchLayoutWithInfo(outlineAdd, R.string.outlineGlobal, R.string.outlineGlobalOptionDescription) { onChange(it) }
 }
 
 @Composable
@@ -159,22 +152,26 @@ fun IconPackDropdown(
     @StringRes labelId: Int,
     iconPacks: List<IconPack>,
     packageName: String,
-    application: InstalledApplication?,
-    onChange: (newValue: IconPack) -> Unit
+    loadIcons: suspend () -> Map<String, ResourceDrawable>,
+    onChange: (packageName: String) -> Unit
 ) {
-    val viewModel: MainViewModel = hiltViewModel()
-    val emptyPack = IconPack("", stringResource(R.string.none), 0, "", 0)
-    val newList = listOf(emptyPack) + iconPacks
-    val defaultPack = newList.find { it.packageName == packageName }
+    val none = stringResource(R.string.none)
+    // A pack that is no longer installed stays listed under its package name, so the field shows
+    // what the setting still holds instead of pretending it is None.
+    val options = remember(iconPacks, packageName, none) {
+        linkedMapOf("" to none).apply {
+            iconPacks.forEach { put(it.packageName, it.applicationName) }
+            if (packageName.isNotBlank() && packageName !in this) put(packageName, packageName)
+        }
+    }
 
     // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
     // Parcelable, so saving it on stop crashes. It's reloaded below anyway.
     var icons: Map<String, ResourceDrawable> by remember { mutableStateOf(mapOf()) }
     var expanded by remember { mutableStateOf(false) }
-    var selectedOption by remember { mutableStateOf(defaultPack ?: emptyPack) }
 
     LaunchedEffect(Unit) {
-        icons = viewModel.iconPackDropdownIcons(application)
+        icons = loadIcons()
     }
 
     ExposedDropdownMenuBox(
@@ -186,22 +183,21 @@ fun IconPackDropdown(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
-        DropdownAnchorField(labelId, selectedOption.applicationName, expanded)
+        DropdownAnchorField(labelId, options[packageName] ?: none, expanded)
         ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = {
                 expanded = false
             }
         ) {
-            newList.forEach { selectionOption ->
-                val icon = icons.entries.find { it.key == selectionOption.packageName }
-                val bitmap = icon?.value?.drawable?.shrinkIfBiggerThan(500)
+            options.forEach { (optionPackage, optionLabel) ->
+                val bitmap = icons[optionPackage]?.drawable?.shrinkIfBiggerThan(500)
 
                 DropdownMenuItem(
                     modifier = Modifier.padding(vertical = 2.dp),
                     text = {
                         Text(
-                            text = selectionOption.applicationName,
+                            text = optionLabel,
                             modifier = Modifier.padding(start = 4.dp)
                         )
                     },
@@ -212,15 +208,13 @@ fun IconPackDropdown(
                                 contentDescription = null,
                                 modifier = Modifier
                                     .size(36.dp)
-                                    .clip(RoundedCornerShape(9.dp))
+                                    .clip(SwatchShape)
                             )
                         }
                     },
                     onClick = {
-                        selectedOption = selectionOption
                         expanded = false
-
-                        onChange(selectionOption)
+                        onChange(optionPackage)
                     }
                 )
             }
@@ -230,14 +224,12 @@ fun IconPackDropdown(
 
 @Composable
 fun OptionInfoDialog(text: String, onDismiss: () -> Unit) {
-    RenkinAlertDialog(
-        onDismissRequest = { onDismiss() },
-        title = { },
-        text = {
-            Text(text)
-        },
-        confirmButton = { },
-        dismissButton = { }
+    MessageDialog(
+        onDismissRequest = onDismiss,
+        badge = { DialogBadge(Icons.Filled.Info, DialogTone.Neutral) },
+        title = null,
+        body = AnnotatedString(text),
+        actions = { DialogPrimaryAction(stringResource(R.string.ok), onDismiss) }
     )
 }
 
@@ -258,8 +250,6 @@ fun OutlineSwitch(enabled: Boolean, onChange: (newValue: Boolean) -> Unit) {
 
 @Composable
 fun DefaultSwitchLayout(isChecked: Boolean, @StringRes label: Int, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(isChecked) }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -271,19 +261,12 @@ fun DefaultSwitchLayout(isChecked: Boolean, @StringRes label: Int, onChange: (ne
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f)
         )
-        Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
-            }
-        )
+        Switch(checked = isChecked, onCheckedChange = onChange)
     }
 }
 
 @Composable
 fun DefaultSwitchLayoutWithInfo(isChecked: Boolean, @StringRes label: Int, @StringRes infoDesc: Int, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(isChecked) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
 
     Row(
@@ -307,11 +290,8 @@ fun DefaultSwitchLayoutWithInfo(isChecked: Boolean, @StringRes label: Int, @Stri
             )
         }
         Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
-            },
+            checked = isChecked,
+            onCheckedChange = onChange,
             modifier = Modifier.padding(start = 12.dp)
         )
     }

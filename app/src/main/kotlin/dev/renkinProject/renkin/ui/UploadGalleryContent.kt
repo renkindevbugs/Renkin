@@ -28,7 +28,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
@@ -90,9 +90,10 @@ internal fun UploadGalleryContent(
     onZoomChange: (Float) -> Unit,
     onSelectedImageChange: (String?) -> Unit,
     onSelectionChange: (GallerySelection) -> Unit,
+    loadThumbnail: suspend (File) -> Bitmap?,
     onChange: (IconPackDrawable?, String?) -> Unit
 ) {
-    if (savedImages.isEmpty()) {
+    if (savedImages.isEmpty() && uploadedImage == null) {
         UploadGalleryEmptyState()
         return
     }
@@ -138,6 +139,7 @@ internal fun UploadGalleryContent(
                 file = file,
                 selected = !selection.active && path == selectedImagePath,
                 marked = path in selection.paths,
+                loadThumbnail = loadThumbnail,
                 onClick = {
                     if (selection.active) {
                         onSelectionChange(selection.toggle(path))
@@ -271,7 +273,7 @@ internal fun UploadGalleryActions(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = CircleShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier.weight(1f)
         ) {

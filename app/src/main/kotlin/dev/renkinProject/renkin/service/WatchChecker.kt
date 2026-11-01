@@ -1,27 +1,30 @@
 package dev.renkinProject.renkin.service
 
 import android.content.Context
+import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.IconPack
-import dev.renkinProject.renkin.data.RawItem
+import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.BaselineInput
 import dev.renkinProject.renkin.data.watch.CandidateInput
 import dev.renkinProject.renkin.data.watch.WatchRepository
+import dev.renkinProject.renkin.data.watch.RuleWithDetails
+import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
 import dev.renkinProject.renkin.data.watch.WatchState
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.contentHash
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.appFilterDrawableName
+import dev.renkinProject.renkin.packages.appFilterDrawableNames
 import dev.renkinProject.renkin.packages.InstalledAppCatalog
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * Isolates one third-party pack read without caching failures. Callers can therefore skip the
@@ -76,205 +79,214 @@ class WatchChecker(
         val profileId: Long
     )
 
+    private suspend fun <T> withStorageAccess(block: suspend () -> T): T = StorageOperationGate.run {
+        withContext(Dispatchers.Default) { block() }
+    }
+
+    data class CheckResult(val suggestions: List<FiredSuggestion>, val storageEpoch: Long) {
+        // Check under the storage gate together with notification/metadata side effects.
+        fun isCurrent(): Boolean = storageEpoch == StorageOperationGate.epoch
+    }
+
+    private data class RuleSnapshot(
+        val details: RuleWithDetails,
+        val states: Set<WatchState>,
+        val candidates: Map<Long, Set<IconSuggestionCandidate>>
+    )
+
+    private data class AppCheck(
+        val component: AppComponent,
+        val previousComponent: AppComponent? = null,
+        val baseline: List<BaselineInput> = emptyList(),
+        val states: List<WatchState> = emptyList(),
+        val candidates: List<CandidateInput> = emptyList()
+    )
+
+    private data class CompletedCheck(val suggestionId: Long, val candidates: List<CandidateInput>)
+    private data class RuleCheck(
+        val snapshot: RuleSnapshot,
+        val apps: List<AppCheck> = emptyList(),
+        val completed: List<CompletedCheck> = emptyList()
+    )
+
+    private suspend fun snapshot(rule: RuleWithDetails) = RuleSnapshot(
+        rule,
+        repo.getStatesForRule(rule.rule.id).toSet(),
+        rule.suggestions.associate { it.id to repo.getCandidates(it.id).toSet() }
+    )
+
+    private suspend fun unchanged(before: RuleSnapshot): Boolean {
+        val current = repo.getRule(before.details.rule.id) ?: return false
+        return current.rule == before.details.rule &&
+            current.apps.toSet() == before.details.apps.toSet() &&
+            current.packs.toSet() == before.details.packs.toSet() &&
+            current.suggestions.toSet() == before.details.suggestions.toSet() &&
+            repo.getStatesForRule(current.rule.id).toSet() == before.states &&
+            current.suggestions.all { repo.getCandidates(it.id).toSet() == before.candidates[it.id] }
+    }
+
     suspend fun runCheck(refreshCompletedSuggestions: Boolean = false): List<FiredSuggestion> =
-        withContext(Dispatchers.Default) {
-            checkMutex.withLock { runCheckLocked(refreshCompletedSuggestions) }
-        }
+        runCheckResult(refreshCompletedSuggestions).suggestions
 
-    private suspend fun runCheckLocked(includeCompletedSuggestions: Boolean): List<FiredSuggestion> {
-        val fired = mutableListOf<FiredSuggestion>()
+    suspend fun runCheckResult(refreshCompletedSuggestions: Boolean = false): CheckResult = withContext(Dispatchers.Default) {
+        val (epoch, rules) = StorageOperationGate.run {
+            StorageOperationGate.epoch to repo.getAllRules()
+                .filter { !it.rule.completed || refreshCompletedSuggestions }
+                .map { snapshot(it) }
+        }
+        // Package parsing and bitmap hashes never own the global storage gate.
         val installedPacks = watchablePacks()
-        val installedAppsByPackage = installedAppCatalog.getAllInstalledApplications()
-            .groupBy { it.packageName }
-        if (includeCompletedSuggestions) {
-            fired += refreshCompletedSuggestions(installedPacks, installedAppsByPackage)
+        val installedApps = installedAppCatalog.getAllInstalledApplications().groupBy { it.packageName }
+        val packIcons = packIconsFor(rules, installedApps)
+        val checks = rules.map { before ->
+            if (before.details.rule.completed) planCompleted(before, installedPacks, installedApps, packIcons)
+            else planActive(before, installedPacks, installedApps, packIcons)
         }
-        fired += checkActiveRules(installedPacks, installedAppsByPackage)
-        return fired
-    }
-
-    private suspend fun checkActiveRules(
-        installedPacks: Map<String, IconPack>,
-        installedAppsByPackage: Map<String, List<InstalledApplication>>
-    ): List<FiredSuggestion> {
         val fired = mutableListOf<FiredSuggestion>()
-
-        for (rule in repo.getActiveRules()) {
-            val packPackages = if (rule.rule.watchAllPacks) {
-                installedPacks.keys.toList()
-            } else {
-                rule.packs.map { it.iconPackPackage }
-            }
-
-            for (ruleApp in rule.apps) {
-                val packageActivities = installedAppsByPackage[ruleApp.packageName].orEmpty()
-                val storedComponent = AppComponent(ruleApp.packageName, ruleApp.activityName)
-                val resolvedApp = resolveWatchApp(storedComponent, packageActivities) ?: continue
-                val installedApp = resolvedApp.application
-                val activeComponent = if (resolvedApp.componentChanged) {
-                    // A package update may replace its launcher activity. Migrate only when the
-                    // replacement is unambiguous; multiple activities require the user's choice.
-                    val replacementApp = AppComponent(installedApp.packageName, installedApp.activityName)
-                    val baseline = buildBaseline(
-                        listOf(replacementApp), rule.rule.watchAllPacks, packPackages, installedPacks
-                    )
-                    val migrated = repo.migrateRuleApp(
-                        rule.rule.id,
-                        storedComponent,
-                        replacementApp,
-                        baseline
-                    )
-                    if (!migrated) continue
-                    replacementApp
-                } else storedComponent
-                val candidates = mutableListOf<CandidateInput>()
-
-                for (packPackage in packPackages) {
-                    val pack = installedPacks[packPackage] ?: continue
-                    val previous = repo.getState(
-                        rule.rule.id,
-                        activeComponent.packageName,
-                        activeComponent.activityName,
-                        packPackage
-                    )
-
-                    // No update since last look → nothing to do (keeps periodic runs cheap)
-                    if (previous != null && previous.lastPackVersionCode == pack.versionCode) continue
-
-                    // Do not record the pack version when reading failed. A transient package
-                    // update/provider failure must be retried on the next check.
-                    val (drawableName, hash) = resolveIcon(packPackage, installedApp) ?: continue
-
-                    // New for the user either way: a pack installed after the rule that already
-                    // carries an icon for the app (previous == null — packs present at rule
-                    // creation were baselined by saveRule), or a known pack whose icon
-                    // content changed with an update.
-                    val isNew = hash != null && (previous == null || hash != previous.lastIconHash)
-
-                    repo.upsertState(
-                        WatchState(
-                            ruleId = rule.rule.id,
-                            packageName = activeComponent.packageName,
-                            activityName = activeComponent.activityName,
-                            iconPackPackage = packPackage,
-                            lastPackVersionCode = pack.versionCode,
-                            lastIconName = drawableName,
-                            lastIconHash = hash,
-                            lastCheckedAt = System.currentTimeMillis()
-                        )
-                    )
-
-                    if (isNew && drawableName != null) {
-                        candidates.add(CandidateInput(packPackage, drawableName, hash))
+        for (check in checks) {
+            // Published only after the transaction returns: a rolled-back commit must not notify.
+            fired += repo.commitCheckedRule {
+                val committed = mutableListOf<FiredSuggestion>()
+                if (StorageOperationGate.epoch != epoch || !unchanged(check.snapshot)) return@commitCheckedRule committed
+                val rule = check.snapshot.details.rule
+                val states = check.apps.flatMap { it.states }
+                if (states.isNotEmpty()) repo.upsertStates(states)
+                for (app in check.apps) {
+                    if (app.previousComponent != null) {
+                        repo.migrateRuleApp(rule.id, app.previousComponent, app.component, app.baseline)
+                        continue
                     }
-                }
-
-                if (candidates.isNotEmpty()) {
-                    val suggestionId = repo.completeWithSuggestion(
-                        rule.rule.id,
-                        activeComponent,
-                        candidates
-                    )
-                    if (suggestionId > 0) {
-                        fired.add(
-                            FiredSuggestion(
-                                suggestionId,
-                                activeComponent.packageName,
-                                activeComponent.activityName,
-                                candidates.map { it.iconPackPackage },
-                                rule.rule.profileId
-                            )
+                    if (app.candidates.isNotEmpty()) {
+                        val id = repo.completeWithSuggestion(rule.id, app.component, app.candidates)
+                        if (id > 0) committed += FiredSuggestion(
+                            suggestionId = id,
+                            packageName = app.component.packageName,
+                            activityName = app.component.activityName,
+                            packPackages = app.candidates.map { it.iconPackPackage },
+                            profileId = rule.profileId
                         )
                     }
                 }
+                for (completed in check.completed) {
+                    val suggestion = check.snapshot.details.suggestions.first { it.id == completed.suggestionId }
+                    if (repo.replaceCandidates(suggestion.id, completed.candidates)) {
+                        committed += FiredSuggestion(
+                            suggestionId = suggestion.id,
+                            packageName = suggestion.packageName,
+                            activityName = suggestion.activityName,
+                            packPackages = completed.candidates.map { it.iconPackPackage },
+                            profileId = rule.profileId
+                        )
+                    }
+                }
+                committed
             }
         }
-
-        return fired
+        CheckResult(fired, epoch)
     }
 
-    private suspend fun refreshCompletedSuggestions(
+    private fun planActive(
+        before: RuleSnapshot,
         installedPacks: Map<String, IconPack>,
-        installedAppsByPackage: Map<String, List<InstalledApplication>>
-    ): List<FiredSuggestion> {
-        val refreshed = mutableListOf<FiredSuggestion>()
-        for (rule in repo.getCompletedRules()) {
-            for (suggestion in rule.suggestions) {
-                val installedApp = installedAppsByPackage[suggestion.packageName]
-                    .orEmpty()
-                    .firstOrNull { it.activityName == suggestion.activityName }
-                    ?: continue
-                val storedCandidates = repo.getCandidates(suggestion.id)
-                val currentCandidates = storedCandidates.map { stored ->
-                    if (installedPacks[stored.iconPackPackage] == null) {
-                        return@map CandidateInput(
-                            stored.iconPackPackage,
-                            stored.drawableName,
-                            stored.iconHash
-                        )
-                    }
-                    val resolved = resolveIcon(stored.iconPackPackage, installedApp)
-                    val drawableName = resolved?.first
-                    val hash = resolved?.second
-                    if (drawableName != null && hash != null) {
-                        CandidateInput(stored.iconPackPackage, drawableName, hash)
-                    } else {
-                        CandidateInput(stored.iconPackPackage, stored.drawableName, stored.iconHash)
-                    }
-                }
-                val changed = currentCandidates.zip(storedCandidates).any { (current, stored) ->
-                    current.iconPackPackage != stored.iconPackPackage ||
-                        current.drawableName != stored.drawableName ||
-                        current.iconHash != stored.iconHash
-                }
-                if (!changed || !repo.replaceCandidates(suggestion.id, currentCandidates)) continue
-                refreshed += FiredSuggestion(
-                    suggestionId = suggestion.id,
-                    packageName = suggestion.packageName,
-                    activityName = suggestion.activityName,
-                    packPackages = currentCandidates.map { it.iconPackPackage },
-                    profileId = rule.rule.profileId
-                )
-            }
+        installedApps: Map<String, List<InstalledApplication>>,
+        packIcons: WatchPackIcons
+    ): RuleCheck {
+        val rule = before.details
+        val packs = if (rule.rule.watchAllPacks) installedPacks.keys.toList() else rule.packs.map { it.iconPackPackage }
+        val statesByComponentPack = before.states.associateBy {
+            Triple(it.packageName, it.activityName, it.iconPackPackage)
         }
-        return refreshed
+        val apps = rule.apps.mapNotNull { ruleApp ->
+            val component = AppComponent(ruleApp.packageName, ruleApp.activityName)
+            val resolved = resolveWatchApp(component, installedApps[ruleApp.packageName].orEmpty()) ?: return@mapNotNull null
+            val installedApp = resolved.application
+            if (resolved.componentChanged) {
+                val replacement = AppComponent(installedApp.packageName, installedApp.activityName)
+                return@mapNotNull AppCheck(replacement, component,
+                    buildBaseline(listOf(replacement), rule.rule.watchAllPacks, packs, installedPacks))
+            }
+            val states = mutableListOf<WatchState>()
+            val candidates = mutableListOf<CandidateInput>()
+            for (packPackage in packs) {
+                val pack = installedPacks[packPackage] ?: continue
+                val previous = statesByComponentPack[Triple(component.packageName, component.activityName, packPackage)]
+                if (previous?.lastPackVersionCode == pack.versionCode) continue
+                val (drawableName, hash) = packIcons.resolveIcon(packPackage, installedApp) ?: continue
+                states += WatchState(
+                    ruleId = rule.rule.id,
+                    packageName = component.packageName,
+                    activityName = component.activityName,
+                    iconPackPackage = packPackage,
+                    lastPackVersionCode = pack.versionCode,
+                    lastIconName = drawableName,
+                    lastIconHash = hash,
+                    lastCheckedAt = System.currentTimeMillis()
+                )
+                if (hash != null && drawableName != null && (previous == null || hash != previous.lastIconHash)) {
+                    candidates += CandidateInput(packPackage, drawableName, hash)
+                }
+            }
+            AppCheck(component, states = states, candidates = candidates)
+        }
+        return RuleCheck(before, apps = apps)
     }
 
-    /**
-     * Resolves a rule's current icons and commits the rule plus its baseline atomically. The same
-     * mutex guards checks, so no worker can see the rule before its baseline exists.
-     */
+    private fun planCompleted(
+        before: RuleSnapshot,
+        installedPacks: Map<String, IconPack>,
+        installedApps: Map<String, List<InstalledApplication>>,
+        packIcons: WatchPackIcons
+    ): RuleCheck {
+        val completed = before.details.suggestions.mapNotNull { suggestion ->
+            val app = installedApps[suggestion.packageName].orEmpty().firstOrNull { it.activityName == suggestion.activityName }
+                ?: return@mapNotNull null
+            val stored = before.candidates[suggestion.id].orEmpty()
+            val candidates = stored.map { candidate ->
+                val resolved = if (candidate.iconPackPackage in installedPacks) packIcons.resolveIcon(candidate.iconPackPackage, app) else null
+                val name = resolved?.first
+                val hash = resolved?.second
+                if (name != null && hash != null) CandidateInput(candidate.iconPackPackage, name, hash)
+                else CandidateInput(candidate.iconPackPackage, candidate.drawableName, candidate.iconHash)
+            }
+            val old = stored.map { CandidateInput(it.iconPackPackage, it.drawableName, it.iconHash) }.toSet()
+            if (candidates.toSet() == old) null else CompletedCheck(suggestion.id, candidates)
+        }
+        return RuleCheck(before, completed = completed)
+    }
+
     suspend fun saveRule(
         existingRuleId: Long?,
         apps: List<AppComponent>,
         watchAllPacks: Boolean,
         packPackages: List<String>,
-        profileId: Long
+        profileId: Long,
+        commit: suspend (suspend () -> Long) -> Long = ::commitRuleDirectly
     ): Long = withContext(Dispatchers.Default) {
-        checkMutex.withLock {
-            val baseline = buildBaseline(apps, watchAllPacks, packPackages)
-            repo.saveRule(existingRuleId, apps, watchAllPacks, packPackages, profileId, baseline)
+        val (epoch, previous) = StorageOperationGate.run {
+            StorageOperationGate.epoch to existingRuleId?.let { repo.getRule(it)?.let { rule -> snapshot(rule) } }
+        }
+        if (existingRuleId != null && previous == null) return@withContext 0L
+        val baseline = buildBaseline(apps, watchAllPacks, packPackages)
+        StorageOperationGate.run {
+            if (epoch != StorageOperationGate.epoch || (previous != null && !unchanged(previous))) return@run 0L
+            commit { repo.saveRule(existingRuleId, apps, watchAllPacks, packPackages, profileId, baseline) }
         }
     }
 
-    suspend fun initializeMissingBaselines() = withContext(Dispatchers.Default) {
-        checkMutex.withLock {
-            val installedPacks = watchablePacks()
-            for (rule in repo.getActiveRules()) {
-                val existing = repo.getStatesForRule(rule.rule.id)
-                    .mapTo(mutableSetOf()) {
-                        Triple(it.packageName, it.activityName, it.iconPackPackage)
-                    }
-                val baseline = buildBaseline(
-                    apps = rule.apps.map { AppComponent(it.packageName, it.activityName) },
-                    watchAllPacks = rule.rule.watchAllPacks,
-                    selectedPacks = rule.packs.map { it.iconPackPackage },
-                    installedPacks = installedPacks
-                ).filterNot {
-                    Triple(it.packageName, it.activityName, it.iconPackPackage) in existing
-                }
-                repo.upsertStates(rule.rule.id, baseline)
+    // Used only inside an import commit, where all live stores must remain frozen.
+    suspend fun initializeMissingBaselines() = withStorageAccess {
+        val installedPacks = watchablePacks()
+        for (rule in repo.getActiveRules()) {
+            val existing = repo.getStatesForRule(rule.rule.id).mapTo(mutableSetOf()) {
+                Triple(it.packageName, it.activityName, it.iconPackPackage)
             }
+            val baseline = buildBaseline(
+                apps = rule.apps.map { AppComponent(it.packageName, it.activityName) },
+                watchAllPacks = rule.rule.watchAllPacks,
+                selectedPacks = rule.packs.map { it.iconPackPackage },
+                installedPacks = installedPacks
+            ).filterNot { Triple(it.packageName, it.activityName, it.iconPackPackage) in existing }
+            repo.upsertStates(rule.rule.id, baseline)
         }
     }
 
@@ -307,10 +319,7 @@ class WatchChecker(
                 )
             } ?: continue
             val (elements, resources) = parsed
-            val drawableNames = mutableMapOf<String, String>()
-            elements.filterIsInstance<RawItem>().forEach { item ->
-                drawableNames.putIfAbsent(item.component, item.drawableLink)
-            }
+            val drawableNames = appFilterDrawableNames(elements)
 
             for (installedApp in installedApps) {
                 val drawableName = drawableNames[installedApp.toComponentInfo()]
@@ -341,32 +350,36 @@ class WatchChecker(
         .filter { !IconPackBuilder.isOwnPack(it.packageName) }
         .associateBy { it.packageName }
 
+    // Every installed activity of a watched package, so a migrated launcher activity is covered too.
+    private fun packIconsFor(
+        rules: List<RuleSnapshot>,
+        installedApps: Map<String, List<InstalledApplication>>
+    ): WatchPackIcons {
+        val watchedPackages = rules.flatMapTo(HashSet()) { snapshot ->
+            snapshot.details.apps.map { it.packageName } + snapshot.details.suggestions.map { it.packageName }
+        }
+        return WatchPackIcons(
+            watchedApps = watchedPackages.flatMap { installedApps[it].orEmpty() },
+            parse = appMan::getAppFilterRawElements,
+            resolve = ::resolveIcon
+        )
+    }
+
     /**
-     * Resolves the (drawable name, content hash) a pack currently provides for an app.
-     * A pair of nulls means the pack was read successfully but has no icon; null means reading
-     * failed and the caller must leave the previous check state untouched for a later retry.
+     * The (drawable name, content hash) a pack's parsed appfilter gives one app. The hash must stay
+     * byte-identical to the stored baselines, or every pair would fire a false suggestion.
      */
     private fun resolveIcon(
         packPackage: String,
-        installedApp: InstalledApplication
-    ): Pair<String?, String?>? {
-        // Same isolation as the baseline pass: an unreadable pack is skipped, never thrown.
-        return readWatchPackOrNull(packPackage) {
-            val elements = appMan.getAppFilterRawElements(packPackage, listOf(installedApp))
-            val component = installedApp.toComponentInfo()
-            val drawableName = elements.filterIsInstance<RawItem>()
-                .firstOrNull { it.component == component }?.drawableLink
-            val resource = appMan.getDrawableFromAppFilterElements(
-                packPackage, listOf(installedApp), elements
-            )[installedApp]
-            val hash = resource?.drawable?.toSafeBitmapOrNull()?.contentHash()
-            drawableName to hash
-        }
+        installedApp: InstalledApplication,
+        elements: List<RawElement>
+    ): Pair<String?, String?> {
+        val drawableName = appFilterDrawableName(elements, installedApp.toComponentInfo())
+        val hash = appMan.getDrawableFromAppFilterElements(packPackage, installedApp, elements)
+            ?.drawable?.toSafeBitmapOrNull()?.contentHash()
+        return drawableName to hash
     }
 
-    companion object {
-        // Every entry point (periodic worker, one-shot worker, manual refresh and rule save)
-        // lives in this process, so one shared lock prevents duplicate completion transactions.
-        private val checkMutex = Mutex()
-    }
 }
+
+private suspend fun commitRuleDirectly(operation: suspend () -> Long): Long = operation()

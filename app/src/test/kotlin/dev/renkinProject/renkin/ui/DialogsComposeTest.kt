@@ -16,6 +16,9 @@ import dev.renkinProject.renkin.apk.IconLockManager.MissingPack
 import dev.renkinProject.renkin.data.ColorPreset
 import dev.renkinProject.renkin.data.VERDICT_PAID
 import dev.renkinProject.renkin.data.VERDICT_UNKNOWN
+import dev.renkinProject.renkin.feature.presets.ColorPresetDialog
+import dev.renkinProject.renkin.feature.presets.ColorPresetStore
+import dev.renkinProject.renkin.feature.presets.LocalColorPresets
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import org.junit.Assert.assertEquals

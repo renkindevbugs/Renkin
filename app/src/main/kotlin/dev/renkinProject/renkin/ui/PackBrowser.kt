@@ -24,7 +24,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -65,6 +64,7 @@ import dev.renkinProject.renkin.extension.calendarPrefixOrNull
 import dev.renkinProject.renkin.extension.prettyDrawableName
 import dev.renkinProject.renkin.extension.isCalendarDayName
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.icon.creator.PackIconPreview
@@ -129,7 +129,7 @@ fun PackIconsRow(
     onLoadingChange: (Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var moreCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
@@ -137,7 +137,9 @@ fun PackIconsRow(
     // The picked pack (primaryIconPack) doesn't change how a pack's preview icons render — the
     // generator colourises by explicit pack name — so exclude it from the key. Otherwise picking
     // an icon (which sets primaryIconPack) re-keys every visible row and flashes the loader.
-    val previewOptions = remember(options) { options.copy(primaryIconPack = "") }
+    val previewOptions = remember(options) {
+        options.withSource { copy(primaryIconPack = "") }
+    }
 
     LaunchedEffect(
         iconPack,
@@ -247,7 +249,7 @@ fun PackDetailGrid(
     onLoadingChange: (Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
@@ -355,7 +357,7 @@ private fun String.inCalendarGroup(prefix: String?): Boolean =
  */
 @Composable
 private fun rememberCalendarPrefixes(iconPack: IconPack, iconPairs: List<PackIconPreview>): Set<String> {
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     var prefixes by remember(iconPack.packageName) { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(iconPack.packageName, iconPairs) {
         val candidates = iconPairs.mapNotNull { it.drawableName.calendarPrefixOrNull() }.distinct()
@@ -370,7 +372,7 @@ private fun rememberCalendarPrefixes(iconPack: IconPack, iconPairs: List<PackIco
  */
 @Composable
 private fun rememberDynamicClockDrawables(iconPack: IconPack): Set<String> {
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     var drawables by remember(iconPack.packageName) { mutableStateOf(emptySet<String>()) }
     LaunchedEffect(iconPack.packageName) {
         drawables = viewModel.dynamicClockDrawables(iconPack.packageName)
@@ -404,10 +406,11 @@ private fun PackIconItem(
     ) {
         val badged = isCalendarGroup || isDynamicClock
         // Long-pressing the icon shows the icon's name the way the pack's own app displays it.
-        RenkinTooltipBox(item.drawableName.prettyDrawableName()) {
+        val iconName = item.drawableName.prettyDrawableName()
+        RenkinTooltipBox(iconName) {
         Image(
             bitmap = item.preview,
-            contentDescription = null,
+            contentDescription = iconName,
             modifier = Modifier
                 .fillMaxSize()
                 // Full-bleed previews (adaptive backgrounds) must not poke out of the

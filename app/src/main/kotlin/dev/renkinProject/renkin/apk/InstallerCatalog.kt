@@ -44,13 +44,16 @@ class InstallerCatalog(context: Context) {
 
     fun entries(): List<InstallerOption> {
         val systemComponent = resolveSystemInstaller()
+        val systemAvailable = hasSystemInstallActivity(packageManager, dummyUri)
         val fixed = buildList {
             add(
                 InstallerOption(
                     selection = InstallerSelection(InstallMethod.SYSTEM),
                     label = appContext.getString(R.string.installerSystem),
-                    description = appContext.getString(R.string.installerSystemDescription),
-                    icon = systemComponent?.packageName?.let(::loadApplicationIcon)
+                    description = appContext.getString(if (systemAvailable) R.string.installerSystemDescription
+                        else R.string.installerSystemUnavailable),
+                    icon = systemComponent?.packageName?.let(::loadApplicationIcon),
+                    available = systemAvailable
                 )
             )
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {

@@ -33,6 +33,15 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.window.Dialog
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -85,10 +94,12 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.MainActivity
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 
 /**
  * The hosting [MainActivity], provided at the root by MainActivity itself.
@@ -157,10 +168,20 @@ fun Modifier.tappableIcon(onClick: () -> Unit): Modifier {
     )
     return this
         .graphicsLayer { scaleX = scale; scaleY = scale }
-        .clickable(interactionSource = interactionSource, indication = null) {
+        .clickable(interactionSource = interactionSource, indication = null, role = Role.Button) {
             view.performTapHaptic()
             onClick()
         }
+}
+
+/** Keeps the display on while composed, so the screen timeout cannot lock the phone mid build or install. */
+@Composable
+fun KeepScreenOn() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
 }
 
 /**
@@ -197,6 +218,7 @@ fun SearchField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String? = null,
+    enabled: Boolean = true,
     // Extra control(s) rendered inside the field after the clear button — e.g. the home
     // list's sort/filter menu, so it belongs to the field instead of floating beside it.
     extraTrailing: (@Composable () -> Unit)? = null
@@ -205,6 +227,7 @@ fun SearchField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
+        enabled = enabled,
         shape = CircleShape,
         singleLine = true,
         // Enter / the IME search key just dismisses the keyboard and the cursor — the list already
@@ -265,6 +288,49 @@ fun RenkinAlertDialog(
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         titleContentColor = MaterialTheme.colorScheme.onSurface
     )
+}
+
+/**
+ * The chrome every fullscreen screen shares (Settings, Crash logs, …): an edge-to-edge dialog with
+ * the back-arrow app bar and a primary title. [content] receives the scaffold padding and owns its
+ * own layout, e.g. [CenteredFullscreenContent].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun FullscreenDialogScaffold(
+    title: String,
+    onDismiss: () -> Unit,
+    actions: @Composable RowScope.() -> Unit = {},
+    bottomBar: @Composable () -> Unit = {},
+    content: @Composable (PaddingValues) -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
+                topBar = {
+                    TopAppBar(
+                        title = { Text(title) },
+                        navigationIcon = {
+                            IconButton(onClick = onDismiss) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.close))
+                            }
+                        },
+                        actions = actions,
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background,
+                            titleContentColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                },
+                bottomBar = bottomBar,
+                content = content
+            )
+        }
+    }
 }
 
 /**
@@ -463,6 +529,19 @@ fun ToastHost(toaster: Toaster) {
         }
     }
     DisposableEffect(Unit) { onDispose { shown?.cancel() } }
+}
+
+/**
+ * Forwards ViewModel toast channels to [toaster] for as long as this host is composed: string
+ * resource ids in [sources], already formatted messages in [texts]. Use once per host.
+ */
+@Composable
+fun CollectToasts(toaster: Toaster, vararg sources: Flow<Int>, texts: List<Flow<String>> = emptyList()) {
+    val context = LocalContext.current
+    LaunchedEffect(toaster, *sources, *texts.toTypedArray()) {
+        sources.forEach { source -> launch { source.collect { toaster.show(context.getString(it)) } } }
+        texts.forEach { source -> launch { source.collect { toaster.show(it) } } }
+    }
 }
 /**
  * Position provider for tooltips that CLAMPS the popup into the window horizontally — the

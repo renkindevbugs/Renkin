@@ -2,12 +2,16 @@
 
 package dev.renkinProject.renkin.ui
 
+import android.view.WindowManager
+import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import dev.renkinProject.renkin.data.UploadedImageLibrary
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Create
@@ -20,16 +24,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,12 +45,12 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import dev.renkinProject.renkin.IconPreviewBuilder
-import dev.renkinProject.renkin.OnlineImageImport
+import dev.renkinProject.renkin.feature.online.OnlineImageImport
 import android.graphics.Bitmap
+import dev.renkinProject.renkin.icon.creator.materialYouSchemes
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
-import dev.renkinProject.renkin.icon.creator.SegmentLayer
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.apk.GeneratedPackIdentity
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.calendarPrefixOrNull
 import dev.renkinProject.renkin.extension.prettyDrawableName
@@ -52,25 +58,28 @@ import dev.renkinProject.renkin.extension.toInt
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
+import dev.renkinProject.renkin.data.AppTargetState
 import dev.renkinProject.renkin.data.Source
-import dev.renkinProject.renkin.data.TextFontKey
-import dev.renkinProject.renkin.data.TextType
-import dev.renkinProject.renkin.data.getStringValue
-import dev.renkinProject.renkin.icon.creator.TextCase
-import android.graphics.drawable.AdaptiveIconDrawable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
-import dev.renkinProject.renkin.drawable.haveMonochrome
+import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.isAdaptiveIconDrawable
 import dev.renkinProject.renkin.packages.supportDynamicColors
-import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
-import dev.renkinProject.renkin.icon.creator.hasIconAdjustments
+import dev.renkinProject.renkin.icon.creator.IconGenerationResult
+import dev.renkinProject.renkin.icon.creator.withModifiers
+import dev.renkinProject.renkin.icon.creator.withExport
+import dev.renkinProject.renkin.icon.creator.withSource
+import dev.renkinProject.renkin.icon.creator.withEffect
+import dev.renkinProject.renkin.icon.creator.ColorFill
+import dev.renkinProject.renkin.icon.creator.IconSourceOptions
+import dev.renkinProject.renkin.icon.creator.IconExportOptions
+import dev.renkinProject.renkin.icon.creator.MaterialYouPackModifier
 import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
-import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
+import dev.renkinProject.renkin.icon.creator.AppBackgroundColor
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import androidx.compose.foundation.background
@@ -83,7 +92,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogProperties
+import dev.renkinProject.renkin.vector.SvgVectorImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -106,6 +118,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.LayersClear
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.produceState
+import dev.renkinProject.renkin.apk.EditorGlobalLayer
+import dev.renkinProject.renkin.util.Log
+import dev.renkinProject.renkin.util.runCatchingCancellable
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -121,6 +141,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
+import dev.renkinProject.renkin.icon.creator.EffectModifier
+import dev.renkinProject.renkin.icon.creator.IconModifierInput
+import dev.renkinProject.renkin.icon.creator.ModifierStack
 
 internal enum class IconOrigin { CREATE, UPLOAD, VECTOR }
 
@@ -144,224 +167,70 @@ private fun topFraction(firstVisibleItemIndex: Int, firstVisibleItemScrollOffset
     if (firstVisibleItemIndex > 0) 0f
     else (1f - firstVisibleItemScrollOffset / 120f).coerceIn(0f, 1f)
 
-/**
- * Holds the draft icon being built in the options dialog and the logic that (re)generates
- * its preview from the chosen options. Every field is plain Compose state — the drafts hold
- * live, non-Parcelable [IconPackDrawable]s, so they can't be saveable anyway. The dialog
- * feeds user input in through the `regenerate*` calls and reads [iconToConfirm] / [hasIcon]
- * / [generating] back out, instead of carrying a dozen loose `remember`s plus the generation
- * effects inline.
- */
-internal class IconDraftState(initialIcon: IconPackDrawable?) {
-    // Icon from the Create tab (pack pick / text / app-icon source). Starts as the icon the
-    // app already has so it stays visible (e.g. when only the modifier is being changed).
-    var createIcon by mutableStateOf(initialIcon)
-        private set
+internal class KeptGlobalPreview(val draft: IconPackDrawable, val layer: EditorGlobalLayer, val icon: IconPackDrawable)
 
-    // Raw uploaded icon (zoom/adaptive applied) before the shared modifier; the modifier is
-    // applied here so it previews live even from the Modifier tab.
-    var uploadBase by mutableStateOf<IconPackDrawable?>(null)
-        private set
-    private var uploadIcon by mutableStateOf<IconPackDrawable?>(null)
-
-    // Hand-edited vector and the same vector with the shared modifier applied.
-    var vectorIcon by mutableStateOf<IconPackDrawable?>(null)
-        private set
-    private var modifiedVector by mutableStateOf<IconPackDrawable?>(null)
-
-    var origin by mutableStateOf(IconOrigin.CREATE)
-
-    var generating by mutableStateOf(false)
-        private set
-    private var activeGenerations = 0
-    private var createGeneration = 0
-    private var uploadGeneration = 0
-    private var vectorGeneration = 0
-
-    // Keep the existing icon on the first pass — only regenerate once the user actually
-    // changes a source, modifier or selects an icon.
-    private var initialized = false
-
-    val hasIcon: Boolean get() = createIcon != null || uploadBase != null || vectorIcon != null
-
-    /**
-     * The icon Confirm would store. It follows whichever source produced it, not the open
-     * tab, so visiting the Modifier tab never silently drops an upload/vector.
-     */
-    val iconToConfirm: IconPackDrawable? get() = when (origin) {
-        IconOrigin.UPLOAD -> uploadIcon
-        IconOrigin.VECTOR -> modifiedVector
-        IconOrigin.CREATE -> createIcon
-    }
-
-    /**
-     * Activates the Create pipeline and drops drafts owned by the other source tabs.
-     * The caller is responsible for clearing their UI-only selection state.
-     */
-    fun selectCreate() {
-        invalidateGenerations()
-        uploadBase = null
-        uploadIcon = null
-        vectorIcon = null
-        modifiedVector = null
-        origin = IconOrigin.CREATE
-    }
-
-    fun selectUpload(icon: IconPackDrawable) {
-        invalidateGenerations()
-        createIcon = null
-        vectorIcon = null
-        modifiedVector = null
-        uploadBase = icon
-        uploadIcon = null
-        origin = IconOrigin.UPLOAD
-    }
-
-    fun clearUpload() {
-        uploadGeneration++
-        uploadBase = null
-        uploadIcon = null
-    }
-
-    fun selectVector(icon: IconPackDrawable) {
-        invalidateGenerations()
-        createIcon = null
-        uploadBase = null
-        uploadIcon = null
-        vectorIcon = icon
-        modifiedVector = null
-        origin = IconOrigin.VECTOR
-    }
-
-    fun clearVector() {
-        vectorGeneration++
-        vectorIcon = null
-        modifiedVector = null
-    }
-
-    /** Keeps the shared loading state correct across overlapping and cancelled effects. */
-    private suspend fun <T> trackGeneration(block: suspend () -> T): T {
-        activeGenerations++
-        generating = true
-        return try {
-            block()
-        } finally {
-            activeGenerations--
-            generating = activeGenerations > 0
-        }
-    }
-
-    private fun invalidateGenerations() {
-        createGeneration++
-        uploadGeneration++
-        vectorGeneration++
-    }
-
-    suspend fun regenerateCreate(
-        builder: IconPreviewBuilder,
-        app: PackageInfoStruct,
-        options: GenerationOptions,
-        customIconList: List<ResourceDrawable>
-    ) {
-        if (!initialized) {
-            initialized = true
-            return
-        }
-        val custom = customIconList.firstOrNull()
-        // previewIcon / applyModifier hop to Dispatchers.Default internally, so this no
-        // longer blocks the main thread; show the spinner for the duration.
-        val generation = ++createGeneration
-        val generated = trackGeneration {
-            when {
-                custom != null -> builder.previewIcon(app, options, custom)
-                // Icon-pack source with no new pick: apply the modifier to the already saved icon
-                // rather than pulling a fresh one from the first pack (which would swap the icon
-                // out from under the user). Null until a tap if none.
-                options.primarySource == Source.ICON_PACK ->
-                    (app.baseIcon ?: app.createdIcon)?.let { builder.applyModifier(it, options) }
-                else -> builder.previewIcon(app, options, null)
-            }
-        }
-        if (generation == createGeneration) createIcon = generated
-    }
-
-    suspend fun regenerateVector(builder: IconPreviewBuilder, options: GenerationOptions) {
-        val base = vectorIcon
-        val generation = ++vectorGeneration
-        val generated = when {
-            base == null -> null
-            // Adjustments without an image edit still go through applyModifier.
-            options.primaryImageEdit == ImageEdit.NONE && !options.hasIconAdjustments() -> base
-            else -> trackGeneration { builder.applyModifier(base, options) }
-        }
-        if (generation == vectorGeneration) modifiedVector = generated
-    }
-
-    suspend fun regenerateUpload(builder: IconPreviewBuilder, options: GenerationOptions) {
-        val base = uploadBase
-        val generation = ++uploadGeneration
-        val generated = if (base == null) null else trackGeneration {
-            builder.applyModifier(base, options)
-        }
-        if (generation == uploadGeneration) uploadIcon = generated
-    }
-}
+// The layer is compared by value: the editor builds a fresh EditorGlobalLayer per read.
+internal fun KeptGlobalPreview?.isPendingFor(draft: IconPackDrawable?, layer: EditorGlobalLayer?): Boolean =
+    draft != null && layer != null && (this == null || this.draft !== draft || this.layer != layer)
 
 @Composable
-fun OptionsDialog(
+internal fun OptionsDialog(
     iconPacks: List<IconPack>,
-    app: PackageInfoStruct,
+    session: EditorSession,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?, sourceUrl: String?) -> Unit,
+    onConfirm: (
+        icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?,
+        calendarPackName: String?, sourcePackName: String?, sourceUrl: String?,
+        modifierRecipe: String?, modifierInput: IconModifierInput?
+    ) -> Unit,
     onDismiss: () -> Unit,
-    onIconClear: () -> Unit
+    onIconClear: () -> Unit,
+    onRestoreModifiers: () -> Unit,
+    onCancelModifierRestore: () -> Unit,
+    autosaveNotice: @Composable () -> Unit = {},
+    flight: IconFlightState? = null,
+    dismissOnConfirm: Boolean = true,
+    canInteract: () -> Boolean = { true },
+    globalLayer: EditorGlobalLayer? = null
 ) {
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
+    val app = session.application
+    val interactionAllowed = canInteract()
 
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-    var source by rememberSaveable { mutableStateOf(Source.ICON_PACK) }
-    var imageEdit by rememberSaveable { mutableStateOf(ImageEdit.NONE) }
-    var textType by rememberSaveable { mutableStateOf(TextType.FULL_NAME) }
-    var customText by rememberSaveable { mutableStateOf(app.appName) }
-    var textCase by rememberSaveable { mutableStateOf(TextCase.AS_IS) }
-    val globalFontPath = getPreferences().getStringValue(TextFontKey)
-    var textFontPath by rememberSaveable(globalFontPath) { mutableStateOf(globalFontPath) }
-    var useVector by rememberSaveable { mutableStateOf(false) }
-    var applicationIconVariant by rememberSaveable { mutableStateOf(ApplicationIconVariant.DEFAULT) }
-    var useFullApplicationIcon by rememberSaveable { mutableStateOf(false) }
-    var invertMonochrome by rememberSaveable { mutableStateOf(false) }
-    var materialYouScheme by rememberSaveable { mutableIntStateOf(0) }
-    var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
-    var customBgColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.Black) }
-    // The Custom scheme's full styles. The flat colours above stay their first stop, because the
-    // pack's own Material You layers and the vector export can only take one colour.
-    var materialYouForegroundStyle by rememberSaveable(stateSaver = colorizerStyleSaver()) {
-        mutableStateOf(ColorizerStyle(firstColor = iconColor.toArgb()))
-    }
-    var materialYouBackgroundStyle by rememberSaveable(stateSaver = colorizerStyleSaver()) {
-        mutableStateOf(ColorizerStyle(firstColor = customBgColor.toArgb()))
-    }
-    var iconPack by rememberSaveable { mutableStateOf(iconPacks.firstOrNull()?.packageName ?: "") }
-    // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
-    // Parcelable, so saving the list on stop crashes.
-    var customIconList by remember { mutableStateOf<List<ResourceDrawable>>(listOf()) }
+    var selectedTab by session::selectedTab
+    var source by session::source
+    val browserSource = session.createSourceToDisplay
+    var imageEdit by session::imageEdit
+    var textType by session::textType
+    var customText by session::customText
+    var textCase by session::textCase
+    var textFontPath by session::textFontPath
+    var useVector by session::useVector
+    var applicationIconVariant by session::applicationIconVariant
+    var useFullApplicationIcon by session::useFullApplicationIcon
+    var invertMonochrome by session::invertMonochrome
+    var materialYouScheme by session::materialYouScheme
+    var iconColor by session::iconColor
+    var customBgColor by session::customBgColor
+    var materialYouForegroundStyle by session::materialYouForegroundStyle
+    var materialYouBackgroundStyle by session::materialYouBackgroundStyle
+    var iconPack by session::iconPack
+    var customIconList by session::customIconList
     // The Create tab's icon search. Hoisted here (not inside CreateTab) so it survives leaving
     // and returning to the tab; it starts at the app's non-localized name and resets per dialog
     // (i.e. per edit) — icon packs name drawables in English, so the localized label rarely matches.
-    var createSearchQuery by rememberSaveable { mutableStateOf(app.originalName) }
+    var createSearchQuery by rememberSaveable {
+        mutableStateOf(if (session.purpose == EditorPurpose.APPLICATION) app.originalName else "")
+    }
     var iconSortOrder by rememberSaveable { mutableStateOf(IconSortOrder.NAME_ASC) }
     var packSortOrder by rememberSaveable { mutableStateOf(PackSortOrder.USAGE) }
     var createBusy by remember { mutableStateOf(false) }
     var packUsage by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     LaunchedEffect(Unit) { packUsage = viewModel.packUsageCounts() }
-    val draft = remember { IconDraftState(app.baseIcon ?: app.createdIcon) }
-    val vectorEditState = remember { VectorEditState() }
-    // Attribution URL for an online icon imported "as image" (it lands in the upload draft,
-    // not the vector editor) and the gallery file it was saved as. The attribution is
-    // dropped as soon as the gallery selects any other picture.
-    var onlineImageUrl by remember { mutableStateOf<String?>(null) }
-    var onlineImagePath by remember { mutableStateOf<String?>(null) }
-    var uploadSelectionVersion by rememberSaveable { mutableIntStateOf(0) }
+    val draft = session.draft
+    val vectorEditState = session.vectorEditState
+    var onlineImageUrl by session::onlineImageUrl
+    var onlineImagePath by session::onlineImagePath
     var showConfirmClear by remember { mutableStateOf(false) }
     val headerScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     // The pack list and the single-pack grid states + which pack is expanded, hoisted so the header
@@ -374,7 +243,7 @@ fun OptionsDialog(
     val labelExpand by remember {
         derivedStateOf {
             when {
-                selectedTab != 0 || source != Source.ICON_PACK -> 1f
+                selectedTab != 0 || session.createSourceToDisplay != Source.ICON_PACK -> 1f
                 expandedPack != null -> topFraction(iconGridState.firstVisibleItemIndex, iconGridState.firstVisibleItemScrollOffset)
                 else -> topFraction(iconListState.firstVisibleItemIndex, iconListState.firstVisibleItemScrollOffset)
             }
@@ -383,64 +252,30 @@ fun OptionsDialog(
     // The global "Add outline" preference is deliberately NOT seeded here: it applies to the
     // bulk refresh's own (hero-source) icons only, never to hand-picked ones. Per-app outline
     // stays an explicit choice in the Modifier tab.
-    val adjustments = rememberSaveable(saver = AdjustmentState.Saver) { AdjustmentState() }
-    val storedMaterialYouPackState = remember(app.baseIcon, app.createdIcon) {
-        ((app.baseIcon ?: app.createdIcon) as? AdaptiveIconPackDrawable)?.materialYouEditState
-    }
-    val materialYouPackAdjustments = rememberSaveable(
-        storedMaterialYouPackState,
-        saver = MaterialYouPackAdjustmentState.Saver
-    ) { MaterialYouPackAdjustmentState(storedMaterialYouPackState) }
-
-    // Browsing a calendar icon must not persist its rotation choice until Apply.
-    var calendarEnabled by rememberSaveable { mutableStateOf(app.calendarEnabled) }
-    var calendarPrefix by remember { mutableStateOf(app.calendarPrefix) }
-    var calendarPackName by remember { mutableStateOf(app.calendarPackName) }
+    val adjustments = session.adjustments
+    val storedMaterialYouPackState = session.storedMaterialYouPackState
+    val materialYouPackAdjustments = session.materialYouPackAdjustments
+    var calendarEnabled by session::calendarEnabled
+    var calendarPrefix by session::calendarPrefix
+    var calendarPackName by session::calendarPackName
     val calendarPackLabel = iconPacks.find { it.packageName == (calendarPackName ?: iconPack) }?.applicationName ?: ""
 
-    /** A real selection in another source invalidates all UI state owned by Create. */
-    val clearCreateSelection: () -> Unit = {
-        customIconList = emptyList()
-        materialYouPackAdjustments.reset()
-        calendarEnabled = false
-        calendarPrefix = null
-        calendarPackName = null
-    }
-
-    /** Switches to Create only after the user changes a Create option or picks a Create icon. */
-    val activateCreate: () -> Unit = {
-        if (draft.origin != IconOrigin.CREATE) {
-            draft.selectCreate()
-            vectorEditState.reset()
-            onlineImageUrl = null
-            onlineImagePath = null
-            uploadSelectionVersion++
-        }
-    }
-
-    val activateUpload: (IconPackDrawable) -> Unit = { icon ->
-        if (draft.origin != IconOrigin.UPLOAD) {
-            clearCreateSelection()
-            vectorEditState.reset()
-        }
-        draft.selectUpload(icon)
-    }
-
-    val activateVector: (IconPackDrawable) -> Unit = { icon ->
-        if (draft.origin != IconOrigin.VECTOR) {
-            clearCreateSelection()
-            onlineImageUrl = null
-            onlineImagePath = null
-            uploadSelectionVersion++
-        }
-        draft.selectVector(icon)
-    }
+    val activateCreate = session::activateCreate
+    val activateUpload = session::activateUpload
+    val activateVector = session::activateVector
 
     val dialogTransition = remember { MutableTransitionState(false).apply { targetState = true } }
-    LaunchedEffect(dialogTransition.targetState, dialogTransition.isIdle) {
-        if (!dialogTransition.targetState && dialogTransition.isIdle) onDismiss()
+    // A returning icon must land in its row before the window, and the overlay with it, goes.
+    val returning = flight?.phase == IconFlightPhase.RETURNING
+    LaunchedEffect(dialogTransition.targetState, dialogTransition.isIdle, returning, interactionAllowed) {
+        if (!dialogTransition.targetState && dialogTransition.isIdle && !returning && canInteract()) onDismiss()
     }
-    val startClose: () -> Unit = { dialogTransition.targetState = false }
+    val startClose: () -> Unit = {
+        if (canInteract()) {
+            flight?.beginReturn()
+            dialogTransition.targetState = false
+        }
+    }
 
     // The Create tab's icon-pack browser is heavy to mount, so defer it until the open
     // animation has settled — the dialog then appears instantly
@@ -448,21 +283,18 @@ fun OptionsDialog(
         derivedStateOf { dialogTransition.isIdle && dialogTransition.currentState }
     }
 
-    val heroBitmap = remember(app.icon) {
-        runCatching { app.icon.toSafeBitmapOrNull() }.getOrNull()
-    }
-
-    // Whether the app ships an official Material You <monochrome> layer. Apps without one use
-    // Renkin's labelled generated fallback instead.
-    val appHasAdaptiveIcon = remember(app.icon) { app.icon.isAdaptiveIconDrawable() }
-    val appHasMaterialYouIcon = remember(app.icon, appHasAdaptiveIcon) {
-        appHasAdaptiveIcon && (app.icon as AdaptiveIconDrawable).haveMonochrome()
-    }
+    val applicationIcon = session.applicationIcon
+    val heroBitmap = applicationIcon?.hero
+    val appBackground = applicationIcon?.background
+    val appHasAdaptiveIcon = applicationIcon?.adaptive == true
+    val appHasMaterialYouIcon = applicationIcon?.monochrome == true
+    val generationApplication = applicationIcon?.application ?: app
 
     val isMaterialYouVariant = source == Source.APPLICATION_ICON &&
         applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU
     val materialYouSchemes = rememberMaterialYouSchemes()
-    val selectedMaterialYouPackIcon = draft.origin == IconOrigin.CREATE &&
+    val selectedMaterialYouPackIcon = session.modifierReplay?.packEditState != null ||
+        session.modifierReplay == null && draft.origin == IconOrigin.CREATE &&
         source == Source.ICON_PACK &&
         (if (customIconList.isEmpty()) {
             storedMaterialYouPackState != null
@@ -471,40 +303,16 @@ fun OptionsDialog(
                 iconPacks.firstOrNull { it.packageName == iconPack }
                     ?.changesWithMaterialYouColors == true
         })
-    val isCustomScheme = materialYouScheme >= materialYouSchemes.size
-    val scheme = materialYouSchemes.getOrNull(materialYouScheme)
-    // The generated approximation maps the regular artwork's light/dark roles in reverse. Swap
-    // only its Custom inputs for now; official monochrome layers and wallpaper schemes stay put.
-    val swapGeneratedCustomColors = isMaterialYouVariant && !appHasMaterialYouIcon && isCustomScheme
-    val effectiveColor = when {
-        swapGeneratedCustomColors -> customBgColor
-        isMaterialYouVariant && !isCustomScheme -> scheme!!.first
-        else -> iconColor
-    }
-    // Background only applies to the Material You variant and the shape plate; other sources
-    // keep the transparent default.
-    val effectiveBgColor = when {
-        swapGeneratedCustomColors -> iconColor
-        isMaterialYouVariant && !isCustomScheme -> scheme!!.second
-        isMaterialYouVariant -> customBgColor
-        adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop -> adjustments.shapeColor
-        else -> Color.Transparent
-    }
-    // Styles only exist for the Custom scheme: a wallpaper scheme is two flat colours by
-    // definition, and the shape plate has its own style further down.
-    val effectiveForegroundStyle = when {
-        !isMaterialYouVariant || !isCustomScheme -> null
-        swapGeneratedCustomColors -> materialYouBackgroundStyle
-        else -> materialYouForegroundStyle
-    }
-    val effectiveBackgroundStyle = when {
-        isMaterialYouVariant && isCustomScheme && swapGeneratedCustomColors ->
-            materialYouForegroundStyle
-        isMaterialYouVariant && isCustomScheme -> materialYouBackgroundStyle
-        // The shape plate's own style is applied by withModifierAdjustments; adding it here too
-        // would just be a second place to keep in sync.
-        else -> null
-    }
+    val createColors = createSourceColors(
+        materialYouVariant = isMaterialYouVariant,
+        wallpaperScheme = materialYouSchemes.getOrNull(materialYouScheme),
+        iconColor = iconColor,
+        customBackground = customBgColor,
+        customForegroundStyle = materialYouForegroundStyle,
+        customBackgroundStyle = materialYouBackgroundStyle,
+        shapePlate = Color(adjustments.shapeStyle.firstColor)
+            .takeIf { adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop }
+    )
     val selectedPackScheme = materialYouSchemes.getOrNull(
         materialYouPackAdjustments.selectedScheme
     )
@@ -521,71 +329,103 @@ fun OptionsDialog(
         else -> selectedPackScheme!!.second.toInt()
     }
 
+    val renderWitness by remember(session) { derivedStateOf { session.renderWitnessOrNull() } }
+    val composedRenderWitness = renderWitness
+    val recoveredRendering = session.recoveredRendering
     // Memoised per stroke list: the options object must only change when the strokes do,
     // or every recomposition would look like a new mask and re-trigger generation.
-    val outlineEraseMask = remember(adjustments.eraseStrokes) {
-        if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
+    val outlineEraseMask = remember(adjustments.eraseStrokes, recoveredRendering,
+        adjustments.outlineMode.takeIf { recoveredRendering != null }) {
+        val build = { if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes) }
+        if (recoveredRendering == null) build()
+        else recoveredRendering.outlineMask(adjustments.eraseStrokes, adjustments.outlineMode, build)
     }
-    val backgroundBrushOperations = remember(adjustments.backgroundBrushStrokes) {
-        buildBackgroundBrushOperations(adjustments.backgroundBrushStrokes)
+    val backgroundBrushOperations = remember(adjustments.backgroundBrushStrokes, recoveredRendering,
+        imageEdit.takeIf { recoveredRendering != null }) {
+        val build = { buildBackgroundBrushOperations(adjustments.backgroundBrushStrokes) }
+        if (recoveredRendering == null) build()
+        else recoveredRendering.backgroundMasks(adjustments.backgroundBrushStrokes, imageEdit, build)
     }
-    val generatingOptions = GenerationOptions(
-        source, imageEdit, textType, iconPack,
-        effectiveColor.toInt(), effectiveBgColor.toInt(), useVector,
-        materialYou = applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
-        themed = themed,
-        override = true,
-        textCustom = customText,
-        textCase = textCase,
-        textFontPath = textFontPath,
-        applicationIconVariant = applicationIconVariant,
-        useFullApplicationIcon = useFullApplicationIcon,
-        invertMonochrome = invertMonochrome,
-        materialYouPackForeground = materialYouPackForeground,
-        materialYouPackBackground = materialYouPackBackground,
-        foregroundStyle = effectiveForegroundStyle,
-        backgroundStyle = effectiveBackgroundStyle,
-        materialYouPackStrokeScale = if (selectedMaterialYouPackIcon) {
-            materialYouPackAdjustments.strokeScale
-        } else 1f,
-        materialYouPackSelectedScheme = materialYouPackAdjustments.selectedScheme,
-        materialYouPackCustomForeground = materialYouPackAdjustments.customForeground,
-        materialYouPackCustomBackground = materialYouPackAdjustments.customBackground
+    val uiOptions = GenerationOptions(
+        source = IconSourceOptions(
+            primarySource = source,
+            primaryTextType = textType,
+            primaryIconPack = iconPack,
+            textCustom = customText,
+            textCase = textCase,
+            textFontPath = textFontPath,
+            applicationIconVariant = applicationIconVariant,
+            useFullApplicationIcon = useFullApplicationIcon,
+            invertMonochrome = invertMonochrome
+        ),
+        export = IconExportOptions(
+            vector = useVector,
+            materialYou = if (session.modifierReplay != null) session.replayMaterialYou
+                else applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
+            themed = themed,
+            foregroundStyle = createColors.foregroundStyle,
+            background = ColorFill(
+                color = createColors.background.toInt(),
+                style = createColors.backgroundStyle
+            )
+        ),
+        modifiers = ModifierStack(
+            effect = EffectModifier(imageEdit, ColorizerStyle(firstColor = createColors.foreground.toInt())),
+            materialYouPack = MaterialYouPackModifier(
+                foreground = materialYouPackForeground,
+                background = materialYouPackBackground,
+                strokeScale = if (selectedMaterialYouPackIcon) {
+                    materialYouPackAdjustments.strokeScale
+                } else 1f,
+                selectedScheme = materialYouPackAdjustments.selectedScheme,
+                customForeground = materialYouPackAdjustments.customForeground,
+                customBackground = materialYouPackAdjustments.customBackground
+            )
+        ),
+        override = true
     ).withModifierAdjustments(
         adjustments = adjustments,
         imageEdit = imageEdit,
         outlineEraseMask = outlineEraseMask,
         backgroundBrushOperations = backgroundBrushOperations
     )
+    val generatingOptions = remember(session, uiOptions, composedRenderWitness, recoveredRendering, session.modifierReplay) {
+        session.generationOptionsFor(uiOptions, composedRenderWitness)
+    }
     // Pack rows describe the source artwork, not its themed export. The launcher applies the
     // adaptive viewport to themed output; applying that inset directly to these flat browser
     // tiles made every candidate look half-sized until a modifier happened to flatten it.
-    val browserOptions = generatingOptions.copy(
-        themed = false,
-        materialYouPackForeground = null,
-        materialYouPackBackground = null,
-        materialYouPackStrokeScale = 1f,
-        materialYouPackSelectedScheme = -1,
-        materialYouPackCustomForeground = null,
-        materialYouPackCustomBackground = null
-    )
+    val browserOptions = uiOptions
+        .withSource { copy(primarySource = browserSource) }
+        .withExport { copy(themed = false) }
+        .withModifiers { copy(materialYouPack = MaterialYouPackModifier()) }
 
     // The Colorize sheet previews a draft style that is NOT applied yet, so it runs the real
     // generation pipeline with the draft substituted in — anything cheaper (colouring the app's
     // current icon) would show a different icon than the one Apply produces.
+    val renderCreateSource: suspend (GenerationOptions, ResourceDrawable?) -> IconGenerationResult = { settings, custom ->
+        val font = session.recoveryResources?.typeface(settings.source.textFontPath)
+        if (font != null) viewModel.previewIconWithOwnedFont(generationApplication, settings, custom, font)
+        else viewModel.previewIconWithInput(generationApplication, settings, custom)
+    }
     val renderPreviewWith: suspend (GenerationOptions) -> Bitmap? = { previewOptions ->
-        val rendered = when (draft.origin) {
+        val replay = draft.replay
+        val rendered = if (replay != null) viewModel.renderModifierReplay(replay, previewOptions).icon else when (draft.origin) {
             IconOrigin.UPLOAD -> draft.uploadBase?.let { viewModel.applyModifier(it, previewOptions) }
             IconOrigin.VECTOR -> draft.vectorIcon?.let { viewModel.applyModifier(it, previewOptions) }
             IconOrigin.CREATE -> {
                 val custom = customIconList.firstOrNull()
                 when {
-                    custom != null -> viewModel.previewIcon(app, previewOptions, custom)
-                    previewOptions.primarySource == Source.ICON_PACK ->
-                        (app.baseIcon ?: app.createdIcon)?.let {
+                    draft.recoveredCreateStage != null -> draft.recoveredCreateStage?.render(previewOptions)?.icon
+                    previewOptions.source.primarySource == Source.APPLICATION_NAME &&
+                        session.recoveryResources?.typeface(previewOptions.source.textFontPath) != null ->
+                        renderCreateSource(previewOptions, custom).icon
+                    custom != null -> viewModel.previewIcon(generationApplication, previewOptions, custom)
+                    previewOptions.source.primarySource == Source.ICON_PACK ->
+                        (session.restoredIconSource ?: app.baseIcon ?: app.createdIcon)?.let {
                             viewModel.applyModifier(it, previewOptions)
                         }
-                    else -> viewModel.previewIcon(app, previewOptions, null)
+                    else -> viewModel.previewIcon(generationApplication, previewOptions, null)
                 }
             }
         }
@@ -594,31 +434,65 @@ fun OptionsDialog(
     val modifierPreviews = rememberModifierPreviews(
         options = generatingOptions,
         adjustments = adjustments,
-        sourceKey = when (draft.origin) {
+        sourceKey = draft.replay?.input ?: when (draft.origin) {
             IconOrigin.UPLOAD -> draft.uploadBase
             IconOrigin.VECTOR -> draft.vectorIcon
-            IconOrigin.CREATE -> customIconList.firstOrNull()?.let {
+            IconOrigin.CREATE -> draft.recoveredCreateStage?.input ?: customIconList.firstOrNull()?.let {
                 iconPack to it.resourceId
-            } ?: (app.baseIcon ?: app.createdIcon ?: app.icon)
+            } ?: (session.restoredIconSource ?: app.baseIcon ?: app.createdIcon ?: app.iconSource)
         },
         render = renderPreviewWith
     )
 
-    LaunchedEffect(generatingOptions, customIconList) {
-        draft.regenerateCreate(viewModel, app, generatingOptions, customIconList)
+    val composedSelections = customIconList.toList()
+    val composedOrigin = draft.origin
+    val composedReplay = draft.replay
+    val composedSource = session.renderSource()
+    val composedSourceRevision = draft.sourceRevision
+    val currentGeneratingOptions = rememberUpdatedState(generatingOptions)
+    val renderStillCurrent = {
+        currentGeneratingOptions.value == generatingOptions && draft.sourceRevision == composedSourceRevision &&
+            draft.origin == composedOrigin &&
+            draft.replay === composedReplay && session.renderSource() === composedSource &&
+            (composedOrigin != IconOrigin.CREATE || session.customIconList == composedSelections)
     }
-    LaunchedEffect(draft.vectorIcon, generatingOptions) {
-        draft.regenerateVector(viewModel, generatingOptions)
+    LaunchedEffect(draft.origin, draft.replay, generatingOptions, customIconList, composedSourceRevision) {
+        draft.regenerateCreate(viewModel, app, generatingOptions, composedSelections,
+            composedRenderWitness, renderStillCurrent, renderSource = renderCreateSource,
+            renderReplay = viewModel::renderModifierReplay)
     }
-    LaunchedEffect(draft.uploadBase, generatingOptions) {
-        draft.regenerateUpload(viewModel, generatingOptions)
+    LaunchedEffect(draft.origin, draft.vectorIcon, generatingOptions, composedSourceRevision) {
+        draft.regenerateVector(viewModel, generatingOptions, composedRenderWitness, renderStillCurrent)
     }
+    LaunchedEffect(draft.origin, draft.uploadBase, generatingOptions, composedSourceRevision) {
+        draft.regenerateUpload(viewModel, generatingOptions, composedRenderWitness, renderStillCurrent)
+    }
+    LaunchedEffect(composedRenderWitness, generatingOptions, draft.generating, draft.completedFrameSerial) {
+        draft.acknowledgeWitness(composedRenderWitness, app, generatingOptions, composedSelections)
+    }
+
+    // The applied Global style drawn over the draft, as Apply with "Keep Global style" stores it.
+    val keptGlobalLayer = globalLayer?.takeIf { session.keepGlobalStyle }
+    val draftIcon = draft.iconToConfirm
+    val globalPreview by produceState<KeptGlobalPreview?>(null, draftIcon, keptGlobalLayer) {
+        if (draftIcon != null && keptGlobalLayer != null) {
+            val styled = runCatchingCancellable { viewModel.applyModifier(draftIcon, keptGlobalLayer.options) }
+                .onFailure { Log.error("OptionsDialog", "Rendering the kept Global style preview failed", it) }
+                .getOrNull() ?: draftIcon
+            value = KeptGlobalPreview(draftIcon, keptGlobalLayer, styled)
+        }
+    }
+    val globalPreviewPending = globalPreview.isPendingFor(draftIcon, keptGlobalLayer)
+    val previewIcon = if (keptGlobalLayer == null) draftIcon else globalPreview?.icon ?: draftIcon
 
     // The snackbar surface exists only for the upload gallery's Undo action; plain hints go
     // through the shared Toaster like everywhere else in the app.
     val snackbarHostState = remember { SnackbarHostState() }
     val toaster = LocalToaster.current
     val selectIconMessage = stringResource(R.string.selectIconFirst)
+    // An added app that is not installed has no icon of its own to start from.
+    val appIconAvailable = app.targetState != AppTargetState.NOT_INSTALLED
+    val appIconUnavailableMessage = stringResource(R.string.appIconSourceUnavailable)
     val externalEditorError = stringResource(R.string.noImageEditorAvailable)
     val context = LocalContext.current
     val externalEditorScope = rememberCoroutineScope()
@@ -626,17 +500,19 @@ fun OptionsDialog(
     LaunchedEffect(selectedTab) {
         // Leaving the icon-pack list re-expands the app bar (other tabs barely scroll).
         if (selectedTab != 0) headerScrollBehavior.state.heightOffset = 0f
-        // Modifiers live only in the Modifier tab — leaving it starts the next visit clean
-        if (selectedTab != 2) {
-            imageEdit = ImageEdit.NONE
-        }
+        session.enterSelectedTab()
     }
 
-    val confirmIcon: () -> Unit = {
+    val confirmIcon: () -> Unit = confirm@{
+        if (!canInteract()) return@confirm
+        if (!session.canConfirmDraft(session.renderWitnessOrNull())) return@confirm
         // Credit the icon to a pack only when it actually came from one: the Create
         // tab's Icon Pack source. A fresh pick uses the picked pack; keeping the
-        // existing icon keeps its stored source. Upload/vector/text/app-icon = none.
-        val sourcePackToPersist = confirmedSourcePack(
+        // existing icon keeps its stored source. Generated app icons resolve their provenance on Apply.
+        val sourcePackToPersist = if (session.modifierReplay != null) app.sourcePackName else if (
+            session.purpose == EditorPurpose.APPLICATION && draft.origin == IconOrigin.CREATE &&
+            source == Source.APPLICATION_ICON && GeneratedPackIdentity.isKnownGenerated(app.packageName)
+        ) app.packageName else confirmedSourcePack(
             origin = draft.origin,
             source = source,
             pickedPack = iconPack.takeIf { customIconList.isNotEmpty() },
@@ -645,12 +521,23 @@ fun OptionsDialog(
         // Online-library attribution follows how the icon was imported: a
         // confirmed vector carries the vector tab's URL, an "as image"
         // import the upload draft's; other origins have no online source.
-        val sourceUrlToPersist = when (draft.origin) {
+        val sourceUrlToPersist = if (session.modifierReplay != null) app.sourceUrl else when (draft.origin) {
             IconOrigin.VECTOR -> vectorEditState.sourceUrl
             IconOrigin.UPLOAD -> onlineImageUrl
             else -> null
         }
-        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, sourcePackToPersist, sourceUrlToPersist)
+        if (!dialogTransition.targetState) return@confirm
+        session.confirmedModifierUse = uiOptions.modifiers.hasVisibleEffect
+        onConfirm(
+            draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName,
+            sourcePackToPersist, sourceUrlToPersist, draft.modifierRecipeToConfirm, draft.modifierInputToConfirm
+        )
+        if (!dismissOnConfirm) return@confirm
+        // The icon is stored already; with a flight only the window waits, so the original
+        // can fly home and the applied icon to the row's result slot before it closes.
+        flight?.beginReturn(applied = true)
+        if (flight?.phase == IconFlightPhase.RETURNING) dialogTransition.targetState = false
+        else onDismiss()
     }
 
     val adaptiveLayoutInfo = LocalAdaptiveLayoutInfo.current
@@ -666,9 +553,27 @@ fun OptionsDialog(
         onDismissRequest = startClose,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
+            decorFitsSystemWindows = false,
+            dismissOnBackPress = interactionAllowed,
+            dismissOnClickOutside = interactionAllowed
         )
     ) {
+        // The system's dialog window animation (a scale/slide on some OEM skins) would carry the
+        // flying icon with it, so the icon visibly dropped before taking off. With a flight the
+        // content's own slide is the only entrance.
+        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+        if (flight != null) SideEffect { dialogWindow?.setWindowAnimations(0) }
+        // Once closing, the window lets touches and keys through to home, so the list is usable
+        // at once while the icons finish flying, as in apps whose transitions never block input.
+        LaunchedEffect(dialogTransition.targetState) {
+            if (!dialogTransition.targetState && flight != null) {
+                dialogWindow?.addFlags(
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                )
+            }
+        }
+        CompositionLocalProvider(LocalIconFlight provides flight) {
+        Box(Modifier.fillMaxSize()) {
         AnimatedVisibility(
             visibleState = dialogTransition,
             enter = slideInHorizontally(
@@ -696,7 +601,7 @@ fun OptionsDialog(
                         else Modifier.nestedScroll(headerScrollBehavior.nestedScrollConnection)
                     )
             ) {
-                val packBrowsing = selectedTab == 0 && source == Source.ICON_PACK
+                val packBrowsing = selectedTab == 0 && browserSource == Source.ICON_PACK
                 val tabContent: @Composable (PaddingValues) -> Unit = { headerPadding ->
                     AnimatedContent(
                         targetState = selectedTab,
@@ -709,8 +614,16 @@ fun OptionsDialog(
                         label = "tabContent"
                     ) { tab ->
                         when (tab) {
-                            0 -> CreateTab(
-                                source = source,
+                            0 -> if (session.modifierReplay != null && browserSource == Source.NONE) {
+                                Column(
+                                    Modifier.fillMaxSize().padding(headerPadding).padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Text(stringResource(R.string.savedModifierSource), style = MaterialTheme.typography.titleMedium)
+                                    Text(stringResource(R.string.savedModifierSourceDescription))
+                                }
+                            } else CreateTab(
+                                source = browserSource,
                                 contentPadding = headerPadding,
                                 iconPacks = iconPacks,
                                 options = browserOptions,
@@ -726,10 +639,11 @@ fun OptionsDialog(
                                 searchQuery = createSearchQuery,
                                 // Component matching only while the query is the untouched default
                                 // (the app's name); a custom query = pure text search.
-                                componentMatch = if (createSearchQuery == app.originalName) {
+                                componentMatch = if (session.purpose == EditorPurpose.APPLICATION && createSearchQuery == app.originalName) {
                                     app.toInstalledApplication()
                                 } else null,
                                 onIconSelect = { res, pack, drawableName ->
+                                    source = Source.ICON_PACK
                                     if (customIconList.firstOrNull()?.resourceId != res.resourceId ||
                                         iconPack != pack.packageName
                                     ) {
@@ -738,7 +652,9 @@ fun OptionsDialog(
                                     customIconList = listOf(res)
                                     iconPack = pack.packageName
                                     activateCreate()
-                                    val newPrefix = drawableName.calendarPrefixOrNull()
+                                    val newPrefix = drawableName.calendarPrefixOrNull().takeIf {
+                                        session.purpose == EditorPurpose.APPLICATION
+                                    }
                                     calendarPrefix = newPrefix
                                     calendarPackName = if (newPrefix != null) pack.packageName else null
                                     // If calendar was enabled but the new icon can't rotate, disable it
@@ -753,7 +669,7 @@ fun OptionsDialog(
                                 textCase = textCase,
                                 onTextCaseChange = { textCase = it; activateCreate() },
                                 fontPath = textFontPath,
-                                onFontPathChange = { textFontPath = it; activateCreate() },
+                                onFontPathChange = session::selectFont,
                                 contentReady = createTabReady,
                                 selectedResourceId = customIconList.firstOrNull()?.resourceId,
                                 selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },
@@ -792,44 +708,30 @@ fun OptionsDialog(
                                     customBgColor = Color(it.firstColor)
                                     activateCreate()
                                 },
-                                // The generated variant swaps the Custom inputs, so each control
-                                // previews through whichever field it actually feeds.
                                 renderMaterialYouForeground = { style ->
                                     renderPreviewWith(
-                                        if (swapGeneratedCustomColors) {
-                                            generatingOptions.copy(
-                                                bgColor = style.firstColor,
-                                                backgroundStyle = style
-                                            )
-                                        } else {
-                                            generatingOptions.copy(
-                                                color = style.firstColor,
-                                                foregroundStyle = style
-                                            )
-                                        }
+                                        generatingOptions
+                                            .withExport { copy(foregroundStyle = style) }
+                                            .withModifiers {
+                                                withEffect {
+                                                    copy(colorizer = colorizer.copy(firstColor = style.firstColor))
+                                                }
+                                            }
                                     )
                                 },
                                 renderMaterialYouBackground = { style ->
                                     renderPreviewWith(
-                                        if (swapGeneratedCustomColors) {
-                                            generatingOptions.copy(
-                                                color = style.firstColor,
-                                                foregroundStyle = style
-                                            )
-                                        } else {
-                                            generatingOptions.copy(
-                                                bgColor = style.firstColor,
-                                                backgroundStyle = style
-                                            )
+                                        generatingOptions.withExport {
+                                            copy(background = ColorFill(style.firstColor, style))
                                         }
                                     )
                                 }
                             )
                             1 -> UploadOptionsTab(
                                 contentPadding = headerPadding,
-                                selectionVersion = uploadSelectionVersion,
                                 snackbarHostState = snackbarHostState,
-                                initialSelectedPath = onlineImagePath,
+                                state = session.upload,
+                                library = viewModel.uploadedImages,
                                 onSelection = { icon, path ->
                                     if (icon == null) {
                                         draft.clearUpload()
@@ -840,28 +742,36 @@ fun OptionsDialog(
                                 }
                             )
                             2 -> ModifierOptionsTab(
+                                leadingContent = {
+                                    ModifierReplayControls(session, onRestoreModifiers)
+                                },
+                                allowImageEdits = session.modifierReplay?.allowsImageEdits != false,
                                 contentPadding = headerPadding,
-                                source = source,
+                                source = if (session.modifierReplay != null) Source.ICON_PACK else source,
                                 imageEdit = imageEdit,
                                 iconColor = iconColor,
                                 useVector = useVector,
-                                useMaterialYou = applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
+                                useMaterialYou = if (session.modifierReplay != null) session.replayMaterialYou
+                                    else applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
                                 adjustments = adjustments,
-                                centerPreview = remember(draft.iconToConfirm) {
-                                    draft.iconToConfirm?.toModifierBitmap()
-                                },
+                                centerPreviewIcon = draft.iconToConfirm,
                                 previewGenerating = draft.generating,
                                 sampleBitmap = heroBitmap,
                                 previews = modifierPreviews,
                                 materialYouPackAdjustments =
                                     materialYouPackAdjustments.takeIf { selectedMaterialYouPackIcon },
                                 materialYouSchemes = materialYouSchemes,
-                                onImageEditChange = { imageEdit = it },
+                                materialYouPackLineThicknessEditable = session.modifierReplay == null,
+                                appBackground = appBackground,
+                                onImageEditChange = {
+                                    imageEdit = if (session.modifierReplay?.allowsImageEdits == false) ImageEdit.NONE else it
+                                },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },
                                 onMaterialYouChange = {
-                                    applicationIconVariant = if (it) ApplicationIconVariant.MATERIAL_YOU
-                                    else ApplicationIconVariant.DEFAULT
+                                    if (session.modifierReplay != null) session.replayMaterialYou = it
+                                    else applicationIconVariant = if (it) ApplicationIconVariant.MATERIAL_YOU
+                                        else ApplicationIconVariant.DEFAULT
                                 },
                                 onEditExternally = { toolbox ->
                                     val icon = draft.iconToConfirm
@@ -869,27 +779,25 @@ fun OptionsDialog(
                                         toaster.show(selectIconMessage)
                                     } else {
                                         externalEditorScope.launch {
-                                            val bitmap = withContext(Dispatchers.Default) {
-                                                icon.toModifierBitmap()
-                                            }
-                                            val opened = if (toolbox) {
-                                                openInImageToolbox(context, bitmap)
-                                            } else {
-                                                editInAnotherApp(context, bitmap)
-                                            }
+                                            val opened = openExternalIconEditor(context, icon, toolbox, viewModel::shareIconForEditing)
                                             if (!opened) toaster.show(externalEditorError)
                                         }
                                     }
                                 }
                             )
                             else -> VectorOptionsTab(
+                                keepRetainedStage = session.modifierReplay != null,
+                                sourceIcon = session.restoredIconSource ?: (app.baseIcon ?: app.createdIcon),
                                 contentPadding = headerPadding,
                                 app = app,
                                 state = vectorEditState,
+                                importSvg = viewModel::importSvg,
                                 onImportedImage = { imported, url ->
+                                    session.upload.selectImported(imported.galleryPath)
                                     activateUpload(BitmapIconDrawable(imported.bitmap, false))
                                     onlineImageUrl = url
                                     onlineImagePath = imported.galleryPath
+                                    selectedTab = 1
                                 },
                                 onIconChange = {
                                     if (it == null) draft.clearVector() else activateVector(it)
@@ -900,12 +808,19 @@ fun OptionsDialog(
                 }
 
                 val bottomSection: @Composable () -> Unit = {
+                    autosaveNotice()
                     AnimatedVisibility(visible = selectedTab == 0) {
-                        SourcePills(source = source) { newSource ->
-                            source = newSource
-                            customIconList = listOf()
-                            activateCreate()
-                        }
+                        SourcePills(
+                            source = browserSource.takeIf { session.modifierReplay == null },
+                            appIconAvailable = appIconAvailable,
+                            onSourceChange = { picked ->
+                                if (picked == Source.APPLICATION_ICON && !appIconAvailable) {
+                                    toaster.show(appIconUnavailableMessage)
+                                } else {
+                                    session.selectCreateSource(picked)
+                                }
+                            }
+                        )
                     }
                     HorizontalDivider()
                     OptionsBottomBar(
@@ -921,12 +836,13 @@ fun OptionsDialog(
                 val preview = OptionsPreview(
                     heroBitmap = heroBitmap,
                     appName = app.appName,
-                    icon = draft.iconToConfirm,
-                    loading = draft.generating
+                    icon = previewIcon,
+                    loading = draft.generating || globalPreviewPending,
+                    canConfirm = interactionAllowed && session.canConfirmDraft(composedRenderWitness)
                 )
                 val actions = OptionsPreviewActions(
                     onDismiss = startClose,
-                    onClear = { showConfirmClear = true },
+                    onClear = { if (canInteract()) showConfirmClear = true },
                     onConfirm = confirmIcon
                 )
                 val packBrowser = PackBrowserChrome(
@@ -942,11 +858,17 @@ fun OptionsDialog(
                     onPackSortChange = { packSortOrder = it }
                 )
                 val calendar = CalendarSelection(
-                    visible = selectedTab == 0 && source == Source.ICON_PACK && calendarPrefix != null,
+                    visible = session.purpose == EditorPurpose.APPLICATION &&
+                        selectedTab == 0 && source == Source.ICON_PACK && calendarPrefix != null,
                     packName = calendarPackLabel,
                     prefix = calendarPrefix.orEmpty(),
                     enabled = calendarEnabled,
                     onToggle = { calendarEnabled = it }
+                )
+                val globalStyle = GlobalStyleSelection(
+                    layer = globalLayer,
+                    keep = session.keepGlobalStyle,
+                    onToggle = { session.keepGlobalStyle = it }
                 )
 
                 if (paneLayout != null) {
@@ -956,6 +878,7 @@ fun OptionsDialog(
                         actions = actions,
                         packBrowser = packBrowser,
                         calendar = calendar,
+                        globalStyle = globalStyle,
                         tabContent = tabContent,
                         bottomSection = bottomSection
                     )
@@ -966,6 +889,7 @@ fun OptionsDialog(
                         actions = actions,
                         packBrowser = packBrowser,
                         calendar = calendar,
+                        globalStyle = globalStyle,
                         headerScrollBehavior = headerScrollBehavior,
                         labelExpand = labelExpand,
                         tabContent = tabContent,
@@ -982,16 +906,69 @@ fun OptionsDialog(
             }
         }
         }
+        // Outside the sliding content, so the icon flies on its own path while the dialog enters.
+        flight?.let { IconFlightOverlay(it) }
+        }
+        }
     }
 
-    if (showConfirmClear) {
+    if (showConfirmClear && interactionAllowed) {
         ConfirmClearDialog(
             onDismiss = { showConfirmClear = false },
             onIconClear = {
-                showConfirmClear = false
-                onIconClear()
+                if (canInteract()) {
+                    showConfirmClear = false
+                    onIconClear()
+                }
             }
         )
+    }
+    if (session.restoringModifiers) RestoringModifiersDialog(onCancel = onCancelModifierRestore)
+    if (!interactionAllowed) {
+        MessageDialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            badge = { DialogProgressBadge() },
+            title = stringResource(R.string.iconGenerationInProgress),
+            actions = {}
+        )
+    }
+}
+
+@Composable
+internal fun RestoringModifiersDialog(onCancel: () -> Unit) {
+    MessageDialog(
+        onDismissRequest = onCancel,
+        badge = { DialogProgressBadge() },
+        title = stringResource(R.string.restoreSavedModifiers),
+        supporting = stringResource(R.string.verifyingSavedModifiers),
+        actions = { DialogSecondaryAction(stringResource(R.string.colorizeCancel), onCancel) }
+    )
+}
+
+@Composable
+private fun ModifierReplayControls(session: EditorSession, onRestore: () -> Unit) {
+    when {
+        session.modifierReplay != null -> {
+            Text(stringResource(R.string.savedModifiersRestored), style = MaterialTheme.typography.bodyMedium)
+            if (session.draft.replayRenderFailed) {
+                Text(stringResource(R.string.savedModifiersPreviewFailed), color = MaterialTheme.colorScheme.error)
+            }
+            if (session.modifierReplay?.verified?.retained?.containsBakedModifierEdits == true) {
+                Text(stringResource(R.string.savedModifiersBakedBaseline), style = MaterialTheme.typography.bodySmall)
+            }
+            if (session.modifierReplay?.allowsImageEdits == false) {
+                Text(stringResource(R.string.savedTextModifiersLimit), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        session.modifierRestoreFailed -> Text(
+            stringResource(R.string.savedModifiersUnavailable),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        session.draft.canRestore -> OutlinedButton(onClick = onRestore) {
+            Text(stringResource(R.string.restoreSavedModifiers))
+        }
     }
 }
 
@@ -999,30 +976,32 @@ private data class OptionsPreview(
     val heroBitmap: Bitmap?,
     val appName: String,
     val icon: IconPackDrawable?,
-    val loading: Boolean
+    val loading: Boolean,
+    val canConfirm: Boolean = !loading
 )
 
 @Composable
 private fun UploadOptionsTab(
     contentPadding: PaddingValues,
-    selectionVersion: Int,
     snackbarHostState: SnackbarHostState,
-    initialSelectedPath: String?,
+    state: UploadEditorState,
+    library: UploadedImageLibrary,
     onSelection: (IconPackDrawable?, String?) -> Unit
 ) {
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
-        key(selectionVersion) {
-            UploadColumn(
-                snackbarHostState = snackbarHostState,
-                initialSelectedPath = initialSelectedPath,
-                onChange = onSelection
-            )
-        }
+        UploadColumn(
+            snackbarHostState = snackbarHostState,
+            state = state,
+            library = library,
+            onChange = onSelection
+        )
     }
 }
 
 @Composable
 private fun ModifierOptionsTab(
+    leadingContent: @Composable () -> Unit,
+    allowImageEdits: Boolean,
     contentPadding: PaddingValues,
     source: Source,
     imageEdit: ImageEdit,
@@ -1030,12 +1009,14 @@ private fun ModifierOptionsTab(
     useVector: Boolean,
     useMaterialYou: Boolean,
     adjustments: AdjustmentState,
-    centerPreview: Bitmap?,
+    centerPreviewIcon: IconPackDrawable?,
     previewGenerating: Boolean,
     sampleBitmap: Bitmap?,
     previews: ModifierPreviews,
     materialYouPackAdjustments: MaterialYouPackAdjustmentState?,
     materialYouSchemes: List<Pair<Color, Color>>,
+    materialYouPackLineThicknessEditable: Boolean,
+    appBackground: AppBackgroundColor?,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
@@ -1044,18 +1025,22 @@ private fun ModifierOptionsTab(
 ) {
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
         ModifierTab(
+            leadingContent = leadingContent,
+            allowImageEdits = allowImageEdits,
             source = source,
             imageEdit = imageEdit,
             iconColor = iconColor,
             useVector = useVector,
             useMaterialYou = useMaterialYou,
             adjustments = adjustments,
-            centerPreview = centerPreview,
+            centerPreviewIcon = centerPreviewIcon,
             previewGenerating = previewGenerating,
             sampleBitmap = sampleBitmap,
             previews = previews,
             materialYouPackAdjustments = materialYouPackAdjustments,
             materialYouSchemes = materialYouSchemes,
+            materialYouPackLineThicknessEditable = materialYouPackLineThicknessEditable,
+            appBackground = appBackground,
             onImageEditChange = onImageEditChange,
             onColorChange = onColorChange,
             onVectorChange = onVectorChange,
@@ -1066,19 +1051,30 @@ private fun ModifierOptionsTab(
 }
 
 @Composable
-private fun VectorOptionsTab(
+internal fun VectorOptionsTab(
+    keepRetainedStage: Boolean,
+    sourceIcon: IconPackDrawable?,
     contentPadding: PaddingValues,
     app: PackageInfoStruct,
     state: VectorEditState,
+    importSvg: suspend (Uri) -> SvgVectorImporter.ImportedSvg?,
     onImportedImage: (OnlineImageImport, String) -> Unit,
     onIconChange: (IconPackDrawable?) -> Unit
 ) {
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
         PrepareEditVector(
             app = app,
+            sourceIcon = sourceIcon,
             state = state,
+            importSvg = importSvg,
             onImportedImage = onImportedImage,
-            onChange = onIconChange
+            onChange = {
+                val inputs = state.inputs()
+                // Seeding the working preview is navigation; returning to the seed after an edit still publishes.
+                val unchanged = state.publishedInputs == inputs ||
+                    (state.publishedInputs == null && !state.hasChangesFromSeed)
+                if (!unchanged && (!keepRetainedStage || state.hasChangesFromSeed)) onIconChange(it)
+            }
         )
     }
 }
@@ -1102,6 +1098,12 @@ private data class PackBrowserChrome(
     val onPackSortChange: (PackSortOrder) -> Unit
 )
 
+private data class GlobalStyleSelection(
+    val layer: EditorGlobalLayer?,
+    val keep: Boolean,
+    val onToggle: (Boolean) -> Unit
+)
+
 private data class CalendarSelection(
     val visible: Boolean,
     val packName: String,
@@ -1117,6 +1119,7 @@ private fun WideOptionsLayout(
     actions: OptionsPreviewActions,
     packBrowser: PackBrowserChrome,
     calendar: CalendarSelection,
+    globalStyle: GlobalStyleSelection,
     tabContent: @Composable (PaddingValues) -> Unit,
     bottomSection: @Composable () -> Unit
 ) {
@@ -1126,19 +1129,24 @@ private fun WideOptionsLayout(
             appName = preview.appName,
             previewIcon = preview.icon,
             previewLoading = preview.loading,
-            confirmEnabled = !preview.loading,
+            confirmEnabled = preview.canConfirm,
             onDismiss = actions.onDismiss,
             onClear = actions.onClear,
             onConfirm = actions.onConfirm,
             modifier = Modifier.width(paneLayout.leadingWidth),
-            extraCard = if (calendar.visible) {
+            extraCard = if (calendar.visible || globalStyle.layer != null) {
                 {
-                    CalendarCard(
-                        packName = calendar.packName,
-                        calendarPrefix = calendar.prefix,
-                        calendarEnabled = calendar.enabled,
-                        onToggle = calendar.onToggle
-                    )
+                    androidx.compose.foundation.layout.Column {
+                        globalStyle.layer?.let { GlobalStyleCard(it, globalStyle.keep, globalStyle.onToggle) }
+                        if (calendar.visible) {
+                            CalendarCard(
+                                packName = calendar.packName,
+                                calendarPrefix = calendar.prefix,
+                                calendarEnabled = calendar.enabled,
+                                onToggle = calendar.onToggle
+                            )
+                        }
+                    }
                 }
             } else null
         )
@@ -1159,6 +1167,7 @@ private fun PhoneOptionsLayout(
     actions: OptionsPreviewActions,
     packBrowser: PackBrowserChrome,
     calendar: CalendarSelection,
+    globalStyle: GlobalStyleSelection,
     headerScrollBehavior: TopAppBarScrollBehavior,
     labelExpand: Float,
     tabContent: @Composable (PaddingValues) -> Unit,
@@ -1180,7 +1189,7 @@ private fun PhoneOptionsLayout(
                         appName = preview.appName,
                         previewIcon = preview.icon,
                         previewLoading = preview.loading,
-                        confirmEnabled = !preview.loading,
+                        confirmEnabled = preview.canConfirm,
                         onDismiss = actions.onDismiss,
                         onClear = actions.onClear,
                         onConfirm = actions.onConfirm,
@@ -1215,6 +1224,7 @@ private fun PhoneOptionsLayout(
                         showProgress = packBrowser.visible && packBrowser.busy
                     )
                     if (selectedTab != 0) HorizontalDivider()
+                    globalStyle.layer?.let { GlobalStyleCard(it, globalStyle.keep, globalStyle.onToggle) }
                     AnimatedVisibility(visible = calendar.visible) {
                         CalendarCard(
                             packName = calendar.packName,
@@ -1329,29 +1339,19 @@ private fun OptionsBottomBar(
  * plain light-on-dark / dark-on-light.
  */
 @Composable
-private fun rememberMaterialYouSchemes(): List<Pair<Color, Color>> {
-    if (!supportDynamicColors()) {
-        return listOf(Color.White to Color.Black, Color.Black to Color.White)
-    }
+internal fun rememberMaterialYouSchemes(): List<Pair<Color, Color>> {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-    return remember(configuration) {
-        fun c(id: Int) = Color(context.resources.getColor(id, context.theme))
-        listOf(
-            c(android.R.color.system_accent1_100) to c(android.R.color.system_accent1_800),
-            c(android.R.color.system_accent2_100) to c(android.R.color.system_accent2_800),
-            c(android.R.color.system_accent3_100) to c(android.R.color.system_accent3_800),
-            c(android.R.color.system_neutral1_100) to c(android.R.color.system_neutral1_800),
-            c(android.R.color.system_accent1_800) to c(android.R.color.system_accent1_100)
-        )
-    }
+    return remember(configuration) { materialYouSchemes(context) }
 }
 
 @Composable
 fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
     ConfirmDialog(
-        title = stringResource(R.string.confirmClear),
-        text = stringResource(R.string.confirmClearText),
+        title = stringResource(R.string.clearIconTitle),
+        text = null,
+        confirmLabel = stringResource(R.string.clear),
+        icon = Icons.Filled.DeleteSweep,
         onConfirm = onIconClear,
         onDismiss = onDismiss
     )
@@ -1361,6 +1361,49 @@ fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
  * Shown when the selected icon ends in a number — the user can opt in to day rotation.
  * Works with any icon from any pack regardless of which app it was designed for.
  */
+/** Offers to keep the applied Global style on top of the edited icon; off stores the edit alone. */
+@Composable
+private fun GlobalStyleCard(layer: EditorGlobalLayer, keep: Boolean, onToggle: (Boolean) -> Unit) {
+    val chips = globalStyleChips(layer.recipe)
+    Surface(
+        shape = dev.renkinProject.renkin.ui.theme.CardShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .toggleable(value = keep, role = Role.Switch, onValueChange = onToggle)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = if (keep) Icons.Filled.Layers else Icons.Filled.LayersClear,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(22.dp)
+            )
+            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.editorKeepGlobalStyle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = if (keep) chips.joinToString(" · ")
+                    else stringResource(R.string.editorGlobalStyleOff, chips.joinToString(", ")),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                )
+            }
+            // The whole card toggles, so the switch itself only shows the state.
+            Switch(checked = keep, onCheckedChange = null)
+        }
+    }
+}
+
 @Composable
 private fun CalendarCard(
     packName: String,
@@ -1409,7 +1452,8 @@ private fun CalendarCard(
 
 @Composable
 private fun SourcePills(
-    source: Source,
+    source: Source?,
+    appIconAvailable: Boolean,
     onSourceChange: (Source) -> Unit
 ) {
     SingleChoiceSegmentedButtonRow(
@@ -1426,7 +1470,13 @@ private fun SourcePills(
             selected = source == Source.APPLICATION_ICON,
             onClick = { onSourceChange(Source.APPLICATION_ICON) },
             shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3)
-        ) { Text(stringResource(R.string.sourceAppIcon)) }
+        ) {
+            // Still tappable: the tap explains why the app's own icon is missing.
+            Text(
+                stringResource(R.string.sourceAppIcon),
+                color = if (appIconAvailable) Color.Unspecified else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+            )
+        }
         SegmentedButton(
             selected = source == Source.APPLICATION_NAME,
             onClick = { onSourceChange(Source.APPLICATION_NAME) },

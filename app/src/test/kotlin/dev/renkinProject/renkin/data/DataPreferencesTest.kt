@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.data
 
+import android.app.Application
+
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -25,7 +27,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
+@Config(application = Application::class, sdk = [33])
 class DataPreferencesTest {
     @get:Rule
     val temporaryFolder = TemporaryFolder()
@@ -387,6 +389,39 @@ class DataPreferencesTest {
             assertEquals(FallbackSource.PRIMARY.ordinal, saved[FallbackSourceKey])
             assertEquals(73, saved[GlobalIconScaleKey])
             assertEquals("keep-font.ttf", saved[TextFontKey])
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun persistGlobalStylePrefs_savesEveryKeyOfEachGlobalColorStyle() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val store = PreferenceDataStoreFactory.create(scope = scope) {
+            temporaryFolder.root.resolve("global-colors.preferences_pb")
+        }
+        val styles = listOf(GlobalShapeStyleKeys, OutlineStyleKeys, GlobalColorizerStyleKeys)
+        try {
+            val staged = mutablePreferencesOf()
+            styles.forEachIndexed { index, keys ->
+                staged[keys.mode] = 1
+                staged[keys.gradientType] = 1
+                staged[keys.gradientAngle] = 30 + index
+                staged[keys.firstColor] = "#FF00000$index"
+                staged[keys.gradientColors] = "#FF11111$index,#FF22222$index"
+                staged[keys.gradientPositions] = "0.0,0.4$index,1.0"
+                keys.legacyGradientColor?.let { staged[it] = "#FF33333$index" }
+            }
+
+            store.persistGlobalStylePrefs(staged)
+            val saved = store.getPreferencesAfterPendingWrites()
+
+            styles.forEach { keys ->
+                listOfNotNull(
+                    keys.mode, keys.gradientType, keys.gradientAngle, keys.firstColor,
+                    keys.gradientColors, keys.gradientPositions, keys.legacyGradientColor
+                ).forEach { key -> assertEquals(key.name, staged[key], saved[key]) }
+            }
         } finally {
             scope.cancel()
         }

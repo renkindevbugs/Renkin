@@ -691,7 +691,7 @@ private fun GradientStopRow(
                 modifier = Modifier.weight(1f)
             )
             Text(
-                text = "${(position * 100).roundToInt()}%",
+                text = formatPercent(position),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

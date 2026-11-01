@@ -1,8 +1,10 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package dev.renkinProject.renkin.ui
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.MainThread
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -14,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -22,7 +23,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -58,11 +58,11 @@ import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.ui.theme.IconShape
-import dev.renkinProject.renkin.OnlineImageImport
+import dev.renkinProject.renkin.feature.online.OnlineIconBrowserDialog
+import dev.renkinProject.renkin.feature.online.OnlineImageImport
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -77,20 +77,19 @@ import dev.renkinProject.renkin.vector.PathExporter.Companion.toStringPath
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyAndRemoveGroup
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.center
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 internal fun PrepareEditVector(
     app: PackageInfoStruct,
+    sourceIcon: IconPackDrawable? = app.baseIcon ?: app.createdIcon,
     state: VectorEditState,
+    importSvg: suspend (Uri) -> SvgVectorImporter.ImportedSvg?,
     // An online icon the editor can't model as paths, imported as a full-size picture
     // instead — the dialog routes it into the upload draft.
     onImportedImage: (OnlineImageImport, sourceUrl: String) -> Unit,
     onChange: (icon: IconPackDrawable?) -> Unit
 ) {
-    val sourceIcon = app.baseIcon ?: app.createdIcon
     val editedVector = remember(sourceIcon) { when (sourceIcon) {
         is ImageVectorDrawable -> sourceIcon.deepCopy().applyAndRemoveGroup().toImageVector()
         is InsetIconDrawable -> {
@@ -102,8 +101,8 @@ internal fun PrepareEditVector(
         else -> ImageVector.createEmptyVector()
     } }
 
-    EditVectorColumn(editedVector, state, onImportedImage) {
-        if (sourceIcon is InsetIconDrawable && it != null) {
+    EditVectorColumn(editedVector, state, importSvg, onImportedImage) {
+        if (sourceIcon is InsetIconDrawable && state.viewportOverride == null && it != null) {
             onChange(InsetIconDrawable(it, sourceIcon.dimensions, sourceIcon.fractions))
         } else {
             onChange(it)
@@ -124,10 +123,34 @@ internal data class PathEntry(val path: VectorPath, val filled: Boolean, val bas
  * user's paths. Seeded once from the source vector via [initialized].
  */
 internal class VectorEditState {
+    data class Inputs(
+        val entries: List<PathEntry>, val thickness: Float, val automaticallyCenter: Boolean,
+        val viewport: Pair<Float, Float>?, val sourceUrl: String?, val containsBakedModifierEdits: Boolean
+    )
+    private var initialInputs: Inputs? by mutableStateOf(null)
+    internal var publishedInputs: Inputs? = null
+    internal var preserveDraftSeedPublication = false
+        private set
+    internal fun seedForDraft(): Inputs? = initialInputs
+    fun inputs() = Inputs(entries, thickness, automaticallyCenter, viewportOverride, sourceUrl, containsBakedModifierEdits)
+    val hasChangesFromSeed: Boolean get() = initialInputs?.let { it != inputs() } == true
+
+    fun captureSeed() {
+        if (initialInputs == null) initialInputs = inputs()
+    }
+    @MainThread
+    internal fun restoreDraftSeed(seed: Inputs?) {
+        require(!initialized || seed != null) { "Initialized editor vector has no seed" }
+        initialInputs = seed
+        preserveDraftSeedPublication = true
+        // Reattaching a recovered working vector must not publish its existing edits again.
+        publishedInputs = inputs()
+    }
     var entries: List<PathEntry> by mutableStateOf(listOf())
     var thickness: Float by mutableStateOf(1f)
     var automaticallyCenter: Boolean by mutableStateOf(true)
     var initialized: Boolean by mutableStateOf(false)
+    var containsBakedModifierEdits: Boolean by mutableStateOf(false)
 
     // Set by "Import SVG": the imported document's coordinate space replaces the template
     // vector's viewport, so the imported paths keep their proportions (a 24-unit heroicon
@@ -140,13 +163,17 @@ internal class VectorEditState {
     var sourceUrl: String? by mutableStateOf(null)
 
     /** Drops the previous vector selection when another editor source is chosen. */
-    fun reset() {
+    fun reset(containsBakedModifierEdits: Boolean = false) {
+        initialInputs = null
+        publishedInputs = null
+        preserveDraftSeedPublication = false
         entries = emptyList()
         thickness = 1f
         automaticallyCenter = true
         initialized = false
         viewportOverride = null
         sourceUrl = null
+        this.containsBakedModifierEdits = containsBakedModifierEdits
     }
 }
 
@@ -191,6 +218,7 @@ private fun PathEntry.toPreviewVector(template: ImageVector, thickness: Float, v
 internal fun EditVectorColumn(
     vector: ImageVector,
     state: VectorEditState,
+    importSvg: suspend (Uri) -> SvgVectorImporter.ImportedSvg?,
     onImportedImage: (OnlineImageImport, sourceUrl: String) -> Unit,
     onChange: (icon: IconPackDrawable?) -> Unit
 ) {
@@ -217,7 +245,11 @@ internal fun EditVectorColumn(
                 }
             }
             state.entries = initial.toList()
+            if (initial.isEmpty()) state.containsBakedModifierEdits = false
+            state.captureSeed()
             state.initialized = true
+            // Recovered tab initialization acknowledges its preview without selecting a new source.
+            if (state.preserveDraftSeedPublication) state.publishedInputs = state.inputs()
         }
 
         val editedVector = remember(
@@ -275,6 +307,7 @@ internal fun EditVectorColumn(
         // and stroke widths as authored). White like every editor path — the Modifier
         // tab recolors. [sourceUrl] records the online origin (null for local files).
         val applyImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit = { imported, sourceUrl ->
+            state.containsBakedModifierEdits = false
             state.viewportOverride = imported.viewportWidth to imported.viewportHeight
             val importStroke = (imported.viewportHeight / 48f).takeIf { it > 0f } ?: 1f
             state.entries = imported.paths.mapNotNull { spec ->
@@ -312,6 +345,7 @@ internal fun EditVectorColumn(
         // Create-tab-style pill row: full width instead of buttons squeezed next to the
         // "Paths" title (which used to wrap the title vertically on narrow screens).
         ImportSourcePills(
+            importSvg = importSvg,
             onImported = { imported, url -> applyImported(imported, url) },
             onImportedImage = onImportedImage
         )
@@ -391,9 +425,11 @@ internal fun EditVectorColumn(
         }
 
         // Publish only when editor inputs change, never as a side effect of composition itself.
-        LaunchedEffect(state.initialized, editedVector, state.entries.isEmpty()) {
-            if (state.initialized) {
-                currentOnChange(if (state.entries.isEmpty()) null else editedVector)
+        val initialized = state.initialized
+        val publishedInputs = state.inputs()
+        LaunchedEffect(initialized, editedVector, publishedInputs) {
+            if (initialized && publishedInputs == state.inputs()) {
+                currentOnChange(if (publishedInputs.entries.isEmpty()) null else editedVector)
             }
         }
     }
@@ -507,8 +543,10 @@ fun VectorPathItem(
  * shapes) toast an error and leave the current edit untouched.
  */
 @Composable
-internal fun rememberSvgImportAction(onImported: (SvgVectorImporter.ImportedSvg) -> Unit): () -> Unit {
-    val context = getCurrentContext()
+internal fun rememberSvgImportAction(
+    importSvg: suspend (Uri) -> SvgVectorImporter.ImportedSvg?,
+    onImported: (SvgVectorImporter.ImportedSvg) -> Unit
+): () -> Unit {
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
     val errorMessage = stringResource(R.string.svgImportFailed)
@@ -516,11 +554,7 @@ internal fun rememberSvgImportAction(onImported: (SvgVectorImporter.ImportedSvg)
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
-            val imported = withContext(Dispatchers.IO) {
-                runCatching {
-                    context.contentResolver.openInputStream(uri)?.use { it.readUtf8TextLimited() }
-                }.getOrNull()?.let { SvgVectorImporter.parse(it) }
-            }
+            val imported = importSvg(uri)
             if (imported == null) toaster.show(errorMessage) else onImported(imported)
         }
     }
@@ -536,10 +570,11 @@ internal fun rememberSvgImportAction(onImported: (SvgVectorImporter.ImportedSvg)
  */
 @Composable
 private fun ImportSourcePills(
+    importSvg: suspend (Uri) -> SvgVectorImporter.ImportedSvg?,
     onImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit,
     onImportedImage: (OnlineImageImport, String) -> Unit
 ) {
-    val importFromFile = rememberSvgImportAction { onImported(it, null) }
+    val importFromFile = rememberSvgImportAction(importSvg) { onImported(it, null) }
     var browserOpen by remember { mutableStateOf(false) }
 
     SingleChoiceSegmentedButtonRow(

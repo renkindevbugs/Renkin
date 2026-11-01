@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui
 
+import dev.renkinProject.renkin.icon.creator.MODIFIER_SCALE_RANGE
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -48,15 +49,107 @@ import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getSourceLabels
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
+import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.ui.modifier.ShadowEditorSheet
+import dev.renkinProject.renkin.ui.modifier.ShadowPresetChips
+import dev.renkinProject.renkin.ui.modifier.ShapeSwatch
+import dev.renkinProject.renkin.ui.modifier.decodeShadowForCancel
+import dev.renkinProject.renkin.ui.modifier.encodeForCancel
+import dev.renkinProject.renkin.ui.modifier.matchingPreset
+import dev.renkinProject.renkin.ui.modifier.shapeLabel
+import dev.renkinProject.renkin.ui.modifier.shadowUiPresets
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.FieldShape
+import dev.renkinProject.renkin.drawable.ResourceDrawable
 import kotlin.math.roundToInt
 
-private enum class GlobalStyleEffect { SHAPE, SCALE, OUTLINE, COLORIZE }
+private enum class GlobalStyleEffect { SHAPE, SCALE, OUTLINE, SHADOW, COLORIZE }
+
+@Composable
+private fun GlobalShadowCard(state: GlobalModifierState, expanded: Boolean, onExpand: () -> Unit) {
+    var editorOpen by rememberSaveable { mutableStateOf(false) }
+    var cancelSnapshot by rememberSaveable { mutableStateOf<String?>(null) }
+    val presets = shadowUiPresets()
+    val shadow = state.shadow
+    val summary = when {
+        !shadow.enabled -> stringResource(R.string.globalEffectOff)
+        else -> shadow.matchingPreset(presets)?.label ?: stringResource(
+            R.string.shadowCardSummary, shadow.blur.roundToInt(), (shadow.opacity * 100).roundToInt()
+        )
+    }
+
+    GlobalEffectCard(
+        title = stringResource(R.string.shadowTitle),
+        summary = summary,
+        active = shadow.enabled,
+        expanded = expanded,
+        onExpand = onExpand
+    ) {
+        ControlledGlobalSwitchRow(
+            label = stringResource(R.string.shadowEnabled),
+            checked = shadow.enabled
+        ) { state.updateShadow(shadow.copy(enabled = it)) }
+        AnimatedVisibility(visible = shadow.enabled) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ShadowPresetChips(shadow, presets, state::updateShadow)
+                OptionCard(
+                    label = stringResource(R.string.globalShadowCustomize),
+                    onClick = {
+                        cancelSnapshot = shadow.encodeForCancel()
+                        editorOpen = true
+                    },
+                    trailing = {
+                        Text(
+                            text = stringResource(
+                                R.string.shadowCardSummary,
+                                shadow.blur.roundToInt(),
+                                (shadow.opacity * 100).roundToInt()
+                            ),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                )
+                Text(
+                    text = stringResource(R.string.globalShadowFlattenHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+
+    if (editorOpen) {
+        ShadowEditorSheet(
+            shadow = shadow,
+            onShadowChange = state::updateShadow,
+            presets = presets,
+            preview = null,
+            previewGenerating = false,
+            renderPreview = null,
+            showRemove = true,
+            onDismiss = {
+                cancelSnapshot?.let(::decodeShadowForCancel)?.let(state::updateShadow)
+                cancelSnapshot = null
+                editorOpen = false
+            },
+            onApply = {
+                cancelSnapshot = null
+                editorOpen = false
+            },
+            onRemove = {
+                state.updateShadow(shadow.copy(enabled = false))
+                cancelSnapshot = null
+                editorOpen = false
+            }
+        )
+    }
+}
 
 /** Native indeterminate progress, inset so its rounded caps remain visible on the dock edge. */
 @Composable
@@ -273,6 +366,7 @@ private fun sourceDisplayName(
 internal fun GenerationSourcesSheet(
     state: GlobalModifierState,
     iconPacks: List<IconPack>,
+    loadPackIcons: suspend () -> Map<String, ResourceDrawable>,
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -298,10 +392,11 @@ internal fun GenerationSourcesSheet(
                 state.normalizeFallbackSource()
             }
             if (state.primarySource == Source.ICON_PACK) {
-                GlobalIconPackDropdown(
+                IconPackDropdown(
                     labelId = R.string.primaryIconPack,
                     iconPacks = iconPacks,
-                    selectedPackage = state.primaryIconPack
+                    packageName = state.primaryIconPack,
+                    loadIcons = loadPackIcons
                 ) { packageName ->
                     state.primaryIconPack = packageName
                     state.normalizeFallbackSource()
@@ -312,10 +407,11 @@ internal fun GenerationSourcesSheet(
                     state.normalizeFallbackSource()
                 }
                 if (state.secondarySource == Source.ICON_PACK) {
-                    GlobalIconPackDropdown(
+                    IconPackDropdown(
                         labelId = R.string.secondaryIconPack,
                         iconPacks = iconPacks,
-                        selectedPackage = state.secondaryIconPack
+                        packageName = state.secondaryIconPack,
+                        loadIcons = loadPackIcons
                     ) { packageName ->
                         state.secondaryIconPack = packageName
                         state.normalizeFallbackSource()
@@ -349,25 +445,6 @@ internal fun GenerationSourcesSheet(
     }
 }
 
-@Composable
-private fun GlobalIconPackDropdown(
-    @androidx.annotation.StringRes labelId: Int,
-    iconPacks: List<IconPack>,
-    selectedPackage: String,
-    onChange: (String) -> Unit
-) {
-    val none = stringResource(R.string.none)
-    val labels = remember(iconPacks, selectedPackage, none) {
-        linkedMapOf("" to none).apply {
-            iconPacks.forEach { put(it.packageName, it.applicationName) }
-            if (selectedPackage.isNotBlank() && selectedPackage !in this) {
-                put(selectedPackage, selectedPackage)
-            }
-        }
-    }
-    EnumDropdown(labelId, selectedPackage, labels, onChange = onChange)
-}
-
 private fun GlobalModifierState.normalizeFallbackSource() {
     val primaryAvailable = primarySource == Source.ICON_PACK && primaryIconPack.isNotBlank()
     val secondaryAvailable = needSecondarySource(primarySource) &&
@@ -387,17 +464,18 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
     var expandedName by rememberSaveable { mutableStateOf(GlobalStyleEffect.SCALE.name) }
 
     val expanded = GlobalStyleEffect.entries.firstOrNull { it.name == expandedName }
+    val colorize = state.modifiers.effect.imageEdit == ImageEdit.COLORIZE
     val off = stringResource(R.string.globalEffectOff)
-    val shapeSummary = if (state.shape == IconShape.NONE) off else stringResource(
+    val shapeSummary = if (!state.shape.isEnabled) off else stringResource(
         R.string.globalShapeSummary,
-        shapeLabel(state.shape),
-        (state.shapeScale * 100).roundToInt()
+        shapeLabel(state.shape.shape),
+        (state.shape.scale * 100).roundToInt()
     )
-    val outlineSummary = if (state.outlineAdd) {
-        stringResource(R.string.globalOutlineSummary, state.outlineWidth.roundToInt())
+    val outlineSummary = if (state.outline.isEnabled) {
+        stringResource(R.string.globalOutlineSummary, state.outline.width.roundToInt())
     } else off
-    val colorizeSummary = if (!state.colorize) off else stringResource(
-        if (state.colorizerStyle.mode == ColorizerMode.GRADIENT) {
+    val colorizeSummary = if (!colorize) off else stringResource(
+        if (state.modifiers.effect.colorizer.mode == ColorizerMode.GRADIENT) {
             R.string.colorizerGradient
         } else {
             R.string.globalOneColor
@@ -408,7 +486,7 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
         GlobalEffectCard(
             title = stringResource(R.string.iconShapeTitle),
             summary = shapeSummary,
-            active = state.shape != IconShape.NONE,
+            active = state.shape.isEnabled,
             expanded = expanded == GlobalStyleEffect.SHAPE,
             onExpand = {
                 expandedName = if (expanded == GlobalStyleEffect.SHAPE) ""
@@ -419,38 +497,38 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                IconShape.entries.forEach { shape ->
+                IconShape.entries.forEach { selectedShape ->
                     ShapeSwatch(
-                        shape = shape,
-                        selected = state.shape == shape,
-                        onClick = { state.shape = shape }
+                        shape = selectedShape,
+                        selected = state.shape.shape == selectedShape,
+                        onClick = { state.updateShape { copy(shape = selectedShape) } }
                     )
                 }
             }
-            AnimatedVisibility(visible = state.shape != IconShape.NONE) {
+            AnimatedVisibility(visible = state.shape.isEnabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
-                            selected = state.shapeCrop,
-                            onClick = { state.shapeCrop = true },
+                            selected = state.shape.crop,
+                            onClick = { state.updateShape { copy(crop = true) } },
                             label = { Text(stringResource(R.string.shapeCrop)) }
                         )
                         FilterChip(
-                            selected = !state.shapeCrop,
-                            onClick = { state.shapeCrop = false },
+                            selected = !state.shape.crop,
+                            onClick = { state.updateShape { copy(crop = false) } },
                             label = { Text(stringResource(R.string.shapePlate)) }
                         )
                     }
                     LabeledSlider(
                         label = stringResource(R.string.shapeIconScale),
-                        value = state.shapeScale,
-                        onValueChange = { state.shapeScale = it },
-                        valueRange = 0.5f..1.5f,
+                        value = state.shape.scale,
+                        onValueChange = { state.updateShape { copy(scale = it) } },
+                        valueRange = MODIFIER_SCALE_RANGE,
                         centered = true,
                         ruler = percentRuler()
                     )
-                    if (!state.shapeCrop) {
-                        val shapeStyle = state.shapeStyle
+                    if (!state.shape.crop) {
+                        val shapeStyle = requireNotNull(state.shape.fill?.style)
                         ColorStyleCard(
                             label = stringResource(R.string.shapeColor),
                             style = shapeStyle,
@@ -464,7 +542,7 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
                                 showSingleColorEffects = false,
                                 onDismiss = { shapeColorPickerOpen = false },
                                 onApply = { style ->
-                                    state.shapeStyle = style
+                                    state.updateShape { copy(fill = style.asFill()) }
                                     shapeColorPickerOpen = false
                                 }
                             )
@@ -476,8 +554,8 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
 
         GlobalEffectCard(
             title = stringResource(R.string.iconScale),
-            summary = "${(state.iconScale * 100).roundToInt()}%",
-            active = state.iconScale != 1f,
+            summary = formatPercent(state.modifiers.transform.scale),
+            active = state.modifiers.transform.scale != 1f,
             expanded = expanded == GlobalStyleEffect.SCALE,
             onExpand = {
                 expandedName = if (expanded == GlobalStyleEffect.SCALE) ""
@@ -486,9 +564,9 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
         ) {
             LabeledSlider(
                 label = stringResource(R.string.iconScale),
-                value = state.iconScale,
-                onValueChange = { state.iconScale = it },
-                valueRange = 0.5f..1.5f,
+                value = state.modifiers.transform.scale,
+                onValueChange = { state.updateTransform { copy(scale = it) } },
+                valueRange = MODIFIER_SCALE_RANGE,
                 centered = true,
                 ruler = percentRuler()
             )
@@ -497,7 +575,7 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
         GlobalEffectCard(
             title = stringResource(R.string.outlineGlobal),
             summary = outlineSummary,
-            active = state.outlineAdd,
+            active = state.outline.isEnabled,
             expanded = expanded == GlobalStyleEffect.OUTLINE,
             onExpand = {
                 expandedName = if (expanded == GlobalStyleEffect.OUTLINE) ""
@@ -506,18 +584,18 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
         ) {
             ControlledGlobalSwitchRow(
                 label = stringResource(R.string.outlineGlobal),
-                checked = state.outlineAdd
-            ) { state.outlineAdd = it }
-            AnimatedVisibility(visible = state.outlineAdd) {
+                checked = state.outline.isEnabled
+            ) { state.updateOutline { copy(mode = if (it) OutlineMode.ADD else OutlineMode.NONE) } }
+            AnimatedVisibility(visible = state.outline.isEnabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     LabeledSlider(
                         label = stringResource(R.string.outlineThickness),
-                        value = state.outlineWidth,
-                        onValueChange = { state.outlineWidth = it },
+                        value = state.outline.width,
+                        onValueChange = { state.updateOutline { copy(width = it) } },
                         valueRange = 1f..16f,
                         ruler = pixelRuler()
                     )
-                    val outlineStyle = state.outlineStyle
+                    val outlineStyle = requireNotNull(state.outline.fill.style)
                     ColorStyleCard(
                         label = stringResource(R.string.outlineColor),
                         style = outlineStyle,
@@ -531,7 +609,7 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
                             showSingleColorEffects = false,
                             onDismiss = { outlineSheetOpen = false },
                             onApply = { style ->
-                                state.outlineStyle = style
+                                state.updateOutline { copy(fill = style.asFill()) }
                                 outlineSheetOpen = false
                             }
                         )
@@ -540,10 +618,19 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
             }
         }
 
+        GlobalShadowCard(
+            state = state,
+            expanded = expanded == GlobalStyleEffect.SHADOW,
+            onExpand = {
+                expandedName = if (expanded == GlobalStyleEffect.SHADOW) ""
+                else GlobalStyleEffect.SHADOW.name
+            }
+        )
+
         GlobalEffectCard(
             title = stringResource(R.string.globalColorize),
             summary = colorizeSummary,
-            active = state.colorize,
+            active = colorize,
             expanded = expanded == GlobalStyleEffect.COLORIZE,
             onExpand = {
                 expandedName = if (expanded == GlobalStyleEffect.COLORIZE) ""
@@ -552,10 +639,10 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
         ) {
             ControlledGlobalSwitchRow(
                 label = stringResource(R.string.globalColorize),
-                checked = state.colorize
-            ) { state.colorize = it }
-            AnimatedVisibility(visible = state.colorize) {
-                val colorizerStyle = state.colorizerStyle
+                checked = colorize
+            ) { state.updateEffect { copy(imageEdit = if (it) ImageEdit.COLORIZE else ImageEdit.NONE) } }
+            AnimatedVisibility(visible = colorize) {
+                val colorizerStyle = state.modifiers.effect.colorizer
                 ColorStyleCard(
                     label = stringResource(R.string.colorize),
                     style = colorizerStyle,
@@ -568,7 +655,7 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
                         sampleBitmap = null,
                         onDismiss = { colorizeSheetOpen = false },
                         onApply = { style ->
-                            state.colorizerStyle = style
+                            state.updateEffect { copy(colorizer = style) }
                             colorizeSheetOpen = false
                         }
                     )

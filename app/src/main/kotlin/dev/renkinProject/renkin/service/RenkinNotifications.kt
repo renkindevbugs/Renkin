@@ -100,8 +100,13 @@ class RenkinNotifications {
 
         with(NotificationManagerCompat.from(context)) {
             if (!canPostNotifications(context)) return
-            notify(iconAvailableId(suggestionId), builder.build())
-            notify(iconAvailableSummaryId, summary)
+            try {
+                notify(iconAvailableId(suggestionId), builder.build())
+                notify(iconAvailableSummaryId, summary)
+            } catch (_: SecurityException) {
+                // Permission can be revoked after the check and before either publication.
+                return
+            }
         }
     }
 

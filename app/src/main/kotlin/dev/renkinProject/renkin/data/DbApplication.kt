@@ -14,6 +14,7 @@ import androidx.room.RoomDatabase
 import androidx.room.Update
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
 
 /** The always-present default profile: undeletable, builds the base Renkin pack package. */
 const val DEFAULT_PROFILE_ID = 1L
@@ -21,8 +22,8 @@ const val DEFAULT_PROFILE_ID = 1L
 /**
  * A named icon set. Every profile owns its own icon assignments ([DbApplication.profileId]),
  * builds its own icon pack APK (a per-profile package name, so several packs can be installed
- * side by side) and keeps its own generation preferences ([prefsSnapshot], swapped in/out of
- * the shared DataStore when the active profile changes).
+ * side by side). [profileStyle] owns configured settings after bootstrap; [prefsSnapshot] and
+ * the active DataStore values are compatibility projections.
  */
 @Entity
 data class Profile(
@@ -31,13 +32,19 @@ data class Profile(
     @ColumnInfo(defaultValue = "") val description: String = "",
     // Launcher-visible label of this profile's built pack (e.g. "Renkin Dark").
     @ColumnInfo(defaultValue = "") val packLabel: String = "",
-    // JSON snapshot of the generation preferences, captured when switching away.
+    // Legacy JSON projection, atomically updated with profileStyle by the style owner.
     @ColumnInfo(defaultValue = "") val prefsSnapshot: String = "",
     // True when the profile's icons were saved (e.g. before switching away) but not built
     // into the pack APK since — the UI marks these so the save isn't mistaken for a build.
     @ColumnInfo(defaultValue = "0") val hasUnbuiltChanges: Boolean = false,
     // "Don't show again" for the missing-icon-packs dialog, chosen per profile.
-    @ColumnInfo(defaultValue = "0") val hideMissingPackWarning: Boolean = false
+    @ColumnInfo(defaultValue = "0") val hideMissingPackWarning: Boolean = false,
+    // Empty only for unconverted legacy rows; bootstrap fills it before storage becomes ready.
+    @ColumnInfo(defaultValue = "") val profileStyle: String = "",
+    // Hand-added launcher components (AppTargetCodec JSON). Only updateAppTargets writes it.
+    @ColumnInfo(defaultValue = "") val appTargets: String = "",
+    @ColumnInfo(defaultValue = "") val customPackageName: String = "",
+    @ColumnInfo(defaultValue = "") val packIcon: String = ""
 )
 
 @Entity(primaryKeys = ["packageName", "activityName", "profileId"])
@@ -80,7 +87,12 @@ data class DbApplication(
     // icon with the pack's fallback styling. Persisted so the home card's fallback count and
     // the Fallback list filter survive profile switches and restarts (the flag can't be
     // re-derived from the stored bitmap).
-    @ColumnInfo(defaultValue = "0") val isFallbackIcon: Boolean = false
+    @ColumnInfo(defaultValue = "0") val isFallbackIcon: Boolean = false,
+    // Last local modifier stage that produced baseDrawable, not a recipe to apply onto it.
+    // Empty for older icons or edits containing brush geometry outside the portable codec.
+    @ColumnInfo(defaultValue = "") val modifierRecipe: String = "",
+    // Bounded settings and content hash; source artwork lives in filesDir/icon-inputs.
+    @ColumnInfo(defaultValue = "") val modifierInput: String = ""
 )
 
 /**
@@ -103,6 +115,9 @@ interface BuiltIconDao {
 
     @Query("DELETE FROM BuiltIcon WHERE profileId = :profileId")
     fun deleteForProfile(profileId: Long)
+
+    @Query("DELETE FROM BuiltIcon WHERE profileId NOT IN (SELECT id FROM Profile)")
+    fun deleteForMissingProfiles()
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertAll(rows: List<BuiltIcon>)
@@ -233,12 +248,42 @@ interface PackVerdictDao {
 
 @Dao
 interface RenkinPackDao {
-    @Query("SELECT * FROM DbApplication WHERE profileId = :profileId")
-    fun getAll(profileId: Long): List<DbApplication>
+    // Row reads return over-long artwork empty; RenkinPackRepository completes it in chunks.
+    @Query("SELECT $ICON_ROW_COLUMNS FROM DbApplication WHERE profileId = :profileId AND packageName = :packageName AND activityName = :activityName")
+    fun editorBaselineInline(profileId: Long, packageName: String, activityName: String): DbApplication?
+
+    @Query("SELECT $FINGERPRINT_COLUMNS FROM DbApplication WHERE profileId = :profileId")
+    fun fingerprintRowsInline(profileId: Long): List<IconFingerprintRow>
+
+    @Query("SELECT modifierInput FROM DbApplication WHERE modifierInput != ''")
+    fun modifierInputDocuments(): List<String>
+
+    @Query("SELECT $ICON_ROW_COLUMNS FROM DbApplication WHERE profileId = :profileId")
+    fun getAllInline(profileId: Long): List<DbApplication>
 
     /** Every profile's rows in one query — backup export. */
-    @Query("SELECT * FROM DbApplication")
-    fun getAllProfiles(): List<DbApplication>
+    @Query("SELECT $ICON_ROW_COLUMNS FROM DbApplication")
+    fun getAllProfilesInline(): List<DbApplication>
+
+    @Query("SELECT profileId, packageName, activityName FROM DbApplication ORDER BY rowid")
+    fun exportKeys(): List<IconExportKey>
+
+    @Query("SELECT DISTINCT sourcePackName FROM DbApplication WHERE sourcePackName != '' " +
+        "AND (:profileId IS NULL OR profileId = :profileId) " +
+        "AND (:excludedProfileId IS NULL OR profileId != :excludedProfileId)")
+    fun exportSourcePacks(profileId: Long?, excludedProfileId: Long?): List<String>
+
+    @Query("SELECT $OVERSIZED_ARTWORK_COLUMNS FROM DbApplication WHERE $OVERSIZED_ARTWORK_FILTER AND profileId = :profileId")
+    fun oversizedArtwork(profileId: Long): List<OversizedIconArtwork>
+
+    @Query("SELECT $OVERSIZED_ARTWORK_COLUMNS FROM DbApplication WHERE $OVERSIZED_ARTWORK_FILTER")
+    fun oversizedArtworkAllProfiles(): List<OversizedIconArtwork>
+
+    @Query("SELECT substr(drawable, :start, :count) FROM DbApplication WHERE profileId = :profileId AND packageName = :packageName AND activityName = :activityName")
+    fun drawableChunk(profileId: Long, packageName: String, activityName: String, start: Int, count: Int): String?
+
+    @Query("SELECT substr(baseDrawable, :start, :count) FROM DbApplication WHERE profileId = :profileId AND packageName = :packageName AND activityName = :activityName")
+    fun baseDrawableChunk(profileId: Long, packageName: String, activityName: String, start: Int, count: Int): String?
 
     @Insert
     fun insertAll(apps: List<DbApplication>)
@@ -254,8 +299,38 @@ interface RenkinPackDao {
     fun distinctSourcePacks(): List<String>
 }
 
+/** Only the exported fields used by the saved-versus-built comparison; excludes source artwork. */
+data class IconFingerprintRow(
+    val packageName: String,
+    val activityName: String,
+    val drawable: String,
+    val calendarEnabled: Boolean,
+    val calendarPrefix: String
+)
+
+data class IconExportKey(
+    val profileId: Long,
+    val packageName: String,
+    val activityName: String
+)
+
 @Dao
 interface ProfileDao {
+    @Query("UPDATE Profile SET profileStyle = :document, prefsSnapshot = :legacySnapshot WHERE id = :id")
+    fun updateStyle(id: Long, document: String, legacySnapshot: String): Int
+
+    @Query("UPDATE Profile SET appTargets = :targets WHERE id = :id")
+    fun updateAppTargets(id: Long, targets: String): Int
+
+    @Query("UPDATE Profile SET name = :name, description = :description, packLabel = :packLabel, customPackageName = :customPackageName, packIcon = :packIcon, hasUnbuiltChanges = :unbuilt WHERE id = :id")
+    fun updateDetails(id: Long, name: String, description: String, packLabel: String, customPackageName: String, packIcon: String, unbuilt: Boolean): Int
+
+    @Query("UPDATE Profile SET hasUnbuiltChanges = :unbuilt WHERE id = :id")
+    fun setUnbuilt(id: Long, unbuilt: Boolean): Int
+
+    @Query("UPDATE Profile SET hideMissingPackWarning = :hide WHERE id = :id")
+    fun setHideMissingPackWarning(id: Long, hide: Boolean): Int
+
     @Query("SELECT * FROM Profile ORDER BY id")
     fun getAllFlow(): kotlinx.coroutines.flow.Flow<List<Profile>>
 
@@ -301,6 +376,14 @@ interface ProfileDao {
 // added: fingerprints are derived from the stored rows instead, and the rebuild makes both
 // shapes of 16 (with and without the column) end up identical.
 // Version 18 adds the ModifierPreset table (saved Modifier-tab recipes, shared by every profile).
+// Version 19 adds optional per-icon modifier metadata without changing the baked artwork.
+// Version 20 adds a reference to the retained input for local modifier replay.
+// Version 21 reserves Profile.profileStyle; DataStore still owns active settings until cutover.
+// Version 22 adds Profile.appTargets (hand-added launcher components, issue #24).
+// Version 23 adds Profile.customPackageName and Profile.packIcon (issue #26).
+// Version 24 adds the GlobalStyleHistoryEntry table (Global style Apply history).
+// Recovery from older snapshots is audited in BackupDatabaseSnapshot (omitted columns and added
+// tables); review it on every bump.
 @Database(
     entities = [
         DbApplication::class,
@@ -308,9 +391,10 @@ interface ProfileDao {
         PackVerdict::class,
         ColorPreset::class,
         BuiltIcon::class,
-        ModifierPreset::class
+        ModifierPreset::class,
+        GlobalStyleHistoryEntry::class
     ],
-    version = 18
+    version = 24
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -319,6 +403,7 @@ abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun colorPresetDao(): ColorPresetDao
     abstract fun modifierPresetDao(): ModifierPresetDao
     abstract fun builtIconDao(): BuiltIconDao
+    abstract fun globalStyleHistoryDao(): GlobalStyleHistoryDao
 
     companion object {
         @Volatile
@@ -540,6 +625,49 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN modifierRecipe TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        internal val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN modifierInput TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        internal val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE Profile ADD COLUMN profileStyle TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        internal val MIGRATION_21_22 = object : Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE Profile ADD COLUMN appTargets TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        internal val MIGRATION_22_23 = object : Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE Profile ADD COLUMN customPackageName TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE Profile ADD COLUMN packIcon TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        internal val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `GlobalStyleHistoryEntry` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`profileId` INTEGER NOT NULL, `appliedAt` INTEGER NOT NULL, `style` TEXT NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_GlobalStyleHistoryEntry_profileId` ON `GlobalStyleHistoryEntry` (`profileId`)"
+                )
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -557,7 +685,13 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_14_15,
             MIGRATION_15_16,
             MIGRATION_16_17,
-            MIGRATION_17_18
+            MIGRATION_17_18,
+            MIGRATION_18_19,
+            MIGRATION_19_20,
+            MIGRATION_20_21,
+            MIGRATION_21_22,
+            MIGRATION_22_23,
+            MIGRATION_23_24
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {
@@ -576,6 +710,12 @@ abstract class RenkinPackDatabase : RoomDatabase() {
 
             override fun onOpen(db: SupportSQLiteDatabase) {
                 insertDefaultProfile(db)
+                // Pre-release v20 builds embedded optional source artwork in this column.
+                // Remove that obsolete representation before SELECT * can fill a CursorWindow.
+                if (db.version >= 20) db.execSQL(
+                    "UPDATE DbApplication SET modifierInput = '' WHERE length(CAST(modifierInput AS BLOB)) > " +
+                        StoredIconModifierInput.MAX_DOCUMENT_CHARS + " OR instr(modifierInput, '\"input\":') > 0"
+                )
             }
         }
 

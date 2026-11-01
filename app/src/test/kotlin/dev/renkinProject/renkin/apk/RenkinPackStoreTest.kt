@@ -15,6 +15,7 @@ import dev.renkinProject.renkin.extension.toBase64
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -22,10 +23,33 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33])
 class RenkinPackStoreTest {
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun equalBitmapPayloadsRestoreIndependentArtwork() {
+        val bitmap = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(AndroidColor.BLUE)
+        }
+        val payload = bitmap.toBase64(Bitmap.CompressFormat.PNG, 100)
+        val row = DbApplication(
+            packageName = "com.example", activityName = "com.example.Main",
+            isAdaptiveIcon = false, isXml = false, drawable = payload,
+            baseDrawable = payload, baseIsXml = false, baseIsAdaptiveIcon = false
+        )
+        val restored = store().decodeRow(row, Color.Black)
+        val rendered = restored.icon as BitmapIconDrawable
+        val base = restored.baseIcon as BitmapIconDrawable
+        assertNotSame(rendered, base)
+        assertNotSame(rendered.drawable.bitmap, base.drawable.bitmap)
+        assertEquals(AndroidColor.BLUE, rendered.drawable.bitmap.getPixel(0, 0))
+        rendered.drawable.bitmap.recycle()
+        assertEquals(AndroidColor.BLUE, base.drawable.bitmap.getPixel(0, 0))
+    }
 
     private fun store(): RenkinPackStore {
         val context: Application = RuntimeEnvironment.getApplication()

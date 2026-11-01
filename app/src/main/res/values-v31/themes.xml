@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ rasterises a static splash icon into a soft bitmap (measured on Android 16:
+         twice the blurred edge pixels of the same vector drawn by the app). An animated vector is
+         drawn live and stays sharp, so the symbol is wrapped in a no-op animation here. -->
+    <style name="Theme.Renkin.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/launch_plum</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/launch_splash_live</item>
+        <item name="postSplashScreenTheme">@style/Theme.Material3.DayNight.NoActionBar</item>
+    </style>
+</resources>

@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.data
 
 import android.app.Application
 import android.content.Context
+import dev.renkinProject.renkin.icon.creator.*
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -43,9 +44,199 @@ class RenkinPackMigrationTest {
 
     @Test
     fun everyReleasedSchemaMigratesToCurrent() {
-        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17).forEach { version ->
+        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23).forEach { version ->
             RenkinPackDatabase.open(context, historical(version, "from-$version")).useDatabase { database ->
                 database.openHelper.writableDatabase
+            }
+        }
+    }
+
+    @Test fun version20AddsUnconvertedStyleWithoutChangingAnyProfileValue() = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Default) {
+        var expected = emptyMap<String, String?>()
+        val name = historical(20, "v20-style") { db ->
+            db.execSQL("INSERT INTO Profile (id, name, description, packLabel, prefsSnapshot, hasUnbuiltChanges, hideMissingPackWarning) " +
+                "VALUES (7, 'Dark', 'kept description', 'Dark Pack', '{\"PRIMARY_SOURCE\":-17}', 1, 1)")
+            db.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                expected = cursor.columnNames.associateWith { cursor.getString(cursor.getColumnIndexOrThrow(it)) }
+            }
+        }
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            val sql = database.openHelper.writableDatabase
+            assertEquals(24, sql.version)
+            sql.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                expected.forEach { (column, value) -> assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column))) }
+                assertTrue("profileStyle" in cursor.columnNames)
+                assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("profileStyle")))
+            }
+            assertEquals("", database.profileDao().get(DEFAULT_PROFILE_ID)!!.profileStyle)
+            val id = database.profileDao().insert(Profile(name = "New"))
+            assertEquals("", database.profileDao().get(id)!!.profileStyle)
+            sql.execSQL("INSERT INTO Profile (id, name) VALUES (9, 'SQL default')")
+            assertEquals("", database.profileDao().get(9)!!.profileStyle)
+        }
+    }
+
+    @Test fun version21AddsEmptyAppTargetsWithoutChangingAnyProfileValue() = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Default) {
+        var expected = emptyMap<String, String?>()
+        val name = historical(21, "v21-targets") { db ->
+            db.execSQL("INSERT INTO Profile (id, name, description, packLabel, prefsSnapshot, hasUnbuiltChanges, hideMissingPackWarning, profileStyle) " +
+                "VALUES (7, 'Dark', 'kept description', 'Dark Pack', 'prefs', 1, 1, 'typed document')")
+            db.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                expected = cursor.columnNames.associateWith { cursor.getString(cursor.getColumnIndexOrThrow(it)) }
+            }
+        }
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            val sql = database.openHelper.writableDatabase
+            assertEquals(24, sql.version)
+            sql.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                expected.forEach { (column, value) -> assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column))) }
+                assertTrue("appTargets" in cursor.columnNames)
+                assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("appTargets")))
+            }
+            assertEquals(1, database.profileDao().updateAppTargets(7, "[]"))
+            assertEquals("[]", database.profileDao().get(7)!!.appTargets)
+        }
+    }
+
+    @Test fun currentProfileColumnSurvivesDaoCopiesAndDatabaseReopen() =kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Default) {
+        val name = historical(21, "v21-style") { db ->
+            db.execSQL("INSERT INTO Profile (id, name, profileStyle) VALUES (7, 'Original', 'retained typed document')")
+        }
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            val profile = database.profileDao().get(7)!!
+            database.profileDao().update(profile.copy(name = "Renamed", hideMissingPackWarning = true))
+        }
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            assertEquals("Renamed", database.profileDao().get(7)!!.name)
+            assertEquals("retained typed document", database.profileDao().get(7)!!.profileStyle)
+        }
+    }
+
+    @Test fun version23AddsAnEmptyGlobalStyleHistoryAndKeepsProfilesAndIcons() =
+        kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Default) {
+            val name = historical(23, "v23-history") { db ->
+                db.execSQL("INSERT INTO Profile (id, name, customPackageName, packIcon) VALUES (7, 'Dark', 'com.example.pack', 'icon')")
+                db.execSQL("INSERT INTO DbApplication (packageName, activityName, isAdaptiveIcon, isXml, drawable, profileId) VALUES ('com.example', 'Main', 0, 0, 'rendered', 7)")
+            }
+            RenkinPackDatabase.open(context, name).useDatabase { database ->
+                assertEquals(24, database.openHelper.writableDatabase.version)
+                assertEquals("com.example.pack", database.profileDao().get(7)!!.customPackageName)
+                assertEquals("rendered", database.renkinPackDao().getAllInline(7).single().drawable)
+                assertTrue(database.globalStyleHistoryDao().list(7).isEmpty())
+                database.globalStyleHistoryDao().insert(GlobalStyleHistoryEntry(profileId = 7, appliedAt = 5, style = "{}"))
+                assertEquals(listOf("{}"), database.globalStyleHistoryDao().list(7).map { it.style })
+            }
+        }
+
+    @Test fun version22AddsEmptyPackIdentityWithoutChangingExistingProfileOrIconData() =
+        kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.Default) {
+            var expected = emptyMap<String, String?>()
+            val name = historical(22, "v22-pack-identity") { db ->
+                db.execSQL("INSERT INTO Profile (id, name, description, packLabel, prefsSnapshot, hasUnbuiltChanges, hideMissingPackWarning, profileStyle, appTargets) " +
+                    "VALUES (7, 'Dark', 'description', 'Dark Pack', 'legacy', 1, 1, 'typed style', 'targets')")
+                db.execSQL("INSERT INTO DbApplication (packageName, activityName, isAdaptiveIcon, isXml, drawable, baseDrawable, profileId) " +
+                    "VALUES ('com.example', 'Main', 1, 1, 'rendered layers', 'base layers', 7)")
+                db.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    expected = cursor.columnNames.associateWith { cursor.getString(cursor.getColumnIndexOrThrow(it)) }
+                }
+            }
+            RenkinPackDatabase.open(context, name).useDatabase { database ->
+                val sql = database.openHelper.writableDatabase
+                assertEquals(24, sql.version)
+                sql.query("SELECT * FROM Profile WHERE id = 7").use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    expected.forEach { (column, value) ->
+                        assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column)))
+                    }
+                    assertEquals(listOf("customPackageName", "packIcon"), cursor.columnNames.takeLast(2))
+                    assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("customPackageName")))
+                    assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("packIcon")))
+                }
+                val icon = database.renkinPackDao().getAllInline(7).single()
+                assertEquals("rendered layers", icon.drawable)
+                assertEquals("base layers", icon.baseDrawable)
+                assertTrue(icon.isAdaptiveIcon)
+                sql.execSQL("INSERT INTO Profile (id, name) VALUES (9, 'SQL defaults')")
+                assertEquals("", database.profileDao().get(9)!!.customPackageName)
+                assertEquals("", database.profileDao().get(9)!!.packIcon)
+            }
+        }
+
+    @Test fun version19AddsEmptyInputAndPreservesEveryExistingColumn() {
+        var expected = emptyMap<String, String?>()
+        val name = historical(19, "v19-input") { db ->
+            db.execSQL("INSERT INTO DbApplication " +
+                "(packageName, activityName, isAdaptiveIcon, isXml, drawable, baseDrawable, modifierRecipe, " +
+                "sourcePackName, sourceDrawableName, isCustomIcon, isFallbackIcon, calendarEnabled, calendarPrefix, profileId) " +
+                "VALUES ('com.custom', 'Main', 1, 1, 'rendered', 'base', 'kept recipe', 'pack.source', 'alternate', 1, 1, 1, 'day_', 1)")
+            db.query("SELECT * FROM DbApplication").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                expected = cursor.columnNames.associateWith { cursor.getString(cursor.getColumnIndexOrThrow(it)) }
+            }
+        }
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            database.openHelper.writableDatabase.query("SELECT * FROM DbApplication").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                expected.forEach { (column, value) -> assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column))) }
+                assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("modifierInput")))
+                assertFalse(cursor.moveToNext())
+            }
+        }
+    }
+
+    @Test fun version20OpenClearsObsoleteInlineAndOversizedInputsWithoutTouchingArtworkOrRecipe() {
+        val state = IconModifierInput(modifierInputTestOptions(), false, ModifierInputOrigin.UPLOAD)
+        val valid = checkNotNull(StoredIconModifierInput.encode(state, StoredModifierArtwork("a".repeat(64), false, false)))
+        val oversized = org.json.JSONObject(valid).put("unknown", "汉".repeat(23_000)).toString()
+        val name = historical(20, "v20-inline") { db ->
+            for ((key, input) in listOf("inline" to "{\"version\":1,\"input\":\"legacy\"}", "oversized" to oversized, "valid" to valid)) {
+                db.execSQL("INSERT INTO DbApplication (packageName, activityName, isAdaptiveIcon, isXml, drawable, baseDrawable, modifierRecipe, modifierInput) " +
+                    "VALUES (?, 'Main', 0, 0, 'rendered', 'base', 'kept recipe', ?)", arrayOf(key, input))
+            }
+        }
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            database.openHelper.writableDatabase.query("SELECT packageName, drawable, baseDrawable, modifierRecipe, modifierInput FROM DbApplication").use { cursor ->
+                var rows = 0
+                while (cursor.moveToNext()) {
+                    rows++
+                    assertEquals("rendered", cursor.getString(1))
+                    assertEquals("base", cursor.getString(2))
+                    assertEquals("kept recipe", cursor.getString(3))
+                    assertEquals(if (cursor.getString(0) == "valid") valid else "", cursor.getString(4))
+                }
+                assertEquals(3, rows)
+            }
+        }
+    }
+
+    @Test
+    fun version18AddsEmptyRecipeAndPreservesEveryExistingIconColumn() {
+        var expected = emptyMap<String, String?>()
+        val name = historical(18, "v18-recipe") { db ->
+            db.execSQL("INSERT INTO DbApplication " +
+                "(packageName, activityName, isAdaptiveIcon, isXml, drawable, baseDrawable, " +
+                "baseIsAdaptiveIcon, calendarEnabled, calendarPrefix, calendarPackName, " +
+                "sourcePackName, sourceUrl, isCustomIcon, isFallbackIcon, profileId) " +
+                "VALUES ('com.custom', 'Main', 1, 0, 'rendered', 'base', 1, 1, 'day_', " +
+                "'pack.calendar', 'pack.source', 'https://example.com/icon', 1, 1, 1)")
+            db.query("SELECT * FROM DbApplication").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                expected = cursor.columnNames.associateWith { cursor.getString(cursor.getColumnIndexOrThrow(it)) }
+            }
+        }
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            database.openHelper.writableDatabase.query("SELECT * FROM DbApplication").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("modifierRecipe")))
+                expected.forEach { (column, value) ->
+                    assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column)))
+                }
+                assertFalse(cursor.moveToNext())
             }
         }
     }

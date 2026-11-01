@@ -10,6 +10,7 @@
         <package android:name="ru.tech.imageresizershrinker" />
         <package android:name="moe.shizuku.privileged.api" />
         <package android:name="af.shizuku.plus.api" />
+        <package android:name="com.hamondev.shevery" />
         <intent>
             <action android:name="android.intent.action.MAIN" /> <!-- Allow to see all apps -->
         </intent>
@@ -23,7 +24,16 @@
             <category android:name="android.intent.category.DEFAULT" />
             <data android:mimeType="application/vnd.android.package-archive" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <intent>
+            <action android:name="android.content.pm.action.CONFIRM_INSTALL" />
+        </intent>
     </queries>
+    <!-- Shevery 14.6 delivers its binder to native clients without a Shizuku compatibility stub. -->
+    <uses-permission android:name="com.hamondev.shevery.permission.PRIVILEGED_API" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Used for exactly two things: asking the Play Store whether an icon pack referenced
          by an imported profile/backup is paid or free (PlayStoreLookup), and — only after the
@@ -79,23 +89,36 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:theme="@style/Theme.Material3.DayNight.NoActionBar"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
+            android:theme="@style/Theme.Renkin.Starting"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|locale|layoutDirection"
             tools:ignore="DiscouragedApi">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Receive an image shared back from an external editor (e.g. ImageToolbox); it's saved
-                 into the upload gallery so it can be picked as an icon. -->
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="" />
+        </activity>
+
+        <!-- Receives an image shared back from an external editor (e.g. ImageToolbox) and saves it
+             into the upload gallery. A trampoline, so the sender's task never gets a second
+             MainActivity; it finishes after the copy and brings Renkin's own task forward. Its empty
+             affinity keeps it out of Renkin's task, where the launcher intent would stack a new
+             MainActivity instead of resuming the existing one. -->
+        <activity
+            android:name=".ShareImportActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|locale|layoutDirection|fontScale">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
             </intent-filter>
-            <meta-data
-                android:name="android.app.lib_name"
-                android:value="" />
         </activity>
 
         <activity

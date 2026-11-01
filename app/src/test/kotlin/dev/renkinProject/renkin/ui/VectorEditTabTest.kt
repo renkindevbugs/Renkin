@@ -14,6 +14,34 @@ import org.junit.Test
 
 class VectorEditTabTest {
 
+    @Test fun unchangedSeedRemainsUnchangedAcrossRepeatedPublicationsAndDetectsEdits() {
+        val state = VectorEditState()
+        state.captureSeed()
+        repeat(3) {
+            assertFalse(state.hasChangesFromSeed)
+        }
+        state.thickness = 2f
+        assertTrue(state.hasChangesFromSeed)
+        state.thickness = 1f
+        assertFalse(state.hasChangesFromSeed)
+        state.viewportOverride = 24f to 24f
+        assertTrue(state.hasChangesFromSeed)
+    }
+
+    @Test fun replacingSeedProvenanceInvalidatesPublicationAndResetCapturesNewBaseline() {
+        val state = VectorEditState()
+        state.reset(containsBakedModifierEdits = true)
+        state.captureSeed()
+        val old = state.inputs()
+        state.containsBakedModifierEdits = false
+        assertTrue(state.hasChangesFromSeed)
+        assertFalse(old == state.inputs())
+        state.reset()
+        state.captureSeed()
+        assertFalse(state.hasChangesFromSeed)
+        assertFalse(state.containsBakedModifierEdits)
+    }
+
     @Test
     fun reloadedFilledPath_usesFillInsteadOfTransparentPersistenceStroke() {
         val vector = ImageVector.Builder("reload", 24.dp, 24.dp, 24f, 24f)

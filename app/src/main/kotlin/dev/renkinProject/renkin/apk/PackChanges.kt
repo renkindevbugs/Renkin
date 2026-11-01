@@ -1,6 +1,14 @@
 package dev.renkinProject.renkin.apk
 
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.stateIn
 
 /** How one app differs from what the last build put in the pack. */
 enum class PackChangeKind { ADDED, CHANGED, REMOVED }
@@ -13,6 +21,39 @@ data class PackChange(
     val kind: PackChangeKind,
     val reason: PackChangeReason
 )
+
+/** The diff may reach its collector after a newer application snapshot. */
+data class PackChangesState(
+    val sessionToken: ProfileSessionToken? = null,
+    val applicationRevision: Long = 0,
+    val changes: List<PackChange> = emptyList()
+) {
+    fun changesFor(state: ApplicationListState): List<PackChange> =
+        if (sessionToken != null && sessionToken == state.sessionToken && applicationRevision == state.revision) {
+            changes
+        } else emptyList()
+}
+
+internal data class PackChangeBaselines(
+    val owner: ProfileSessionToken?,
+    val built: Map<String, String>,
+    val saved: Map<String, String>,
+    val updated: Set<String>
+)
+
+internal fun observePackChanges(
+    applications: StateFlow<ApplicationListState>,
+    baselines: Flow<PackChangeBaselines>,
+    scope: CoroutineScope
+): StateFlow<PackChangesState> = combine(applications, baselines) { state, inputs ->
+    if (inputs.owner != null && inputs.owner == state.sessionToken) {
+        PackChangesState(
+            state.sessionToken, state.revision,
+            packChanges(state.applications, inputs.built, inputs.saved, inputs.updated)
+        )
+    } else PackChangesState()
+}.flowOn(Dispatchers.Default)
+    .stateIn(scope, SharingStarted.WhileSubscribed(5_000), PackChangesState())
 
 /**
  * What a build would change, compared with the icons the last build shipped. [builtKeys] is that

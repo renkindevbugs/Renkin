@@ -4,7 +4,8 @@ import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
@@ -16,12 +17,15 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.extension.toNullableColor
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -31,10 +35,27 @@ import kotlin.enums.enumEntries
 // snapshot read started by the next tap. This mutex gives writes and action snapshots one order.
 private val preferenceAccessMutex = Mutex()
 
+private suspend fun <T> withPreferenceAccess(block: suspend () -> T): T = StorageOperationGate.run {
+    preferenceAccessMutex.withLock { block() }
+}
+
+/** Settings writes use the owner under the storage gate; direct DataStore writes are reserved for restore and application settings. */
+private suspend fun DataStore<Preferences>.editOwnedPreferences(transform: (MutablePreferences) -> Unit) {
+    val owner = ProfileStyleAccess.ownerFor(this)
+    if (owner != null) owner.edit(transform) else edit { transform(it) }
+}
+
+/** Operations holding the storage gate use [getPreferencesAfterPendingWrites], never await shared UI emissions. */
+fun DataStore<Preferences>.observePreferences(): Flow<Preferences> = StorageOperationGate.observe(flow {
+    val owner = ProfileStyleAccess.ownerFor(this@observePreferences)
+    emitAll(owner?.observe() ?: this@observePreferences.data)
+})
+
 private const val DARK_MODE_NAME = "NIGHT_THEME"
 private const val INSTALL_METHOD_NAME = "INSTALL_METHOD"
 private const val EXTERNAL_INSTALLER_COMPONENT_NAME = "EXTERNAL_INSTALLER_COMPONENT"
 private const val ASK_INSTALLER_EVERY_TIME_NAME = "ASK_INSTALLER_EVERY_TIME"
+private const val SHOW_RENKIN_PACKS_NAME = "SHOW_RENKIN_PACKS"
 private const val INSTALLER_CHOICE_CONFIRMED_NAME = "INSTALLER_CHOICE_CONFIRMED"
 private const val INCLUDE_VECTOR_NAME = "INCLUDE_VECTOR"
 private const val MONOCHROME_NAME = "MONOCHROME"
@@ -80,6 +101,8 @@ val DarkModeKey = intPreferencesKey(DARK_MODE_NAME)
 val InstallMethodKey = intPreferencesKey(INSTALL_METHOD_NAME)
 val ExternalInstallerComponentKey = stringPreferencesKey(EXTERNAL_INSTALLER_COMPONENT_NAME)
 val AskInstallerEveryTimeKey = booleanPreferencesKey(ASK_INSTALLER_EVERY_TIME_NAME)
+/** App-wide, not per profile: offer other profiles' generated packs as icon sources (issue #25). */
+val ShowRenkinPacksKey = booleanPreferencesKey(SHOW_RENKIN_PACKS_NAME)
 val InstallerChoiceConfirmedKey = booleanPreferencesKey(INSTALLER_CHOICE_CONFIRMED_NAME)
 val IncludeVectorKey = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
 val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
@@ -166,6 +189,45 @@ val GlobalColorizerGradientPositionsKey =
     stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_POSITIONS")
 val GlobalColorizerGradientAngleKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_ANGLE")
 val GlobalColorizerGradientTypeKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_TYPE")
+// Pack-wide shadow, the per-icon Shadow modifier for every icon (issue #22). Blur, distance and
+// angle are Int px/degrees and opacity an Int percent: the profile snapshot restore only carries
+// Bool/Int/Long/String. The defaults are the Soft preset.
+val GlobalShadowKey = booleanPreferencesKey("GLOBAL_SHADOW")
+val GlobalShadowBlurKey = intPreferencesKey("GLOBAL_SHADOW_BLUR")
+val GlobalShadowDistanceKey = intPreferencesKey("GLOBAL_SHADOW_DISTANCE")
+val GlobalShadowAngleKey = intPreferencesKey("GLOBAL_SHADOW_ANGLE")
+val GlobalShadowAllDirectionsKey = booleanPreferencesKey("GLOBAL_SHADOW_ALL_DIRECTIONS")
+val GlobalShadowOpacityKey = intPreferencesKey("GLOBAL_SHADOW_OPACITY")
+val GlobalShadowColorKey = stringPreferencesKey("GLOBAL_SHADOW_COLOR")
+val GlobalShadowColorizerModeKey = intPreferencesKey("GLOBAL_SHADOW_COLORIZER_MODE")
+val GlobalShadowGradientTypeKey = intPreferencesKey("GLOBAL_SHADOW_GRADIENT_TYPE")
+val GlobalShadowGradientAngleKey = intPreferencesKey("GLOBAL_SHADOW_GRADIENT_ANGLE")
+val GlobalShadowGradientColorsKey = stringPreferencesKey("GLOBAL_SHADOW_GRADIENT_COLORS")
+val GlobalShadowGradientPositionsKey = stringPreferencesKey("GLOBAL_SHADOW_GRADIENT_POSITIONS")
+const val GLOBAL_SHADOW_BLUR_DEFAULT = 14
+const val GLOBAL_SHADOW_DISTANCE_DEFAULT = 7
+const val GLOBAL_SHADOW_ANGLE_DEFAULT = 135
+const val GLOBAL_SHADOW_OPACITY_DEFAULT = 32
+// How a refresh draws apps when the primary source is the app's own icon (issue #12): the same
+// Default / Material You / Monochrome choice the editor offers per app, for every app at once.
+val AppIconVariantKey = intPreferencesKey("APP_ICON_VARIANT")
+val AppIconFullIconKey = booleanPreferencesKey("APP_ICON_FULL_ICON")
+val AppIconInvertMonochromeKey = booleanPreferencesKey("APP_ICON_INVERT_MONOCHROME")
+// Index into the wallpaper Material You schemes, resolved at each refresh so icons follow the
+// current wallpaper; the value one past the last scheme selects the custom colours below.
+val AppIconMaterialYouSchemeKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_SCHEME")
+val AppIconMaterialYouForegroundKey = stringPreferencesKey("APP_ICON_MATERIAL_YOU_FOREGROUND")
+val AppIconMaterialYouForegroundModeKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_FOREGROUND_MODE")
+val AppIconMaterialYouForegroundGradientTypeKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_FOREGROUND_GRADIENT_TYPE")
+val AppIconMaterialYouForegroundGradientAngleKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_FOREGROUND_GRADIENT_ANGLE")
+val AppIconMaterialYouForegroundGradientColorsKey = stringPreferencesKey("APP_ICON_MATERIAL_YOU_FOREGROUND_GRADIENT_COLORS")
+val AppIconMaterialYouForegroundGradientPositionsKey = stringPreferencesKey("APP_ICON_MATERIAL_YOU_FOREGROUND_GRADIENT_POSITIONS")
+val AppIconMaterialYouBackgroundKey = stringPreferencesKey("APP_ICON_MATERIAL_YOU_BACKGROUND")
+val AppIconMaterialYouBackgroundModeKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_BACKGROUND_MODE")
+val AppIconMaterialYouBackgroundGradientTypeKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_BACKGROUND_GRADIENT_TYPE")
+val AppIconMaterialYouBackgroundGradientAngleKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_BACKGROUND_GRADIENT_ANGLE")
+val AppIconMaterialYouBackgroundGradientColorsKey = stringPreferencesKey("APP_ICON_MATERIAL_YOU_BACKGROUND_GRADIENT_COLORS")
+val AppIconMaterialYouBackgroundGradientPositionsKey = stringPreferencesKey("APP_ICON_MATERIAL_YOU_BACKGROUND_GRADIENT_POSITIONS")
 // Which icon categories the global modifiers apply to (the Global options screen's toggle
 // buttons): refresh-generated icons (on by default — also gates the globals during a bulk
 // refresh), hand-picked (custom) icons, and apps that have no icon yet (those get one
@@ -202,8 +264,7 @@ val LastSeenWhatsNewVersionKey = intPreferencesKey("LAST_SEEN_WHATS_NEW_VERSION"
 val HideProfileShareWarningKey = booleanPreferencesKey("HIDE_PROFILE_SHARE_WARNING")
 
 /**
- * The generation preferences that belong to a profile — captured into [Profile.prefsSnapshot]
- * when switching away and restored when switching back, so profiles don't influence each other.
+ * Profile fields represented by the typed style and its [Profile.prefsSnapshot]/UI projections.
  * App-level settings (dark mode, watch interval, sort/filter) intentionally stay global.
  */
 private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
@@ -211,7 +272,9 @@ private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
     OutlineAddKey, GlobalShapeCropKey, GlobalColorizeKey, GlobalColorizeFlatKey,
     GlobalColorizeLightenKey,
     GlobalColorizeMonochromeKey, GlobalColorizeInverseKey,
-    GlobalApplyGeneratedKey, GlobalApplyExistingKey, GlobalApplyCustomKey, GlobalIncludeEmptyKey
+    GlobalApplyGeneratedKey, GlobalApplyExistingKey, GlobalApplyCustomKey, GlobalIncludeEmptyKey,
+    AppIconFullIconKey, AppIconInvertMonochromeKey,
+    GlobalShadowKey, GlobalShadowAllDirectionsKey
 )
 
 private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
@@ -223,7 +286,14 @@ private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
     BackgroundColorizerModeKey, BackgroundGradientTypeKey, BackgroundGradientAngleKey,
     GlobalShapeColorizerModeKey, GlobalShapeGradientTypeKey, GlobalShapeGradientAngleKey,
     OutlineColorizerModeKey, OutlineGradientTypeKey, OutlineGradientAngleKey,
-    GlobalColorizerModeKey, GlobalColorizerGradientAngleKey, GlobalColorizerGradientTypeKey
+    GlobalColorizerModeKey, GlobalColorizerGradientAngleKey, GlobalColorizerGradientTypeKey,
+    AppIconVariantKey, AppIconMaterialYouSchemeKey,
+    AppIconMaterialYouForegroundModeKey, AppIconMaterialYouForegroundGradientTypeKey,
+    AppIconMaterialYouForegroundGradientAngleKey,
+    AppIconMaterialYouBackgroundModeKey, AppIconMaterialYouBackgroundGradientTypeKey,
+    AppIconMaterialYouBackgroundGradientAngleKey,
+    GlobalShadowBlurKey, GlobalShadowDistanceKey, GlobalShadowAngleKey, GlobalShadowOpacityKey,
+    GlobalShadowColorizerModeKey, GlobalShadowGradientTypeKey, GlobalShadowGradientAngleKey
 )
 
 private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
@@ -235,76 +305,129 @@ private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
     ColorizerGradientPositionsKey, GlobalColorizerGradientPositionsKey,
     OutlineGradientPositionsKey,
     BackgroundGradientColorsKey, BackgroundGradientPositionsKey,
-    GlobalShapeGradientColorsKey, GlobalShapeGradientPositionsKey
+    GlobalShapeGradientColorsKey, GlobalShapeGradientPositionsKey,
+    AppIconMaterialYouForegroundKey, AppIconMaterialYouForegroundGradientColorsKey,
+    AppIconMaterialYouForegroundGradientPositionsKey,
+    AppIconMaterialYouBackgroundKey, AppIconMaterialYouBackgroundGradientColorsKey,
+    AppIconMaterialYouBackgroundGradientPositionsKey,
+    GlobalShadowColorKey, GlobalShadowGradientColorsKey, GlobalShadowGradientPositionsKey
 )
 
 val ProfilePrefKeys: List<Preferences.Key<*>> =
     ProfileBooleanPrefKeys + ProfileIntPrefKeys + ProfileStringPrefKeys
 
+private val legacyProfilePreferences = LegacyProfilePreferences(
+    ProfileBooleanPrefKeys, ProfileIntPrefKeys, ProfileStringPrefKeys
+)
+
+private val persistedPreferenceTypes: Map<String, (Any) -> Boolean> = buildMap {
+    for (key in ProfileBooleanPrefKeys + listOf(
+        AskInstallerEveryTimeKey, InstallerChoiceConfirmedKey, AppFilterNoIconKey,
+        OnboardingSeenKey, HideProfileShareWarningKey, ShowRenkinPacksKey
+    )) put(key.name) { it is Boolean }
+    for (key in ProfileIntPrefKeys + listOf(
+        DarkModeKey, InstallMethodKey, AppSortOrderKey, WatchCheckIntervalKey,
+        AutoBackupIntervalKey, LastSeenWhatsNewVersionKey
+    )) put(key.name) { it is Int }
+    for (key in ProfileStringPrefKeys + listOf(ExternalInstallerComponentKey, AutoBackupTreeUriKey)) {
+        put(key.name) { it is String }
+    }
+    for (key in listOf(ActiveProfileIdKey, LastWatchCheckAtKey, LastAutoBackupAtKey)) put(key.name) { it is Long }
+}
+
+internal fun isValidPersistedPreference(name: String, value: Any): Boolean =
+    persistedPreferenceTypes[name]?.invoke(value) ?: true
+
 /** Commits only the staged Global options keys from [source], under the shared write mutex. */
 suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preferences) {
-    preferenceAccessMutex.withLock {
-        edit { target -> target.copyGlobalModifierPrefsFrom(source) }
+    withPreferenceAccess {
+        editOwnedPreferences { target -> target.copyGlobalModifierPrefsFrom(source) }
     }
 }
 
 /** Commits the staged sources and modifiers as one profile-scoped Global style transaction. */
 suspend fun DataStore<Preferences>.persistGlobalStylePrefs(source: Preferences) {
-    preferenceAccessMutex.withLock {
-        edit { target ->
-            target[PrimarySourceKey] = source.getIntValue(
-                PrimarySourceKey, SOURCE_DEFAULT.ordinal
-            )
-            target[PrimaryIconPackKey] = source.getStringValue(PrimaryIconPackKey)
-            target[SecondarySourceKey] = source.getIntValue(
-                SecondarySourceKey, SOURCE_DEFAULT.ordinal
-            )
-            target[SecondaryIconPackKey] = source.getStringValue(SecondaryIconPackKey)
-            target[FallbackSourceKey] = source.getIntValue(
-                FallbackSourceKey, FALLBACK_SOURCE_DEFAULT.ordinal
-            )
-            target.copyGlobalModifierPrefsFrom(source)
-        }
+    withPreferenceAccess {
+        editOwnedPreferences { target -> target.copyGlobalStyleFrom(source) }
     }
+}
+
+/** Exactly the keys [persistGlobalStylePrefs] writes: the Global screen's sources and global layer. */
+fun Preferences.globalStyleRecipe(): Preferences =
+    mutablePreferencesOf().apply { copyGlobalStyleFrom(this@globalStyleRecipe) }
+
+/** These preferences with [recipe]'s Global style keys written over them. */
+fun Preferences.withGlobalStyle(recipe: Preferences): Preferences =
+    toMutablePreferences().apply { copyGlobalStyleFrom(recipe) }
+
+private val GlobalTargetKeys = listOf(GlobalApplyGeneratedKey, GlobalApplyExistingKey, GlobalApplyCustomKey, GlobalIncludeEmptyKey)
+
+/** These preferences with every global effect off; the sources and the Apply targets stay. */
+fun Preferences.withoutGlobalLayer(): Preferences {
+    val targetsOnly = mutablePreferencesOf().apply {
+        for (key in GlobalTargetKeys) this@withoutGlobalLayer[key]?.let { this[key] = it }
+    }
+    return toMutablePreferences().apply { copyGlobalModifierPrefsFrom(targetsOnly) }
+}
+
+private fun MutablePreferences.copyGlobalStyleFrom(source: Preferences) {
+    this[PrimarySourceKey] = source.getIntValue(PrimarySourceKey, SOURCE_DEFAULT.ordinal)
+    this[PrimaryIconPackKey] = source.getStringValue(PrimaryIconPackKey)
+    this[SecondarySourceKey] = source.getIntValue(SecondarySourceKey, SOURCE_DEFAULT.ordinal)
+    this[SecondaryIconPackKey] = source.getStringValue(SecondaryIconPackKey)
+    this[FallbackSourceKey] = source.getIntValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT.ordinal)
+    copyGlobalModifierPrefsFrom(source)
 }
 
 private fun MutablePreferences.copyGlobalModifierPrefsFrom(source: Preferences) {
     this[GlobalShapeKey] = source.getIntValue(GlobalShapeKey, 0)
     this[GlobalShapeCropKey] = source.getBooleanValue(GlobalShapeCropKey, true)
     this[GlobalShapeScaleKey] = source.getIntValue(GlobalShapeScaleKey, 100)
-    this[GlobalShapeColorKey] = source.getStringValue(GlobalShapeColorKey)
+    copyColorStyleFrom(source, GlobalShapeStyleKeys)
     this[GlobalIconScaleKey] = source.getIntValue(GlobalIconScaleKey, 100)
     this[OutlineAddKey] = source.getBooleanValue(OutlineAddKey)
     this[OutlineWidthKey] = source.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
-    this[OutlineColorKey] = source.getStringValue(OutlineColorKey)
-    this[OutlineColorizerModeKey] = source.getIntValue(OutlineColorizerModeKey)
-    this[OutlineGradientTypeKey] = source.getIntValue(OutlineGradientTypeKey)
-    this[OutlineGradientAngleKey] = source.getIntValue(OutlineGradientAngleKey)
-    this[OutlineGradientColorsKey] = source.getStringValue(OutlineGradientColorsKey)
-    this[OutlineGradientPositionsKey] = source.getStringValue(OutlineGradientPositionsKey)
+    copyColorStyleFrom(source, OutlineStyleKeys)
+    this[GlobalShadowKey] = source.getBooleanValue(GlobalShadowKey)
+    this[GlobalShadowBlurKey] = source.getIntValue(GlobalShadowBlurKey, GLOBAL_SHADOW_BLUR_DEFAULT)
+    this[GlobalShadowDistanceKey] = source.getIntValue(GlobalShadowDistanceKey, GLOBAL_SHADOW_DISTANCE_DEFAULT)
+    this[GlobalShadowAngleKey] = source.getIntValue(GlobalShadowAngleKey, GLOBAL_SHADOW_ANGLE_DEFAULT)
+    this[GlobalShadowAllDirectionsKey] = source.getBooleanValue(GlobalShadowAllDirectionsKey)
+    this[GlobalShadowOpacityKey] = source.getIntValue(GlobalShadowOpacityKey, GLOBAL_SHADOW_OPACITY_DEFAULT)
+    copyColorStyleFrom(source, GlobalShadowStyleKeys)
     this[GlobalColorizeKey] = source.getBooleanValue(GlobalColorizeKey)
-    this[GlobalColorizeColorKey] = source.getStringValue(GlobalColorizeColorKey)
     this[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
     this[GlobalColorizeLightenKey] = source.getBooleanValue(GlobalColorizeLightenKey)
     this[GlobalColorizeMonochromeKey] = source.getBooleanValue(GlobalColorizeMonochromeKey)
     this[GlobalColorizeInverseKey] = source.getBooleanValue(GlobalColorizeInverseKey)
-    this[GlobalColorizerModeKey] = source.getIntValue(GlobalColorizerModeKey)
-    this[GlobalColorizerGradientColorKey] = source.getStringValue(GlobalColorizerGradientColorKey)
-    this[GlobalColorizerGradientColorsKey] = source.getStringValue(GlobalColorizerGradientColorsKey)
-    this[GlobalColorizerGradientPositionsKey] =
-        source.getStringValue(GlobalColorizerGradientPositionsKey)
-    this[GlobalColorizerGradientAngleKey] = source.getIntValue(GlobalColorizerGradientAngleKey)
-    this[GlobalColorizerGradientTypeKey] = source.getIntValue(GlobalColorizerGradientTypeKey)
+    copyColorStyleFrom(source, GlobalColorizerStyleKeys)
     this[GlobalApplyGeneratedKey] = source.getBooleanValue(GlobalApplyGeneratedKey, true)
     this[GlobalApplyExistingKey] = source.getBooleanValue(GlobalApplyExistingKey)
     this[GlobalApplyCustomKey] = source.getBooleanValue(GlobalApplyCustomKey)
     this[GlobalIncludeEmptyKey] = source.getBooleanValue(GlobalIncludeEmptyKey)
 }
 
+// Copies every key of a colour style, so a style edited as a whole is also saved as a whole.
+// An unset colour is removed rather than copied as "", which colour parsing rejects.
+private fun MutablePreferences.copyColorStyleFrom(source: Preferences, keys: ColorStyleKeys) {
+    this[keys.mode] = source.getIntValue(keys.mode)
+    this[keys.gradientType] = source.getIntValue(keys.gradientType)
+    this[keys.gradientAngle] = source.getIntValue(keys.gradientAngle)
+    copyColorStringFrom(source, keys.firstColor)
+    copyColorStringFrom(source, keys.gradientColors)
+    copyColorStringFrom(source, keys.gradientPositions)
+    keys.legacyGradientColor?.let { copyColorStringFrom(source, it) }
+}
+
+private fun MutablePreferences.copyColorStringFrom(source: Preferences, key: Preferences.Key<String>) {
+    val value = source.getStringValue(key)
+    if (value.isEmpty()) this -= key else this[key] = value
+}
+
 /** Records the hero source that a successful build actually used as one atomic profile write. */
 suspend fun DataStore<Preferences>.persistBuiltPrimaryPrefs(source: Preferences) {
-    preferenceAccessMutex.withLock {
-        edit { target ->
+    withPreferenceAccess {
+        editOwnedPreferences { target ->
             target[BuiltPrimarySourceKey] = source.getIntValue(
                 PrimarySourceKey, SOURCE_DEFAULT.ordinal
             )
@@ -314,35 +437,37 @@ suspend fun DataStore<Preferences>.persistBuiltPrimaryPrefs(source: Preferences)
 }
 
 /** Serializes the profile-scoped preferences into a JSON snapshot (see [ProfilePrefKeys]). */
-fun Preferences.snapshotProfilePrefs(): String {
-    val json = org.json.JSONObject()
-    for (key in ProfilePrefKeys) {
-        this[key]?.let { json.put(key.name, it) }
-    }
-    return json.toString()
-}
+fun Preferences.snapshotProfilePrefs(): String =
+    legacyProfilePreferences.encode(ProfileStylePreferences.toPreferences(ProfileStylePreferences.capture(this)))
+
+internal fun String.withBuiltPrimaryPrefs(source: Preferences): String =
+    legacyProfilePreferences.withBuiltPrimary(this, source)
 
 /**
  * Restores a [snapshotProfilePrefs] JSON into the store: present keys are written back, absent
  * ones removed — a fresh profile starts from the defaults.
  */
 suspend fun DataStore<Preferences>.restoreProfilePrefs(snapshot: String) {
-    preferenceAccessMutex.withLock {
-        edit { it.replaceProfilePrefs(snapshot) }
+    withPreferenceAccess {
+        editOwnedPreferences { it.replaceProfilePrefs(snapshot) }
     }
 }
 
 /**
- * Snapshots the leaving profile, persists that snapshot, restores the target and records its id
- * while ordinary preference setters are blocked. Without one lock around the whole sequence, a
- * UI write can land after the leaving snapshot but before the target restore and be silently lost.
+ * Selects the owner's target style while ordinary setters are blocked. Standalone stores keep
+ * the legacy snapshot/swap contract under the same mutex, so an edit cannot cross a switch.
  */
 suspend fun DataStore<Preferences>.switchProfilePrefs(
     targetSnapshot: String,
     newProfileId: Long,
     persistLeavingSnapshot: suspend (String) -> Unit
 ) {
-    preferenceAccessMutex.withLock {
+    withPreferenceAccess {
+        val owner = ProfileStyleAccess.ownerFor(this)
+        if (owner != null) {
+            owner.switchTo(newProfileId)
+            return@withPreferenceAccess
+        }
         persistLeavingSnapshot(data.first().snapshotProfilePrefs())
         edit { target ->
             target.replaceProfilePrefs(targetSnapshot)
@@ -353,31 +478,12 @@ suspend fun DataStore<Preferences>.switchProfilePrefs(
 
 /** Replaces every profile key, removing missing, malformed and wrongly typed values. */
 internal fun MutablePreferences.replaceProfilePrefs(snapshot: String) {
-    // A corrupt/unparsable snapshot starts from defaults. Crucially, an invalid value must
-    // remove the previous profile's value instead of leaking it into the target profile.
-    val json = runCatching { org.json.JSONObject(snapshot) }.getOrDefault(org.json.JSONObject())
-
-    for (key in ProfileBooleanPrefKeys) {
-        val value = json.opt(key.name)
-        if (value is Boolean) this[key] = value else remove(key)
-    }
-    for (key in ProfileIntPrefKeys) {
-        val value = when (val raw = json.opt(key.name)) {
-            is Int -> raw
-            is Long -> raw.takeIf { it in Int.MIN_VALUE..Int.MAX_VALUE }?.toInt()
-            else -> null
-        }
-        if (value != null) this[key] = value else remove(key)
-    }
-    for (key in ProfileStringPrefKeys) {
-        val value = json.opt(key.name)
-        if (value is String) this[key] = value else remove(key)
-    }
+    legacyProfilePreferences.replace(this, snapshot)
 }
 
 @Composable
 fun DataStore<Preferences>.getPreferencesValue(): Preferences {
-    return data.collectAsState(initial = emptyPreferences()).value
+    return remember(this) { observePreferences() }.collectAsStateWithLifecycle(initialValue = emptyPreferences()).value
 }
 
 @Composable
@@ -560,18 +666,31 @@ fun DataStore<Preferences>.getGradientStops(
  * the source and another with the pack.
  */
 suspend fun DataStore<Preferences>.setPrimarySource(source: Source, packageName: String?) {
-    preferenceAccessMutex.withLock {
-        edit { target ->
+    withPreferenceAccess {
+        editOwnedPreferences { target ->
             target[PrimarySourceKey] = source.ordinal
             packageName?.let { target[PrimaryIconPackKey] = it }
         }
     }
 }
 
+suspend fun DataStore<Preferences>.setIconSources(
+    primary: Source, primaryPackage: String, secondary: Source, secondaryPackage: String
+) {
+    withPreferenceAccess {
+        editOwnedPreferences { target ->
+            target[PrimarySourceKey] = primary.ordinal
+            target[PrimaryIconPackKey] = primaryPackage
+            target[SecondarySourceKey] = secondary.ordinal
+            target[SecondaryIconPackKey] = secondaryPackage
+        }
+    }
+}
+
 /** Startup restore of the last BUILT source/pack — same atomicity requirement. */
 suspend fun DataStore<Preferences>.restoreBuiltPrimarySource(snapshot: Preferences) {
-    preferenceAccessMutex.withLock {
-        edit { target ->
+    withPreferenceAccess {
+        editOwnedPreferences { target ->
             target[PrimarySourceKey] = snapshot.getIntValue(
                 BuiltPrimarySourceKey, SOURCE_DEFAULT.ordinal
             )
@@ -615,6 +734,24 @@ val BackgroundStyleKeys = ColorStyleKeys(
     gradientPositions = BackgroundGradientPositionsKey
 )
 
+val AppIconMaterialYouForegroundStyleKeys = ColorStyleKeys(
+    mode = AppIconMaterialYouForegroundModeKey,
+    gradientType = AppIconMaterialYouForegroundGradientTypeKey,
+    gradientAngle = AppIconMaterialYouForegroundGradientAngleKey,
+    firstColor = AppIconMaterialYouForegroundKey,
+    gradientColors = AppIconMaterialYouForegroundGradientColorsKey,
+    gradientPositions = AppIconMaterialYouForegroundGradientPositionsKey
+)
+
+val AppIconMaterialYouBackgroundStyleKeys = ColorStyleKeys(
+    mode = AppIconMaterialYouBackgroundModeKey,
+    gradientType = AppIconMaterialYouBackgroundGradientTypeKey,
+    gradientAngle = AppIconMaterialYouBackgroundGradientAngleKey,
+    firstColor = AppIconMaterialYouBackgroundKey,
+    gradientColors = AppIconMaterialYouBackgroundGradientColorsKey,
+    gradientPositions = AppIconMaterialYouBackgroundGradientPositionsKey
+)
+
 val GlobalShapeStyleKeys = ColorStyleKeys(
     mode = GlobalShapeColorizerModeKey,
     gradientType = GlobalShapeGradientTypeKey,
@@ -632,6 +769,15 @@ val GlobalColorizerStyleKeys = ColorStyleKeys(
     gradientColors = GlobalColorizerGradientColorsKey,
     gradientPositions = GlobalColorizerGradientPositionsKey,
     legacyGradientColor = GlobalColorizerGradientColorKey
+)
+
+val GlobalShadowStyleKeys = ColorStyleKeys(
+    mode = GlobalShadowColorizerModeKey,
+    gradientType = GlobalShadowGradientTypeKey,
+    gradientAngle = GlobalShadowGradientAngleKey,
+    firstColor = GlobalShadowColorKey,
+    gradientColors = GlobalShadowGradientColorsKey,
+    gradientPositions = GlobalShadowGradientPositionsKey
 )
 
 // The outline's first colour IS its legacy key, so there is no separate legacy stop to write —
@@ -655,8 +801,8 @@ suspend fun DataStore<Preferences>.setColorStyle(
     // Covers the first colour too, so it is one longer than [gradientStops]; empty = even spread.
     gradientPositions: List<Float> = emptyList()
 ) {
-    preferenceAccessMutex.withLock {
-        edit { target ->
+    withPreferenceAccess {
+        editOwnedPreferences { target ->
             target.setColorStyle(
                 keys, mode, gradientType, gradientAngle,
                 firstColor, gradientStops, gradientPositions
@@ -719,19 +865,19 @@ inline fun <reified T: Enum<T>> Preferences.getEnumValue(
 
 //Common
 fun <T : Any> DataStore<Preferences>.getPreferenceFlow(key: Preferences.Key<T>): Flow<T?> {
-    return data.map { settings ->
+    return observePreferences().map { settings ->
         settings[key]
     }
 }
 
 @Composable
 fun <T : Any> DataStore<Preferences>.getPreferenceValue(key: Preferences.Key<T>, default: T): T {
-    return getPreferenceFlow(key).collectAsState(initial = default).value ?: default
+    return remember(this, key) { getPreferenceFlow(key) }.collectAsStateWithLifecycle(initialValue = default).value ?: default
 }
 
 suspend fun <T> DataStore<Preferences>.setPreferenceValue(key: Preferences.Key<T>, value: T) {
-    preferenceAccessMutex.withLock {
-        edit { settings ->
+    withPreferenceAccess {
+        editOwnedPreferences { settings ->
             settings[key] = value
         }
     }
@@ -739,7 +885,7 @@ suspend fun <T> DataStore<Preferences>.setPreferenceValue(key: Preferences.Key<T
 
 /** Reads a snapshot only after every preference write that started before it has completed. */
 suspend fun DataStore<Preferences>.getPreferencesAfterPendingWrites(): Preferences =
-    preferenceAccessMutex.withLock { data.first() }
+    withPreferenceAccess { ProfileStyleAccess.ownerFor(this)?.snapshot() ?: data.first() }
 
 //Labels
 @Composable

@@ -34,6 +34,19 @@ class PackBrowserPreviewsTest {
     }
 
     @Test
+    fun calendarDaysSortNumerically() {
+        val days = listOf("cal_10", "cal_2", "cal_1", "cal_31", "cal_3", "cal_02", "calendar")
+        assertEquals(
+            listOf("cal_1", "cal_02", "cal_2", "cal_3", "cal_10", "cal_31", "calendar"),
+            orderDrawableNames(days, emptyList(), "", IconSortOrder.NAME_ASC)
+        )
+        assertEquals(
+            listOf("calendar", "cal_31", "cal_10", "cal_3", "cal_2", "cal_02", "cal_1"),
+            orderDrawableNames(days, emptyList(), "", IconSortOrder.NAME_DESC)
+        )
+    }
+
+    @Test
     fun nameDesc_sortsDescending() {
         val result = orderDrawableNames(names, emptyList(), "", IconSortOrder.NAME_DESC)
         assertEquals(listOf("maps_pin", "google_maps", "gmail", "calendar"), result)
@@ -71,16 +84,21 @@ class PackBrowserPreviewsTest {
     }
 
     private fun options(color: Int = 0xFF000000.toInt()) = GenerationOptions(
-        primarySource = Source.APPLICATION_NAME,
-        primaryImageEdit = ImageEdit.NONE,
-        primaryTextType = TextType.FULL_NAME,
-        primaryIconPack = "",
-        color = color,
-        bgColor = 0,
-        vector = false,
-        materialYou = false,
-        themed = false,
-        override = true
+        source = IconSourceOptions(
+            primarySource = Source.APPLICATION_NAME,
+            primaryTextType = TextType.FULL_NAME,
+            primaryIconPack = ""
+        ),
+        export = IconExportOptions(
+            vector = false,
+            materialYou = false,
+            themed = false,
+            background = ColorFill(0)
+        ),
+        override = true,
+        modifiers = ModifierStack(
+            effect = EffectModifier(imageEdit = ImageEdit.NONE, colorizer = ColorizerStyle(firstColor = color)),
+        )
     )
 
     @Test

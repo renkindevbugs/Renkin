@@ -12,7 +12,6 @@ import android.graphics.drawable.Drawable
 import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
-import kotlin.math.roundToInt
 
 /**
  * Creates a blank ARGB_8888 bitmap of [width]×[height], runs [draw] on a Canvas backed by it and
@@ -191,24 +190,6 @@ fun Bitmap.contentBounds(): Rect? {
     return Rect(left, top, right + 1, bottom + 1)
 }
 
-/** Shifts the whole image by ([dx], [dy]) whole pixels; content pushed off the edge is dropped. */
-fun Bitmap.translated(dx: Float, dy: Float): Bitmap {
-    val idx = dx.roundToInt()
-    val idy = dy.roundToInt()
-    if (idx == 0 && idy == 0) return this
-    val w = width
-    val h = height
-    val px = IntArray(w * h)
-    getPixels(px, 0, w, 0, 0, w, h)
-    val out = IntArray(w * h)
-    for (y in 0 until h) for (x in 0 until w) {
-        val sx = x - idx
-        val sy = y - idy
-        if (sx in 0 until w && sy in 0 until h) out[y * w + x] = px[sy * w + sx]
-    }
-    return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
-}
-
 fun Bitmap.changeBackgroundColor(color: Int): Bitmap {
     val newBitmap = this.emptyLike()
     val canvas = Canvas(newBitmap)
@@ -268,7 +249,7 @@ fun Bitmap.toBase64(format: Bitmap.CompressFormat, quality: Int, base64Flag: Int
 fun Bitmap.contentHash(): String {
     val bytes = getBytes(Bitmap.CompressFormat.PNG, 100)
     val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
-    return digest.joinToString("") { "%02x".format(it) }
+    return digest.toLowerHex()
 }
 
 private val standardBase64Pattern = Regex("[A-Za-z0-9+/]*={0,2}")

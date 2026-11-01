@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -172,7 +171,7 @@ fun CreateTab(
     fontPath: String = "",
     onFontPathChange: (String) -> Unit = {},
     contentReady: Boolean = true,
-    // Resource id of the icon currently picked (from options.primaryIconPack), so the grid
+    // Resource id of the icon currently picked (from options.source.primaryIconPack), so the grid
     // can frame it. null = nothing picked yet.
     selectedResourceId: Int? = null,
     // Prefix of the picked calendar icon (e.g. "bee_calendar_"), so the grid frames the whole
@@ -212,7 +211,7 @@ fun CreateTab(
     val busy = activeLoads > 0 || searchQuery != debouncedQuery
     LaunchedEffect(busy) { onBusyChange(busy) }
     // Pack first-install times, fetched only once the recently-installed sort is chosen.
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     val packInstallTimes by produceState(emptyMap<String, Long>(), packSort, iconPacks) {
         if (packSort == PackSortOrder.INSTALL_DATE && value.isEmpty()) {
             value = viewModel.installTimes(iconPacks.map { it.packageName })
@@ -292,8 +291,8 @@ fun CreateTab(
                         query = debouncedQuery,
                         component = componentMatch,
                         onLoadingChange = trackLoad,
-                        selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.primaryIconPack },
-                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { detailPack.packageName == options.primaryIconPack },
+                        selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.source.primaryIconPack },
+                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { detailPack.packageName == options.source.primaryIconPack },
                         gridState = gridState,
                         onBack = { onExpandedPackChange(null) },
                         onSelect = { resource, _, drawableName -> onIconSelect(resource, detailPack, drawableName) }
@@ -331,8 +330,8 @@ fun CreateTab(
                                         query = debouncedQuery,
                                         component = componentMatch,
                                         onLoadingChange = trackLoad,
-                                        selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
-                                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.primaryIconPack },
+                                        selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.source.primaryIconPack },
+                                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.source.primaryIconPack },
                                         onMore = { onExpandedPackChange(pack) },
                                         onResult = { hasMatches ->
                                             packMatches = packMatches + (pack.packageName to hasMatches)
@@ -384,7 +383,7 @@ fun CreateTab(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                FontPickerRow(selectedPath = fontPath, onChange = onFontPathChange)
+                FontPickerRow(selectedPath = fontPath, fonts = viewModel.fonts, onChange = onFontPathChange)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -448,6 +447,42 @@ private fun ApplicationIconVariantSelector(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
+        ApplicationIconVariantControls(
+            variant, appHasMaterialYouIcon, appHasAdaptiveIcon, onVariantChange,
+            useFullApplicationIcon, onUseFullApplicationIconChange, invertMonochrome, onInvertMonochromeChange,
+            schemes, selectedScheme, onSchemeChange, customForeground, customBackground,
+            onCustomForegroundChange, onCustomBackgroundChange, renderForeground, renderBackground
+        )
+    }
+}
+
+/**
+ * The variant choice for an app drawn from its own launcher icon. The editor shows it for one
+ * app; Advanced options shows it for every app at once ([appliesToAllApps]), where whether an
+ * app ships an official Material You icon is only known per app at refresh time.
+ */
+@Composable
+internal fun ApplicationIconVariantControls(
+    variant: ApplicationIconVariant,
+    appHasMaterialYouIcon: Boolean,
+    appHasAdaptiveIcon: Boolean,
+    onVariantChange: (ApplicationIconVariant) -> Unit,
+    useFullApplicationIcon: Boolean,
+    onUseFullApplicationIconChange: (Boolean) -> Unit,
+    invertMonochrome: Boolean,
+    onInvertMonochromeChange: (Boolean) -> Unit,
+    schemes: List<Pair<Color, Color>>,
+    selectedScheme: Int,
+    onSchemeChange: (Int) -> Unit,
+    customForeground: ColorizerStyle,
+    customBackground: ColorizerStyle,
+    onCustomForegroundChange: (ColorizerStyle) -> Unit,
+    onCustomBackgroundChange: (ColorizerStyle) -> Unit,
+    renderForeground: (suspend (ColorizerStyle) -> Bitmap?)? = null,
+    renderBackground: (suspend (ColorizerStyle) -> Bitmap?)? = null,
+    appliesToAllApps: Boolean = false
+) {
+    Column {
         Text(
             text = stringResource(R.string.iconVariant),
             style = MaterialTheme.typography.titleSmall,
@@ -465,7 +500,7 @@ private fun ApplicationIconVariantSelector(
                 selected = variant == ApplicationIconVariant.MATERIAL_YOU,
                 modifier = Modifier.weight(1f),
                 badge = {
-                    if (!appHasMaterialYouIcon) {
+                    if (!appliesToAllApps && !appHasMaterialYouIcon) {
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
@@ -482,8 +517,11 @@ private fun ApplicationIconVariantSelector(
                 modifier = Modifier.weight(1f)
             ) { onVariantChange(ApplicationIconVariant.MONOCHROME) }
         }
-        val generatedMaterialYou = variant == ApplicationIconVariant.MATERIAL_YOU && !appHasMaterialYouIcon
+        val generatedMaterialYou = !appliesToAllApps &&
+            variant == ApplicationIconVariant.MATERIAL_YOU && !appHasMaterialYouIcon
         val hint = when {
+            appliesToAllApps && variant == ApplicationIconVariant.MATERIAL_YOU ->
+                stringResource(R.string.materialYouAllAppsHint)
             generatedMaterialYou -> stringResource(R.string.materialYouGeneratedHint)
             variant == ApplicationIconVariant.MATERIAL_YOU -> stringResource(R.string.materialYouRecolorHint)
             variant == ApplicationIconVariant.MONOCHROME -> stringResource(R.string.monochromeHint)

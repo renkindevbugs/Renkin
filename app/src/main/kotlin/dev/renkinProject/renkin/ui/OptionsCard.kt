@@ -22,7 +22,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -46,6 +49,8 @@ import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.FALLBACK_SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.data.FallbackSourceKey
+import dev.renkinProject.renkin.data.AppIconMaterialYouBackgroundStyleKeys
+import dev.renkinProject.renkin.data.AppIconMaterialYouForegroundStyleKeys
 import dev.renkinProject.renkin.data.IMAGE_EDIT_DEFAULT
 import androidx.compose.animation.AnimatedVisibility
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
@@ -83,8 +88,12 @@ import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.icon.creator.ApplicationIconStyle
+import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.applicationIconStyle
 import dev.renkinProject.renkin.icon.creator.colorStyle
+import kotlin.math.roundToInt
 
 /**
  * The home list's Advanced options card: expandable Generation defaults plus the entry point
@@ -202,8 +211,15 @@ private data class AdvancedOptionsState(
     val backgroundStyle: ColorizerStyle,
     val outlineStyle: ColorizerStyle,
     val outlineAdd: Boolean,
-    val outlineWidth: Float
+    val outlineWidth: Float,
+    val appIconStyle: ApplicationIconStyle,
+    val appIconMaterialYouForeground: ColorizerStyle,
+    val appIconMaterialYouBackground: ColorizerStyle
 ) {
+    /** The app-icon style applies only with the app's own icon as the primary source and no path tracing. */
+    val showsAppIconStyle: Boolean
+        get() = primarySource == Source.APPLICATION_ICON && !pathTracing
+
     val pathTracing: Boolean
         get() = isPathTracingEnabled(
             primarySource, primaryImageEdit, secondarySource, secondaryImageEdit
@@ -223,8 +239,10 @@ private data class AdvancedOptionsState(
 @Composable
 private fun advancedOptionsState(viewModel: OptionsViewModel): AdvancedOptionsState {
     val store = getPreferences()
-    val prefs by viewModel.preferenceSnapshot.collectAsState()
+    val prefs by viewModel.preferenceSnapshot.collectAsStateWithLifecycle()
     val iconColor = store.getIconColor()
+    // Custom Material You colours start from the first wallpaper scheme, as the refresh does.
+    val defaultScheme = rememberMaterialYouSchemes().first()
     return AdvancedOptionsState(
         primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT),
         primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT),
@@ -250,7 +268,10 @@ private fun advancedOptionsState(viewModel: OptionsViewModel): AdvancedOptionsSt
         outlineAdd = prefs.getBooleanValue(OutlineAddKey),
         outlineWidth = normalizeOutlineWidth(
             prefs.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
-        ).toFloat()
+        ).toFloat(),
+        appIconStyle = prefs.applicationIconStyle(),
+        appIconMaterialYouForeground = prefs.colorStyle(AppIconMaterialYouForegroundStyleKeys, defaultScheme.first),
+        appIconMaterialYouBackground = prefs.colorStyle(AppIconMaterialYouBackgroundStyleKeys, defaultScheme.second)
     )
 }
 
@@ -306,6 +327,31 @@ private fun AdvancedSourceSection(
         }
     }
 
+    // The editor's per-app icon variant, chosen once for every app the refresh draws (issue #12).
+    if (state.showsAppIconStyle) {
+        val style = state.appIconStyle
+        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            ApplicationIconVariantControls(
+                variant = style.variant,
+                appHasMaterialYouIcon = true,
+                appHasAdaptiveIcon = true,
+                onVariantChange = viewModel::setAppIconVariant,
+                useFullApplicationIcon = style.fullIcon,
+                onUseFullApplicationIconChange = viewModel::setAppIconFullIcon,
+                invertMonochrome = style.invertMonochrome,
+                onInvertMonochromeChange = viewModel::setAppIconInvertMonochrome,
+                schemes = rememberMaterialYouSchemes(),
+                selectedScheme = style.materialYouScheme,
+                onSchemeChange = viewModel::setAppIconMaterialYouScheme,
+                customForeground = state.appIconMaterialYouForeground,
+                customBackground = state.appIconMaterialYouBackground,
+                onCustomForegroundChange = viewModel::setAppIconMaterialYouForeground,
+                onCustomBackgroundChange = viewModel::setAppIconMaterialYouBackground,
+                appliesToAllApps = true
+            )
+        }
+    }
+
     if (needTextType(state.primarySource)) {
         TextTypeDropdown(R.string.primaryTextType, state.primaryTextType) {
             viewModel.setPrimaryTextType(it)
@@ -316,7 +362,7 @@ private fun AdvancedSourceSection(
     // edit dialog). Shown when any source produces text icons.
     if (needTextType(state.primarySource) || needTextType(state.secondarySource)) {
         Box(Modifier.padding(horizontal = 12.dp)) {
-            FontPickerRow(selectedPath = state.textFont) {
+            FontPickerRow(selectedPath = state.textFont, fonts = viewModel.fonts) {
                 viewModel.setTextFont(it)
             }
         }
@@ -327,16 +373,6 @@ private fun AdvancedSourceSection(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             color = MaterialTheme.colorScheme.outlineVariant
         )
-
-        SourceDropdown(R.string.secondarySource, state.secondarySource) {
-            viewModel.setSecondarySource(it)
-        }
-
-        if (needIconPack(state.secondarySource)) {
-            IconPackDropdown(
-                R.string.secondaryIconPack, iconPacks, state.secondaryIconPack, null
-            ) { viewModel.setSecondaryIconPack(it.packageName) }
-        }
 
         if (needImageEdit(state.secondarySource)) {
             ImageEditDropdown(R.string.secondaryImageEdit, state.secondaryImageEdit) {
@@ -384,7 +420,10 @@ private fun AdvancedColorSection(state: AdvancedOptionsState, viewModel: Options
     val showIconColor = showIconColor(
         state.primarySource, state.primaryImageEdit,
         state.secondarySource, state.secondaryImageEdit, state.useThemed
-    )
+    ) &&
+        // Material You brings its own colours and Monochrome uses none, so the icon colour
+        // would do nothing there.
+        !(state.showsAppIconStyle && state.appIconStyle.variant != ApplicationIconVariant.DEFAULT)
     val showBgColor = showBackgroundColor(
         state.primarySource, state.primaryImageEdit,
         state.secondarySource, state.secondaryImageEdit, state.useThemed
@@ -446,6 +485,7 @@ private fun AdvancedColorSection(state: AdvancedOptionsState, viewModel: Options
 /** The contour drawn around every generated icon, and the colour style it is drawn with. */
 @Composable
 private fun AdvancedOutlineSection(state: AdvancedOptionsState, viewModel: OptionsViewModel) {
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
 
     OptionsSectionLabel(R.string.outlineTitle)
@@ -454,18 +494,40 @@ private fun AdvancedOutlineSection(state: AdvancedOptionsState, viewModel: Optio
     }
     AnimatedVisibility(visible = state.outlineAdd) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            LabeledSlider(
-                label = stringResource(R.string.outlineThickness),
-                value = state.outlineWidth,
-                onValueChange = {
-                    viewModel.setOutlineWidth(it)
-                },
-                valueRange = OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat(),
-                ruler = pixelRuler(),
-                // The card's other rows are inset by the same amount; without it the track ran
-                // past the card's rounded edge.
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
+            val expected = viewModel.sessionFor(runtimeState)
+            key(expected) {
+                var draftWidth by remember { mutableStateOf<Float?>(null) }
+                var dragging by remember { mutableStateOf(false) }
+                var editVersion by remember { mutableIntStateOf(0) }
+                LaunchedEffect(state.outlineWidth) {
+                    if (!dragging && draftWidth == state.outlineWidth) draftWidth = null
+                }
+                LabeledSlider(
+                    label = stringResource(R.string.outlineThickness),
+                    value = draftWidth ?: state.outlineWidth,
+                    onValueChange = {
+                        draftWidth = normalizeOutlineWidth(it.roundToInt()).toFloat()
+                        dragging = true
+                        editVersion++
+                    },
+                    onValueChangeFinished = {
+                        val width = draftWidth
+                        if (dragging && width != null) {
+                            dragging = false
+                            val submittedVersion = editVersion
+                            viewModel.setOutlineWidth(width, expected) { saved ->
+                                if (!saved && editVersion == submittedVersion && !dragging) {
+                                    draftWidth = null
+                                }
+                            }
+                        }
+                    },
+                    valueRange = OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat(),
+                    ruler = pixelRuler(),
+                    // Keep the track aligned with the card's other rows.
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
             ColorStyleCard(
                 label = stringResource(R.string.outlineColor),
                 style = state.outlineStyle,

@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.icon.creator
 
+import android.app.Application
+
 import android.graphics.Bitmap
 import android.graphics.Color
 import org.junit.Assert.assertEquals
@@ -9,7 +11,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
+@Config(application = Application::class, sdk = [33])
 class ColorizerLightenTest {
 
     @Test

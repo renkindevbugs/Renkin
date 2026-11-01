@@ -53,7 +53,7 @@ class VectorRenderer(private val imageVector: ImageVector) {
         canvas.save()
         canvas.translate(group.translationX, group.translationY)
         canvas.rotate(group.rotation, group.pivotX, group.pivotY)
-        canvas.scale(group.scaleX, group.scaleY, -group.pivotX, -group.pivotY)
+        canvas.scale(group.scaleX, group.scaleY, group.pivotX, group.pivotY)
 
         for (child in group) {
             if (child is VectorGroup) {

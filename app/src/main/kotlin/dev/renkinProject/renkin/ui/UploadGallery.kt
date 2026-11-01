@@ -2,7 +2,6 @@
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,46 +13,39 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.stringResource
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.data.UploadedImageStore
+import dev.renkinProject.renkin.data.UploadedImageLibrary
 import dev.renkinProject.renkin.drawable.IconPackDrawable
-import dev.renkinProject.renkin.drawable.shrinkIfBiggerThan
-import dev.renkinProject.renkin.extension.toDrawable
 import java.io.File
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 const val MIME_TYPE_IMAGE = "image/*"
 
 @Composable
-fun UploadColumn(
+internal fun UploadColumn(
     snackbarHostState: SnackbarHostState,
-    initialSelectedPath: String? = null,
+    state: UploadEditorState,
+    library: UploadedImageLibrary,
     onChange: (icon: IconPackDrawable?, path: String?) -> Unit
 ) {
-    var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
-    var zoomLevel by rememberSaveable { mutableFloatStateOf(1f) }
-    var selectedImagePath by rememberSaveable(initialSelectedPath) {
-        mutableStateOf(initialSelectedPath)
-    }
+    var asAdaptiveIcon by state::asAdaptiveIcon
+    var zoomLevel by state::zoomLevel
+    var selectedImagePath by state::selectedImagePath
+    var hadSelectedImage by remember { mutableStateOf(selectedImagePath != null) }
     var savedImages by remember { mutableStateOf<List<File>>(emptyList()) }
     var uploadedImage by remember { mutableStateOf<Bitmap?>(null) }
     var mask by remember { mutableStateOf<Bitmap?>(null) }
+    var loadedPath by remember { mutableStateOf<String?>(null) }
     var selection by remember { mutableStateOf(GallerySelection()) }
     var isUploading by remember { mutableStateOf(false) }
 
-    val context = getCurrentContext()
-    val resources = context.resources
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val uploadErrorMessage = stringResource(R.string.uploadImageError)
@@ -66,9 +58,7 @@ fun UploadColumn(
         if (toDelete.isEmpty()) return
         snackbarHostState.currentSnackbarData?.dismiss()
         scope.launch {
-            val trashed = withContext(Dispatchers.IO) {
-                UploadedImageStore.moveToTrash(context, toDelete)
-            }
+            val trashed = library.moveToTrash(toDelete)
             if (trashed.isEmpty()) {
                 toaster.show(uploadErrorMessage)
                 return@launch
@@ -76,7 +66,7 @@ fun UploadColumn(
             val movedFiles = trashed.map { it.original }.toSet()
             savedImages = savedImages - movedFiles
             if (movedFiles.any { it.absolutePath == selectedImagePath }) {
-                selectedImagePath = null
+                state.selectGallery(null)
             }
             if (trashed.size != toDelete.size) toaster.show(uploadErrorMessage)
 
@@ -86,19 +76,16 @@ fun UploadColumn(
                 duration = SnackbarDuration.Long
             )
             if (result == SnackbarResult.ActionPerformed) {
-                withContext(Dispatchers.IO) { UploadedImageStore.restore(trashed) }
-                savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
+                library.restore(trashed)
+                savedImages = library.list()
             } else {
-                withContext(Dispatchers.IO) { UploadedImageStore.permanentlyDelete(trashed) }
+                library.permanentlyDelete(trashed)
             }
         }
     }
 
     LaunchedEffect(Unit) {
-        savedImages = withContext(Dispatchers.IO) {
-            UploadedImageStore.cleanupTrash(context)
-            UploadedImageStore.list(context)
-        }
+        savedImages = library.load()
     }
 
     val launcher = rememberLauncherForActivityResult(
@@ -108,42 +95,32 @@ fun UploadColumn(
         scope.launch {
             isUploading = true
             try {
-                var failed = false
-                val added = withContext(Dispatchers.IO) {
-                    uris.mapNotNull { uri ->
-                        try {
-                            getBitmapFromURI(context, uri)
-                                ?.toDrawable(resources)
-                                ?.shrinkIfBiggerThan(MAX_UPLOADED_IMAGE_SIZE)
-                                ?.let { UploadedImageStore.save(context, it) }
-                                .also { if (it == null) failed = true }
-                        } catch (_: Exception) {
-                            failed = true
-                            null
-                        }
-                    }
-                }
-                savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
-                selectedImagePath = added.firstOrNull()?.absolutePath ?: selectedImagePath
-                if (failed) toaster.show(uploadErrorMessage)
+                val imported = library.import(uris)
+                savedImages = library.list()
+                imported.added.firstOrNull()?.absolutePath?.let(state::selectGallery)
+                if (imported.anyFailed) toaster.show(uploadErrorMessage)
             } finally {
                 isUploading = false
             }
         }
     }
 
-    LaunchedEffect(selectedImagePath) {
+    LaunchedEffect(selectedImagePath, state.ownedImage) {
         val path = selectedImagePath
         if (path == null) {
             uploadedImage = null
             mask = null
-            onChange(null, null)
+            loadedPath = null
+            if (hadSelectedImage) onChange(null, null)
+            hadSelectedImage = false
             return@LaunchedEffect
         }
-        val bitmap = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path) }
+        hadSelectedImage = true
+        val bitmap = state.ownedImage ?: library.decode(path)
         if (bitmap == null) {
             uploadedImage = null
             mask = null
+            loadedPath = null
             selectedImagePath = null
             onChange(null, null)
             toaster.show(uploadErrorMessage)
@@ -151,6 +128,7 @@ fun UploadColumn(
             val squared = squareBitmap(bitmap)
             uploadedImage = squared
             mask = createMask(squared)
+            loadedPath = path
         }
     }
 
@@ -159,10 +137,12 @@ fun UploadColumn(
     }
 
     Box(Modifier.fillMaxSize()) {
+        val previewSelection = state.selection()
+        val previewOwnedImage = state.ownedImage
         UploadGalleryContent(
             savedImages = savedImages,
-            uploadedImage = uploadedImage,
-            mask = mask,
+            uploadedImage = uploadedImage.takeIf { selectedImagePath != null && loadedPath == selectedImagePath },
+            mask = mask.takeIf { selectedImagePath != null && loadedPath == selectedImagePath },
             asAdaptiveIcon = asAdaptiveIcon,
             zoomLevel = zoomLevel,
             selectedImagePath = selectedImagePath,
@@ -172,9 +152,16 @@ fun UploadColumn(
                 zoomLevel = 1f
             },
             onZoomChange = { zoomLevel = it },
-            onSelectedImageChange = { selectedImagePath = it },
+            onSelectedImageChange = state::selectGallery,
             onSelectionChange = { selection = it },
-            onChange = onChange
+            loadThumbnail = library::thumbnail,
+            onChange = { icon, path ->
+                if (path != null && previewSelection == state.selection() && path == previewSelection.path &&
+                    previewOwnedImage === state.ownedImage
+                ) {
+                    if (state.ownedImage == null || state.publishedSelection != previewSelection) onChange(icon, path)
+                }
+            }
         )
         UploadGalleryActions(
             savedImages = savedImages,
@@ -189,5 +176,3 @@ fun UploadColumn(
         if (isUploading) UploadLoadingOverlay()
     }
 }
-
-private const val MAX_UPLOADED_IMAGE_SIZE = 500

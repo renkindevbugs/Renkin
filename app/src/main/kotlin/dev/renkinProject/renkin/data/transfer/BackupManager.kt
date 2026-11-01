@@ -13,11 +13,12 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.apk.PackKeystore
-import dev.renkinProject.renkin.data.ActiveProfileIdKey
+import dev.renkinProject.renkin.apk.ProfilePackIdentityException
+import dev.renkinProject.renkin.apk.validateProfilePackIdentity
 import dev.renkinProject.renkin.data.AutoBackupIntervalKey
 import dev.renkinProject.renkin.data.AutoBackupTreeUriKey
-import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
@@ -26,7 +27,11 @@ import dev.renkinProject.renkin.data.ModifierPreset
 import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
-import dev.renkinProject.renkin.data.snapshotProfilePrefs
+import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
+import dev.renkinProject.renkin.data.ProfileStyleAccess
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.BaselineInput
@@ -35,20 +40,29 @@ import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dev.renkinProject.renkin.data.watch.SuggestionImport
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchRuleImport
-import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.service.WatchChecker
+import dev.renkinProject.renkin.service.RenkinNotifications
+import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+import java.io.Closeable
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
+import java.io.OutputStreamWriter
+import java.io.Writer
 
 /**
  * Writes and restores `.renkin` files (a ZIP of `manifest.json`, `data.json` and, for full
@@ -62,7 +76,8 @@ import java.util.zip.ZipOutputStream
  *    that pack is installed there — but because the pixels ride along, a pack that later
  *    disappears from the store keeps working (its verdict flips to unlisted and unlocks).
  *
- * Import is all-or-nothing: the file is fully parsed BEFORE any store is touched. Whether
+ * Import stages and validates the entire archive BEFORE any store is touched. A durable
+ * local snapshot rolls back interrupted commits across databases, preferences and files. Whether
  * imported icons are usable is decided on the importing device every time they load
  * (PackVerdictManager) — verdicts inside the file are never trusted. After an import the
  * caller reloads the in-memory state and kicks off verdict verification.
@@ -71,12 +86,67 @@ class BackupManager(
     private val context: Context,
     private val packRepo: RenkinPackRepository,
     private val watchRepo: WatchRepository,
-    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(context)
+    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(context),
+    private val editorDraftInvalidation: EditorDraftInvalidation
 ) {
-    /** Production entry point: uses the shared singleton databases. Tests inject in-memory ones. */
-    constructor(context: Context) : this(context, RenkinPackRepository(context), WatchRepository(context))
-
+    private var inputCleanupComplete = false
     private val appManager by lazy { ApplicationManager(context) }
+    private val operations = Mutex()
+    private val recovery = BackupRecoveryStore(context)
+    private val mutablePreviousStateAvailable = MutableStateFlow(false)
+    val previousStateAvailable = mutablePreviousStateAvailable.asStateFlow()
+    private val mutablePreviousStateStored = MutableStateFlow(false)
+    val previousStateStored = mutablePreviousStateStored.asStateFlow()
+    private val mutableAbandonedRecoveryAvailable = MutableStateFlow(false)
+    val abandonedRecoveryAvailable = mutableAbandonedRecoveryAvailable.asStateFlow()
+    enum class RestoreStage { IDLE, VALIDATING_SAVED_STATE, SAVING_CURRENT_STATE, RESTORING_DATA, RESTORING_FILES }
+    private val mutableRestoreStage = MutableStateFlow(RestoreStage.IDLE)
+    val restoreStage = mutableRestoreStage.asStateFlow()
+    private val mutableSnapshotStage = MutableStateFlow<BackupSnapshotStage?>(null)
+    val snapshotStage = mutableSnapshotStage.asStateFlow()
+    private val restoreCancellationLock = Any()
+    private var restoreCancellationRequested = false
+    private val mutableRestoreCancellable = MutableStateFlow(false)
+    val restoreCancellable = mutableRestoreCancellable.asStateFlow()
+
+    fun requestRestorePreparationCancellation(): Boolean = synchronized(restoreCancellationLock) {
+        if (!mutableRestoreCancellable.value) return@synchronized false
+        restoreCancellationRequested = true
+        mutableRestoreCancellable.value = false
+        true
+    }
+
+    private fun allowRestorePreparationCancellation() = synchronized(restoreCancellationLock) {
+        if (restoreCancellationRequested) throw CancellationException("Restore preparation cancelled")
+        mutableRestoreCancellable.value = true
+    }
+
+    private fun beginRestoreCommit() = synchronized(restoreCancellationLock) {
+        if (restoreCancellationRequested) throw CancellationException("Restore preparation cancelled")
+        // Cancellation and the first durable mutation have one boundary: an accepted Cancel
+        // cannot race into a non-cancellable commit after the button was tapped.
+        mutableRestoreCancellable.value = false
+        mutableRestoreStage.value = RestoreStage.RESTORING_DATA
+    }
+
+    private suspend fun <T> runOperation(block: suspend () -> T): T =
+        withContext(Dispatchers.IO) {
+            StorageOperationGate.run {
+                operations.withLock {
+                    synchronized(restoreCancellationLock) { restoreCancellationRequested = false }
+                    try {
+                        block()
+                    } catch (error: OutOfMemoryError) {
+                        Log.error("BackupManager", "Backup exceeded heap; maxHeapBytes=${Runtime.getRuntime().maxMemory()}", error)
+                        throw BackupMemoryException(error)
+                    } finally {
+                        synchronized(restoreCancellationLock) { mutableRestoreCancellable.value = false }
+                        mutableSnapshotStage.value = null
+                        mutableRestoreStage.value = RestoreStage.IDLE
+                    }
+                }
+            }
+        }
 
     enum class ImportKind { BACKUP, PROFILE }
 
@@ -90,6 +160,7 @@ class BackupManager(
 
     data class ImportInspection(
         val kind: ImportKind,
+        val fingerprint: String,
         val backup: BackupPreview? = null
     )
 
@@ -111,14 +182,11 @@ class BackupManager(
 
     /** Whether a saved profile references at least one personal Icon Pack Studio export. */
     suspend fun profileUsesIconPackStudio(profileId: Long): Boolean =
-        packRepo.getAll(profileId).usesIconPackStudioExport()
+        packRepo.exportSourcePacks(profileId).any(::isIconPackStudioExport)
 
     /** Whether any saved profile except [excludedProfileId] references an IPS export. */
     suspend fun otherProfilesUseIconPackStudio(excludedProfileId: Long): Boolean =
-        packRepo.getAllProfilesApplications()
-            .asSequence()
-            .filterNot { it.profileId == excludedProfileId }
-            .usesIconPackStudioExport()
+        packRepo.exportSourcePacks(excludedProfileId = excludedProfileId).any(::isIconPackStudioExport)
 
     suspend fun exportBackup(uri: Uri) = exportBackup {
         context.contentResolver.openOutputStream(uri) ?: throw IOException("Cannot open $uri for writing")
@@ -128,24 +196,74 @@ class BackupManager(
         context.contentResolver.openOutputStream(uri) ?: throw IOException("Cannot open $uri for writing")
     }
 
-    suspend fun exportBackup(open: () -> OutputStream) = withContext(Dispatchers.IO) {
-        // Fold the live generation prefs into the active profile's snapshot first (the same
-        // capture a profile switch does), so the exported profile rows are self-consistent.
-        val prefs = context.dataStore.getPreferencesAfterPendingWrites()
-        val activeId = prefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
-        packRepo.profile(activeId)?.let {
-            packRepo.updateProfile(it.copy(prefsSnapshot = prefs.snapshotProfilePrefs()))
-        }
+    suspend fun exportBackup(open: () -> OutputStream) {
+        val prepared = prepareBackupExport()
+        writePreparedExport(prepared, open)
+    }
 
-        val allIcons = packRepo.getAllProfilesApplications()
-        val iconsByProfile = allIcons.groupBy { it.profileId }
+    suspend fun exportProfile(profileId: Long, open: () -> OutputStream) {
+        val prepared = prepareProfileExport(profileId)
+        writePreparedExport(prepared, open)
+    }
+
+    class PreparedExport internal constructor(internal val directory: File, internal val archive: File) {
+        internal var closed = false
+    }
+
+    private suspend fun prepareExport(operation: suspend () -> PreparedExport): PreparedExport {
+        var prepared: PreparedExport? = null
+        try {
+            return runOperation { operation().also { prepared = it } }
+        } catch (error: Throwable) {
+            prepared?.let { discardExport(it) }
+            throw error
+        }
+    }
+
+    suspend fun discardExport(prepared: PreparedExport) = withContext(NonCancellable + Dispatchers.IO) {
+        if (!prepared.closed) {
+            prepared.closed = true
+            BackupStaging.release(prepared.directory)
+        }
+    }
+
+    suspend fun writePreparedExport(prepared: PreparedExport, uri: Uri) = writePreparedExport(prepared) {
+        context.contentResolver.openOutputStream(uri) ?: throw IOException("Cannot open $uri for writing")
+    }
+
+    suspend fun writePreparedExport(prepared: PreparedExport, open: () -> OutputStream) {
+        try {
+            withContext(Dispatchers.IO) {
+                check(!prepared.closed) { "Prepared export has expired" }
+                currentCoroutineContext().ensureActive()
+                // Only immutable local bytes travel to SAF. No storage or profile lock is held.
+                open().use { output ->
+                    prepared.archive.inputStream().use { input ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            output.write(buffer, 0, count)
+                        }
+                    }
+                }
+            }
+        } finally { discardExport(prepared) }
+    }
+
+    suspend fun prepareBackupExport(): PreparedExport = prepareExport {
+        // The storage gate freezes profile commits, watch, prefs, gallery and signing
+        // writers until the complete archive has copied every live input.
+        val prefs = context.dataStore.getPreferencesAfterPendingWrites()
+
         val rulesByProfile = watchRepo.getAllRules()
             .groupBy { it.rule.profileId }
         val data = BackupData(
             profiles = packRepo.profiles().map { profile ->
                 BackupProfile(
                     profile = profile,
-                    icons = iconsByProfile[profile.id].orEmpty(),
+                    icons = emptyList(),
                     watchRules = rulesByProfile[profile.id].orEmpty().map { it.toBackupRule() }
                 )
             },
@@ -153,7 +271,7 @@ class BackupManager(
                 if (key.name in DEVICE_LOCAL_PREF_NAMES) return@mapNotNull null
                 BackupPref.of(value)?.let { key.name to it }
             }.toMap(),
-            packLabels = packLabelsFor(allIcons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet()),
+            packLabels = packLabelsFor(packRepo.exportSourcePacks()),
             colorPresets = packRepo.allColorPresets().map {
                 BackupColorPreset(it.name, it.style, it.createdAt)
             },
@@ -168,20 +286,32 @@ class BackupManager(
             }
         )
 
-        ZipOutputStream(open().buffered()).use { zip ->
-            zip.putTextEntry(MANIFEST_ENTRY, manifestJson(KIND_BACKUP))
-            zip.putTextEntry(DATA_ENTRY, BackupCodec.encode(data))
+        val files = buildMap {
             context.filesDir.resolve(IconPackBuilder.KEYSTORE_FILE_NAME)
                 .takeIf { it.exists() }
-                ?.let { zip.putFileEntry(KEYSTORE_ENTRY, it) }
-            // The keystore's random password (absent for legacy keystores, which open with
-            // the built-in constant) — without it a restored keystore couldn't sign.
-            PackKeystore.passwordFile(context.filesDir)
-                .takeIf { it.exists() }
-                ?.let { zip.putFileEntry(KEYSTORE_PASSWORD_ENTRY, it) }
+                ?.let { keystore ->
+                    put(KEYSTORE_ENTRY, keystore)
+                    // A failed first build can leave a password without a keystore. That
+                    // orphan is not a signing identity and must not travel on its own.
+                    PackKeystore.passwordFile(context.filesDir)
+                        .takeIf { it.exists() }
+                        ?.let { put(KEYSTORE_PASSWORD_ENTRY, it) }
+                }
             for (file in UploadedImageStore.list(context)) {
-                zip.putFileEntry("$UPLOADS_DIR/${file.name}", file)
+                put("$UPLOADS_DIR/${file.name}", file)
             }
+        }.toMutableMap()
+        val availableInputs = IconModifierInputStore.directory(context).listFiles().orEmpty()
+            .filter { it.isFile && IconModifierInputStore.validName(it.name) }.associateBy { it.name }
+        val inputs = BackupModifierInputPreparation(availableInputs)
+        val metadata = BackupValidator.prepare(data, ImportKind.BACKUP, BackupCodec.FORMAT_VERSION)
+        exportArchive(KIND_BACKUP, metadata, files) { writer ->
+            packRepo.readExportIcons { rows ->
+                writeBackupExport(metadata, writer, BackupCodec.FORMAT_VERSION) { id, consume ->
+                    rows.visit(id) { consume(inputs.prepare(it)) }
+                }
+            }
+            files.putAll(inputs.files.mapKeys { (name, _) -> "${IconModifierInputStore.ARCHIVE_DIR}/$name" })
         }
     }
 
@@ -192,48 +322,102 @@ class BackupManager(
      * importing device at load time, not here — so the export works fully offline.
      * No uploads or keystore travel with a share.
      */
-    suspend fun exportProfile(profileId: Long, open: () -> OutputStream) = withContext(Dispatchers.IO) {
-        val prefs = context.dataStore.getPreferencesAfterPendingWrites()
-        val activeId = prefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
-        if (profileId == activeId) {
-            packRepo.profile(profileId)?.let {
-                packRepo.updateProfile(it.copy(prefsSnapshot = prefs.snapshotProfilePrefs()))
-            }
-        }
+    suspend fun prepareProfileExport(profileId: Long): PreparedExport = prepareExport {
         val profile = packRepo.profile(profileId) ?: throw IOException("Profile $profileId does not exist")
-        val icons = packRepo.getAll(profileId)
         val rules = watchRepo.getAllRules()
             .filter { it.rule.profileId == profileId && !it.rule.completed }
             .map { it.toBackupRule() }
 
-        val sourcePacks = icons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet()
-        val exportIcons = icons.map { icon ->
-            if (icon.sourcePackName.isNotEmpty() && icon.sourceDrawableName.isEmpty()) {
-                icon.copy(
-                    // Bulk-refresh icons are exactly the appfilter-mapped ones, so this
-                    // resolution is faithful; a hand-picked alternate degrades to the
-                    // pack's default icon for the app.
-                    sourceDrawableName = appFilterDrawableName(icon.sourcePackName, icon.packageName, icon.activityName) ?: ""
-                )
-            } else icon
-        }
         val data = BackupData(
-            profiles = listOf(BackupProfile(profile, exportIcons, rules)),
+            profiles = listOf(BackupProfile(profile, emptyList(), rules)),
             prefs = emptyMap(),
-            packLabels = packLabelsFor(sourcePacks)
+            packLabels = packLabelsFor(packRepo.exportSourcePacks(profileId))
         )
 
-        ZipOutputStream(open().buffered()).use { zip ->
-            zip.putTextEntry(MANIFEST_ENTRY, manifestJson(KIND_PROFILE))
-            zip.putTextEntry(DATA_ENTRY, BackupCodec.encode(data))
+        val metadata = BackupValidator.prepare(data, ImportKind.PROFILE, BackupCodec.FORMAT_VERSION)
+        exportArchive(KIND_PROFILE, metadata) { writer ->
+            packRepo.readExportIcons { rows ->
+                writeBackupExport(metadata, writer, BackupCodec.FORMAT_VERSION) { id, consume ->
+                    rows.visit(id) { consume(sharedIcon(it)) }
+                }
+            }
         }
     }
 
-    private fun Sequence<DbApplication>.usesIconPackStudioExport(): Boolean =
-        any { isIconPackStudioExport(it.sourcePackName) }
+    private fun sharedIcon(saved: DbApplication): DbApplication {
+        // Sharing carries the reviewed image, never a hidden pre-edit upload/source.
+        val icon = saved.copy(modifierInput = "")
+        return if (icon.sourcePackName.isNotEmpty() && icon.sourceDrawableName.isEmpty()) {
+            // Existing bulk-refresh fallback: hand-picked alternates degrade to the pack default.
+            icon.copy(sourceDrawableName = appFilterDrawableName(icon.sourcePackName, icon.packageName, icon.activityName) ?: "")
+        } else icon
+    }
 
-    private fun Iterable<DbApplication>.usesIconPackStudioExport(): Boolean =
-        asSequence().usesIconPackStudioExport()
+    private suspend fun exportArchive(
+        kind: String,
+        data: BackupData,
+        files: Map<String, File> = emptyMap(),
+        writeData: suspend (Writer) -> Unit
+    ): PreparedExport {
+        val directory = BackupStaging.create(stagingRoot(), "backup-export-")
+        val dataFile = File(directory, DATA_ENTRY)
+        try {
+            ensureBackupSpace(directory)
+            val coroutineContext = currentCoroutineContext()
+            FileOutputStream(dataFile).use { output ->
+                var bytes = 0L
+                var nextSpaceCheck = 0L
+                val bounded = object : OutputStream() {
+                    override fun write(value: Int) = write(byteArrayOf(value.toByte()), 0, 1)
+                    override fun write(buffer: ByteArray, offset: Int, count: Int) {
+                        coroutineContext.ensureActive()
+                        bytes += count
+                        if (bytes > BackupArchiveLimits.MAX_DATA_BYTES) throw BackupSizeException()
+                        if (bytes >= nextSpaceCheck) {
+                            ensureBackupSpace(directory, 1024 * 1024L)
+                            nextSpaceCheck = bytes + 1024 * 1024
+                        }
+                        output.write(buffer, offset, count)
+                    }
+                }
+                val writer = OutputStreamWriter(bounded, Charsets.UTF_8).buffered()
+                writeData(writer)
+                writer.flush()
+                output.fd.sync()
+            }
+            val archive = File(directory, "archive.zip")
+            writeBackupArchive({
+                val output = FileOutputStream(archive)
+                object : OutputStream() {
+                    private var bytes = 0L
+                    private var nextSpaceCheck = 0L
+                    override fun write(value: Int) = write(byteArrayOf(value.toByte()), 0, 1)
+                    override fun write(buffer: ByteArray, offset: Int, count: Int) {
+                        coroutineContext.ensureActive()
+                        bytes += count
+                        if (bytes > BackupArchiveLimits.MAX_ARCHIVE_BYTES) throw BackupSizeException()
+                        if (bytes >= nextSpaceCheck) {
+                            ensureBackupSpace(directory, 1024 * 1024L)
+                            nextSpaceCheck = bytes + 1024 * 1024L
+                        }
+                        output.write(buffer, offset, count)
+                    }
+                    override fun close() = output.close()
+                }
+            }, manifestJson(kind), dataFile, files)
+            dataFile.delete()
+            return PreparedExport(directory, archive)
+        } catch (error: OutOfMemoryError) {
+            Log.error("BackupManager", "Out of memory exporting; profiles=${data.profiles.size}, dataBytes=${dataFile.length()}", error)
+            BackupStaging.release(directory)
+            throw error
+        } catch (error: Throwable) {
+            BackupStaging.release(directory)
+            throw error
+        }
+    }
+
+    private fun stagingRoot(): File = File(context.filesDir, "backup-imports")
 
     // ---- Import --------------------------------------------------------------------
 
@@ -242,83 +426,209 @@ class BackupManager(
         context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri for reading")
     }
 
-    suspend fun inspectFile(open: () -> InputStream): ImportInspection = withContext(Dispatchers.IO) {
-        val archive = readArchive(open)
-        val manifest = archive.manifest
-        val data = archive.data
-        val kind = kindOf(manifest)
-        if (kind == ImportKind.PROFILE) return@withContext ImportInspection(kind)
-        requireValidBackup(data)
+    suspend fun inspectFile(open: () -> InputStream): ImportInspection = runOperation {
+        readArchive(open, inspectionOnly = true).use(::inspectArchive)
+    }
 
-        val rules = data.profiles.flatMap { it.watchRules }
-        ImportInspection(
+    class PreparedImport internal constructor(
+        internal val staged: StagedBackupArchive,
+        val inspection: ImportInspection
+    ) {
+        internal var closed = false
+    }
+
+    suspend fun prepareImport(uri: Uri): PreparedImport {
+        var prepared: PreparedImport? = null
+        try {
+            return runOperation {
+                val archive = readArchive(inspectionOnly = true, open = {
+                    context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri for reading")
+                })
+                try {
+                    PreparedImport(archive.staged, inspectArchive(archive)).also { prepared = it }
+                } catch (error: Throwable) {
+                    archive.close()
+                    throw error
+                }
+            }
+        } catch (error: Throwable) {
+            // withContext can cancel the handoff after staging succeeded on IO.
+            prepared?.let { discardImport(it) }
+            throw error
+        }
+    }
+
+    suspend fun discardImport(prepared: PreparedImport) = withContext(NonCancellable + Dispatchers.IO) {
+        operations.withLock { closePrepared(prepared) }
+    }
+
+    suspend fun importPrepared(
+        prepared: PreparedImport,
+        commit: suspend (suspend () -> ImportResult) -> ImportResult = ::commitImportDirectly
+    ): ImportResult = runOperation {
+        check(!prepared.closed) { "Prepared import has expired" }
+        mutableRestoreStage.value = RestoreStage.VALIDATING_SAVED_STATE
+        try {
+            readContents(prepared.staged).use { archive ->
+                if (kindOf(archive.manifest) != prepared.inspection.kind) throw IOException("Prepared file kind changed")
+                applyArchive(archive, commit)
+            }
+        } finally {
+            closePrepared(prepared)
+        }
+    }
+
+    private fun closePrepared(prepared: PreparedImport) {
+        if (!prepared.closed) {
+            prepared.closed = true
+            prepared.staged.close()
+        }
+    }
+
+    private fun inspectArchive(archive: ArchiveContents): ImportInspection {
+        val kind = kindOf(archive.manifest)
+        if (kind == ImportKind.PROFILE) return ImportInspection(kind, archive.fingerprint)
+        val rules = archive.data.profiles.flatMap { it.watchRules }
+        return ImportInspection(
             kind = kind,
+            fingerprint = archive.fingerprint,
             backup = BackupPreview(
-                appVersion = manifest.optString("appVersion"),
-                exportedAt = manifest.optLong("exportedAt"),
-                profiles = data.profiles.map { ProfilePreview(it.profile.name, it.icons.size) },
+                appVersion = archive.manifest.optString("appVersion"),
+                exportedAt = archive.manifest.optLong("exportedAt"),
+                profiles = archive.data.profiles.map { ProfilePreview(it.profile.name, it.icons.size) },
                 activeWatchRules = rules.count { !it.completed },
                 completedWatchRules = rules.count { it.completed },
-                savedStyles = data.colorPresets.size + data.modifierPresets.size,
-                uploadedImages = archive.uploadedImages
+                savedStyles = archive.data.colorPresets.size + archive.data.modifierPresets.size,
+                uploadedImages = archive.uploadedImages.size
             )
         )
     }
 
-    suspend fun importFile(uri: Uri): ImportResult = importFile {
-        context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri for reading")
-    }
+    suspend fun importFile(
+        uri: Uri,
+        expectedKind: ImportKind? = null,
+        expectedFingerprint: String? = null,
+        commit: suspend (suspend () -> ImportResult) -> ImportResult = ::commitImportDirectly
+    ): ImportResult = importPreparedFile(
+        open = { context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri for reading") },
+        expectedKind = expectedKind,
+        expectedFingerprint = expectedFingerprint,
+        commit = commit
+    )
 
-    /** Dispatches on the file's kind: full backups replace, shared profiles add. */
-    suspend fun importFile(open: () -> InputStream): ImportResult = withContext(Dispatchers.IO) {
-        val archive = readArchive(open)
-        when (kindOf(archive.manifest)) {
-            ImportKind.BACKUP -> restoreBackup(archive.data, open)
-            ImportKind.PROFILE -> importProfile(archive.data)
+    suspend fun importFile(open: () -> InputStream): ImportResult =
+        importPreparedFile(open, null, null, ::commitImportDirectly)
+
+    suspend fun importBackup(uri: Uri): ImportResult = importFile(uri, ImportKind.BACKUP)
+
+    suspend fun importBackup(open: () -> InputStream): ImportResult =
+        importPreparedFile(open, ImportKind.BACKUP, null, ::commitImportDirectly)
+
+    private suspend fun commitImportDirectly(commit: suspend () -> ImportResult): ImportResult = commit()
+
+    private suspend fun importPreparedFile(
+        open: () -> InputStream,
+        expectedKind: ImportKind?,
+        expectedFingerprint: String?,
+        commit: suspend (suspend () -> ImportResult) -> ImportResult
+    ): ImportResult = runOperation {
+        readArchive(open).use { archive ->
+            val kind = kindOf(archive.manifest)
+            if (expectedKind != null && kind != expectedKind) throw IOException("File kind changed after inspection")
+            if (expectedFingerprint != null && archive.fingerprint != expectedFingerprint) {
+                throw IOException("File changed after inspection")
+            }
+            applyArchive(archive, commit)
         }
     }
 
-    suspend fun importBackup(uri: Uri): ImportResult = importBackup {
-        context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri for reading")
-    }
-
-    suspend fun importBackup(open: () -> InputStream): ImportResult = withContext(Dispatchers.IO) {
-        val archive = readArchive(open)
-        if (kindOf(archive.manifest) != ImportKind.BACKUP) throw IOException("Not a full-backup file")
-        restoreBackup(archive.data, open)
-    }
-
-    /** Pass 1 of an import: read and fully validate before touching anything on the device. */
-    private fun readArchive(open: () -> InputStream): ArchiveContents {
-        var manifest: JSONObject? = null
-        var dataJson: String? = null
-        var uploadedImages = 0
-        ZipInputStream(open().buffered()).use { zip ->
-            var entry = zip.nextEntry
-            while (entry != null) {
-                when (entry.name) {
-                    MANIFEST_ENTRY -> manifest = JSONObject(zip.readEntryText())
-                    DATA_ENTRY -> dataJson = zip.readEntryText()
-                }
-                if (entry.name.startsWith("$UPLOADS_DIR/") && entry.name.endsWith(".png")) {
-                    uploadedImages++
-                }
-                entry = zip.nextEntry
+    private suspend fun applyArchive(
+        archive: ArchiveContents,
+        commit: suspend (suspend () -> ImportResult) -> ImportResult
+    ): ImportResult {
+        check(!archive.inspectionOnly) { "Inspection metadata cannot be imported" }
+        currentCoroutineContext().ensureActive()
+        return when (kindOf(archive.manifest)) {
+            ImportKind.BACKUP -> restoreBackup(archive, commit)
+            ImportKind.PROFILE -> {
+                val snapshot = captureCurrentState()
+                try {
+                    currentCoroutineContext().ensureActive()
+                    ensureRecoverySpace(snapshot, archive.staged.entries[DATA_ENTRY]?.length() ?: 0L)
+                    commitWithRecovery(snapshot, commit) { importProfile(archive.data) }
+                } finally { recovery.discard(snapshot) }
             }
         }
-        val meta = manifest ?: throw IOException("Not a Renkin file (no manifest)")
-        if (meta.optInt("format", Int.MAX_VALUE) > BackupCodec.FORMAT_VERSION) {
-            throw IOException("File was made by a newer app version")
-        }
-        val data = BackupCodec.decode(dataJson ?: throw IOException("File has no data entry"))
-        return ArchiveContents(meta, data, uploadedImages)
     }
 
-    private data class ArchiveContents(
+    private suspend fun readArchive(open: () -> InputStream, inspectionOnly: Boolean = false): ArchiveContents {
+        return readContents(StagedBackupArchive.read(stagingRoot(), open), inspectionOnly)
+    }
+
+    private suspend fun readContents(staged: StagedBackupArchive, inspectionOnly: Boolean = false): ArchiveContents {
+        try {
+            val manifest = parseBackupJson(staged.entries[MANIFEST_ENTRY]?.readText(Charsets.UTF_8)
+                ?: throw IOException("Not a Renkin file (no manifest)"))
+            val format = manifest.opt("format")
+            if (format !is Int || format < 1) throw IOException("Invalid backup format version")
+            if (format > BackupCodec.FORMAT_VERSION) throw IOException("File was made by a newer app version")
+            val kind = kindOf(manifest)
+            val dataFile = staged.entries[DATA_ENTRY] ?: throw IOException("File has no data entry")
+            val parsedData = BackupValidator.prepare(
+                dataFile.reader(Charsets.UTF_8).use {
+                    if (inspectionOnly) readBackupInspectionData(it, format) else readBackupData(it, format)
+                }, kind, format
+            )
+            val uploads = staged.entries.filterKeys { name -> name.startsWith("$UPLOADS_DIR/") }.map { (name, file) ->
+                val filename = name.removePrefix("$UPLOADS_DIR/")
+                if ('/' in filename || !filename.endsWith(".png")) throw IOException("Invalid uploaded image entry")
+                filename to file
+            }.toMap()
+            val keystore = staged.entries[KEYSTORE_ENTRY]
+            val password = staged.entries[KEYSTORE_PASSWORD_ENTRY]
+            val inputs = staged.entries.filterKeys { it.startsWith("${IconModifierInputStore.ARCHIVE_DIR}/") }
+                .map { (name, file) ->
+                    val filename = name.removePrefix("${IconModifierInputStore.ARCHIVE_DIR}/")
+                    if (!IconModifierInputStore.validName(filename)) throw IOException("Invalid modifier input entry")
+                    filename to file
+                }.toMap()
+            if (password != null && keystore == null) throw IOException("Keystore password has no keystore")
+            if (kind == ImportKind.PROFILE && (uploads.isNotEmpty() || inputs.isNotEmpty() || keystore != null || password != null)) {
+                throw IOException("Shared profile contains device files")
+            }
+            val (data, inputFiles) = prepareModifierInputs(parsedData, if (kind == ImportKind.BACKUP) inputs else emptyMap())
+            return ArchiveContents(staged, manifest, data, uploads, keystore, password, inputFiles, inspectionOnly)
+        } catch (error: Throwable) {
+            if (error is OutOfMemoryError) Log.error("BackupManager", "Out of memory decoding; dataBytes=${staged.entries[DATA_ENTRY]?.length()}", error)
+            staged.close()
+            throw error
+        }
+    }
+
+    private suspend fun prepareModifierInputs(
+        data: BackupData,
+        available: Map<String, File>
+    ): Pair<BackupData, Map<String, File>> {
+        val inputs = BackupModifierInputPreparation(available)
+        val profiles = data.profiles.map { profile ->
+            profile.copy(icons = profile.icons.map { inputs.prepare(it) })
+        }
+        return data.copy(profiles = profiles) to inputs.files
+    }
+
+    private class ArchiveContents(
+        val staged: StagedBackupArchive,
         val manifest: JSONObject,
         val data: BackupData,
-        val uploadedImages: Int
-    )
+        val uploadedImages: Map<String, File>,
+        val keystore: File?,
+        val password: File?,
+        val modifierInputs: Map<String, File>,
+        val inspectionOnly: Boolean
+    ) : Closeable {
+        val fingerprint: String get() = staged.fingerprint
+        override fun close() = staged.close()
+    }
 
     private fun kindOf(manifest: JSONObject): ImportKind = when (manifest.optString("kind")) {
         KIND_BACKUP -> ImportKind.BACKUP
@@ -326,91 +636,305 @@ class BackupManager(
         else -> throw IOException("Unknown file kind")
     }
 
-    private suspend fun restoreBackup(data: BackupData, open: () -> InputStream): ImportResult {
-        requireValidBackup(data)
-
-        packRepo.replaceEverything(
-            data.profiles.map { it.profile },
-            data.profiles.flatMap { it.icons }
-        )
-        watchRepo.replaceAllRules(data.profiles.flatMap { bp ->
-            bp.watchRules.map { it.toImport(bp.profile.id) }
-        })
-        WatchChecker(context, iconPackCatalog, watchRepo).initializeMissingBaselines()
-        // Replace-all, like everything else in a full restore. Archives written before saved
-        // colours existed carry none, which correctly clears a library the user is replacing.
-        packRepo.replaceColorPresets(
-            data.colorPresets.map { ColorPreset(name = it.name, style = it.style, createdAt = it.createdAt) }
-        )
-        packRepo.replaceModifierPresets(
-            data.modifierPresets.map {
-                ModifierPreset(
-                    name = it.name,
-                    payload = it.payload,
-                    schemaVersion = it.schemaVersion,
-                    createdAt = it.createdAt,
-                    lastUsedAt = it.lastUsedAt
-                )
-            }
-        )
-        restorePrefs(data.prefs)
-        // The verdict cache is per-device truth (which packs are owned/priced HERE), not part of
-        // the backup — re-derive it from what's actually installed so a restored profile locks
-        // exactly like a fresh import: packs not installed here stay locked until installed.
-        packRepo.resetVerdictsToInstalled(
-            runCatching { iconPackCatalog.installedIconPacks() }.getOrDefault(emptyList())
-        )
-        storePackLabels(data.packLabels)
-
-        // Pass 2: the bundled files. The gallery is replaced wholesale to match the backup.
-        val uploadsDir = UploadedImageStore.directory(context)
-        uploadsDir.listFiles()?.forEach { it.delete() }
-        var keystoreRestored = false
-        var passwordRestored = false
-        ZipInputStream(open().buffered()).use { zip ->
-            var entry = zip.nextEntry
-            while (entry != null) {
-                when {
-                    entry.name == KEYSTORE_ENTRY -> {
-                        writeEntryTo(zip, context.filesDir.resolve(IconPackBuilder.KEYSTORE_FILE_NAME))
-                        keystoreRestored = true
-                    }
-                    entry.name == KEYSTORE_PASSWORD_ENTRY -> {
-                        writeEntryTo(zip, PackKeystore.passwordFile(context.filesDir))
-                        passwordRestored = true
-                    }
-                    entry.name.startsWith("$UPLOADS_DIR/") && entry.name.endsWith(".png") ->
-                        // Only the file name is trusted, never the entry's path (zip-slip).
-                        writeEntryTo(zip, File(uploadsDir, File(entry.name).name))
-                }
-                entry = zip.nextEntry
+    suspend fun recoverPendingRestore() = runOperation {
+        val snapshot = recovery.pendingSnapshot()
+        if (snapshot != null) {
+            StorageOperationGate.reportRecoveryRunning()
+            withContext(NonCancellable) {
+                Log.info("BackupManager", "Recovering interrupted storage restore")
+                restoreSnapshot(snapshot)
+                recovery.clearPending()
             }
         }
-        // A restored keystore without a password in the backup is a legacy one (opens with
-        // the built-in constant) — a stale random password left behind would lock it out.
-        // When the backup carried no keystore at all, both local files stay as they are.
-        if (keystoreRestored && !passwordRestored) {
-            PackKeystore.passwordFile(context.filesDir).delete()
+        recovery.syncMetadata()
+        recovery.cleanup()
+        BackupStaging.cleanAfterProcessStart(context.filesDir)
+        if (!inputCleanupComplete) {
+            IconModifierInputStore.cleanupAfterProcessStart(
+                context,
+                packRepo.modifierInputDocuments() + editorDraftInvalidation.retainedModifierInputs()
+            )
+            inputCleanupComplete = true
         }
-
-        return ImportResult(ImportKind.BACKUP, data.profiles.size, data.profiles.sumOf { it.icons.size })
+        refreshAbandonedRecoveryAvailability()
+        try {
+            refreshPreviousStateAvailability()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            mutablePreviousStateAvailable.value = false
+            Log.error("BackupManager", "Retained undo snapshot is unavailable; preserved recovery storage", error)
+        }
     }
 
-    private fun requireValidBackup(data: BackupData) {
-        if (data.profiles.none { it.profile.id == DEFAULT_PROFILE_ID }) {
-            throw IOException("Backup has no default profile")
+    suspend fun restorePreviousState(commit: suspend (suspend () -> Unit) -> Unit) = runOperation {
+        allowRestorePreparationCancellation()
+        mutableRestoreStage.value = RestoreStage.VALIDATING_SAVED_STATE
+        val previous = recovery.previousSnapshot() ?: throw IOException("No previous saved state")
+        recovery.validate(previous)
+        checkSnapshotCompatibility(previous)
+        val snapshot = captureCurrentState()
+        try {
+            currentCoroutineContext().ensureActive()
+            ensureRecoverySpace(snapshot, 0)
+            commitWithRecovery(snapshot, commit) { restoreSnapshot(previous) }
+        } finally { recovery.discard(snapshot) }
+    }
+
+    suspend fun abandonPendingRecovery() = runOperation {
+        withContext(NonCancellable) {
+            editorDraftInvalidation.duringStorageRecovery()
+            recovery.preserveAbandonedRecovery()
+            refreshAbandonedRecoveryAvailability()
+            StorageOperationGate.markStorageReplaced()
+            try {
+                ProfileStyleAccess.repairInvalidDocuments { recovery.preserveCurrentProfileStyles(packRepo) }
+            } finally { refreshAbandonedRecoveryAvailability() }
+            ProfileStyleAccess.initialize(force = true)
+            mutablePreviousStateAvailable.value = false
+            mutablePreviousStateStored.value = false
         }
+    }
+
+    suspend fun discardAbandonedRecovery() = runOperation {
+        try {
+            withContext(NonCancellable) { recovery.discardAbandonedRecovery() }
+        } finally { refreshAbandonedRecoveryAvailability() }
+    }
+
+    private fun refreshAbandonedRecoveryAvailability() {
+        try {
+            mutableAbandonedRecoveryAvailable.value = recovery.hasAbandonedRecovery()
+        } catch (error: Exception) {
+            Log.error("BackupManager", "Cannot list abandoned recovery copies", error)
+        }
+    }
+
+    suspend fun discardPreviousState() = runOperation {
+        withContext(NonCancellable) { recovery.discardPreviousState() }
+        refreshPreviousStateAvailability()
+    }
+
+    private suspend fun refreshPreviousStateAvailability() {
+        mutablePreviousStateStored.value = recovery.hasPreviousState()
+        mutablePreviousStateAvailable.value = false
+        val snapshot = recovery.previousSnapshot() ?: return
+        try {
+            checkSnapshotCompatibility(snapshot)
+            mutablePreviousStateStored.value = true
+            mutablePreviousStateAvailable.value = true
+        } catch (error: CancellationException) { throw error }
+        catch (error: Exception) { Log.error("BackupManager", "Previous state is incompatible; retained for explicit discard", error) }
+    }
+
+    private suspend fun captureCurrentState(): BackupRecoveryStore.Snapshot {
+        allowRestorePreparationCancellation()
+        mutableRestoreStage.value = RestoreStage.SAVING_CURRENT_STATE
+        return recovery.capture(packRepo, watchRepo) { mutableSnapshotStage.value = it }
+    }
+
+    private suspend fun checkSnapshotCompatibility(snapshot: BackupRecoveryStore.Snapshot) {
+        packRepo.checkRecoveryCompatibility(File(snapshot.directory, "pack.json"))
+        watchRepo.checkRecoveryCompatibility(File(snapshot.directory, "watch.json"))
+    }
+
+    private fun ensureRecoverySpace(snapshot: BackupRecoveryStore.Snapshot, incomingDataBytes: Long) {
+        val databaseBytes = snapshot.directory.resolve("pack.json").length() + snapshot.directory.resolve("watch.json").length()
+        val largestFile = snapshot.files.filter { it.startsWith("gallery/") || it.startsWith("signing/") ||
+            it.startsWith("${IconModifierInputStore.ARCHIVE_DIR}/") }
+            .maxOfOrNull { File(snapshot.directory, it).length() } ?: 0L
+        ensureBackupSpace(context.filesDir, databaseBytes + incomingDataBytes + largestFile)
+    }
+
+    private suspend fun restoreSnapshot(snapshot: BackupRecoveryStore.Snapshot) {
+        recovery.validate(snapshot)
+        checkSnapshotCompatibility(snapshot)
+        editorDraftInvalidation.duringStorageRecovery()
+        mutableRestoreStage.value = RestoreStage.RESTORING_DATA
+        StorageOperationGate.markStorageReplaced()
+        // The pending marker survives every step. A failed or interrupted rollback is retried
+        // from these immutable files before any subsequent storage operation can proceed.
+        clearWatchNotifications()
+        packRepo.restoreRecoverySnapshot(File(snapshot.directory, "pack.json"))
+        watchRepo.restoreRecoverySnapshot(File(snapshot.directory, "watch.json"))
+        val prefs = File(snapshot.directory, "prefs.json").reader(Charsets.UTF_8).use {
+            readBackupData(it, RECOVERY_PREFS_FORMAT).prefs
+        }
+        restorePrefs(prefs, preserveDeviceLocal = false)
+        ProfileStyleAccess.initialize(force = true)
+        mutableRestoreStage.value = RestoreStage.RESTORING_FILES
+        recovery.restoreFiles(snapshot)
+        packRepo.flushRecoveryWrites()
+        watchRepo.flushRecoveryWrites()
+    }
+
+    private suspend fun clearWatchNotifications() {
+        val ids = watchRepo.getAllRules().flatMap { rule -> rule.suggestions.map { it.id } }
+        try {
+            RenkinNotifications().cancelIconAvailable(context, ids, cancelSummary = true)
+        } catch (error: Exception) {
+            Log.error("BackupManager", "Cannot clear notifications for replaced watch records", error)
+        }
+    }
+
+    private suspend fun <T> commitWithRecovery(
+        snapshot: BackupRecoveryStore.Snapshot,
+        commit: suspend (suspend () -> T) -> T,
+        operation: suspend () -> T
+    ): T {
+        currentCoroutineContext().ensureActive()
+        beginRestoreCommit()
+        return withContext(NonCancellable) {
+            // Only the durable phase may invalidate the live profile session. Preparation
+            // and an accepted Cancel must leave in-memory icons, tokens and undo untouched.
+            // Fail before the commit callback can invalidate the provider session or start recovery.
+            editorDraftInvalidation.beforeStorageReplacement()
+            commit {
+                var activated = false
+                try {
+                    recovery.activate(snapshot)
+                    activated = true
+                    StorageOperationGate.markStorageReplaced()
+                    mutableRestoreStage.value = RestoreStage.RESTORING_DATA
+                    val result = operation()
+                    ProfileStyleAccess.initialize(force = true)
+                    packRepo.flushRecoveryWrites()
+                    watchRepo.flushRecoveryWrites()
+                    recovery.complete(snapshot)
+                    mutablePreviousStateStored.value = true
+                    mutablePreviousStateAvailable.value = true
+                    result
+                } catch (error: Throwable) {
+                    if (activated) {
+                        try {
+                            recovery.ensurePending(snapshot)
+                            restoreSnapshot(snapshot)
+                            recovery.clearPending()
+                        } catch (rollbackError: Throwable) {
+                            error.addSuppressed(rollbackError)
+                            StorageOperationGate.requireRecovery(error)
+                            Log.error("BackupManager", "Rollback could not finish; recovery snapshot retained", error)
+                            throw BackupRecoveryRequiredException(error)
+                        }
+                    } else {
+                        try {
+                            recovery.clearPending()
+                        } catch (cleanupError: Throwable) {
+                            error.addSuppressed(cleanupError)
+                            StorageOperationGate.requireRecovery(error)
+                            throw BackupRecoveryRequiredException(error)
+                        }
+                    }
+                    throw error
+                }
+            }
+        }
+    }
+
+    private suspend fun restoreBackup(
+        archive: ArchiveContents,
+        commit: suspend (suspend () -> ImportResult) -> ImportResult
+    ): ImportResult {
+        val data = archive.data
+        val profiles = data.profiles.map { it.profile }
+        profiles.forEach { profile ->
+            validateProfilePackIdentity(context, profile.id, profile.customPackageName, profiles, checkInstalled = false)
+        }
+        val uploadsDir = UploadedImageStore.directory(context)
+        val inputsDir = IconModifierInputStore.directory(context)
+        if (archive.modifierInputs.isNotEmpty() && !inputsDir.isDirectory && !inputsDir.mkdirs()) {
+            throw IOException("Cannot create modifier input restore storage")
+        }
+        val replacements = buildMap<File, File?> {
+            archive.keystore?.let { put(context.filesDir.resolve(IconPackBuilder.KEYSTORE_FILE_NAME), it) }
+            if (archive.keystore != null) put(PackKeystore.passwordFile(context.filesDir), archive.password)
+            for ((name, file) in archive.uploadedImages) put(File(uploadsDir, name), file)
+            for (file in UploadedImageStore.list(context)) {
+                if (file.name !in archive.uploadedImages) put(file, null)
+            }
+            for ((name, file) in archive.modifierInputs) put(File(inputsDir, name), file)
+            for (file in inputsDir.listFiles().orEmpty()) {
+                if (file.isFile && IconModifierInputStore.validName(file.name) && file.name !in archive.modifierInputs) put(file, null)
+            }
+        }
+        val incomingDataBytes = archive.staged.entries[DATA_ENTRY]?.length() ?: 0L
+        ensureBackupRestoreSpace(context, incomingDataBytes)
+        var snapshot = captureCurrentState()
+        return try {
+            BackupFileTransaction.prepare(context.filesDir, replacements) { batch ->
+                snapshot = recovery.attachFileBatch(snapshot, batch)
+            }.use { files ->
+                currentCoroutineContext().ensureActive()
+                ensureRecoverySpace(snapshot, incomingDataBytes)
+                try {
+                    val result = commitWithRecovery(snapshot, commit) {
+                        clearWatchNotifications()
+                        UploadedImageStore.invalidatePendingTrash()
+                        mutableRestoreStage.value = RestoreStage.RESTORING_FILES
+                        files.apply()
+                        mutableRestoreStage.value = RestoreStage.RESTORING_DATA
+                        packRepo.replaceEverything(
+                            data.profiles.map { it.profile },
+                            data.profiles.flatMap { it.icons }
+                        )
+                        watchRepo.replaceAllRules(data.profiles.flatMap { bp ->
+                            bp.watchRules.map { it.toImport(bp.profile.id) }
+                        })
+                        WatchChecker(context, iconPackCatalog, watchRepo).initializeMissingBaselines()
+                        // Replace-all, like everything else in a full restore. Archives written before saved
+                        // colours existed carry none, which correctly clears a library the user is replacing.
+                        packRepo.replaceColorPresets(
+                            data.colorPresets.map { ColorPreset(name = it.name, style = it.style, createdAt = it.createdAt) }
+                        )
+                        packRepo.replaceModifierPresets(
+                            data.modifierPresets.map {
+                                ModifierPreset(
+                                    name = it.name,
+                                    payload = it.payload,
+                                    schemaVersion = it.schemaVersion,
+                                    createdAt = it.createdAt,
+                                    lastUsedAt = it.lastUsedAt
+                                )
+                            }
+                        )
+                        restorePrefs(data.prefs)
+                        // The verdict cache is per-device truth (which packs are owned/priced HERE), not part of
+                        // the backup — re-derive it from what's actually installed so a restored profile locks
+                        // exactly like a fresh import: packs not installed here stay locked until installed.
+                        packRepo.resetVerdictsToInstalled(
+                            runCatching { iconPackCatalog.installedIconPacks() }.getOrDefault(emptyList())
+                        )
+                        storePackLabels(data.packLabels)
+                        files.sync()
+                        ImportResult(ImportKind.BACKUP, data.profiles.size, data.profiles.sumOf { it.icons.size })
+                    }
+                    files.finish()
+                    result
+                } catch (error: Throwable) {
+                    if (error !is BackupRecoveryRequiredException) files.finish()
+                    throw error
+                }
+            }
+        } finally { recovery.discard(snapshot) }
     }
 
     /** A shared profile always lands as a NEW profile — imports never overwrite anything. */
     private suspend fun importProfile(data: BackupData): ImportResult {
         val bp = data.profiles.firstOrNull() ?: throw IOException("File contains no profile")
+        val existing = packRepo.profiles()
+        val packageName = try {
+            validateProfilePackIdentity(context, null, bp.profile.customPackageName, existing)
+            bp.profile.customPackageName
+        } catch (_: ProfilePackIdentityException) {
+            ""
+        }
         // A numbered suffix keeps repeated imports of the same share tellable apart.
         val name = uniqueProfileName(bp.profile.name, packRepo.profiles().map { it.name }.toSet())
         val newId = packRepo.createProfile(
             // Fresh identity (the id also names the built pack's package) and fresh flags:
             // the icons are saved-but-not-built, and the missing-pack dialog choice is local.
-            bp.profile.copy(id = 0, name = name, hasUnbuiltChanges = true, hideMissingPackWarning = false)
+            bp.profile.copy(id = 0, name = name, hasUnbuiltChanges = true, hideMissingPackWarning = false,
+                customPackageName = packageName)
         )
         packRepo.replaceAll(newId, bp.icons.map { it.copy(profileId = newId) })
         watchRepo.insertRules(bp.watchRules.map { it.toImport(newId) })
@@ -521,14 +1045,14 @@ class BackupManager(
             appManager.appFilterDrawableName(packPackage, InstalledApplication(packageName, activityName, 0))
         }.getOrNull()
 
-    private suspend fun restorePrefs(prefs: Map<String, BackupPref>) {
+    private suspend fun restorePrefs(prefs: Map<String, BackupPref>, preserveDeviceLocal: Boolean = true) {
         context.dataStore.edit { store ->
-            val autoBackupInterval = store[AutoBackupIntervalKey]
-            val autoBackupTreeUri = store[AutoBackupTreeUriKey]
-            val lastAutoBackupAt = store[LastAutoBackupAtKey]
+            val autoBackupInterval = store[AutoBackupIntervalKey].takeIf { preserveDeviceLocal }
+            val autoBackupTreeUri = store[AutoBackupTreeUriKey].takeIf { preserveDeviceLocal }
+            val lastAutoBackupAt = store[LastAutoBackupAtKey].takeIf { preserveDeviceLocal }
             store.clear()
             for ((name, pref) in prefs) {
-                if (name in DEVICE_LOCAL_PREF_NAMES) continue
+                if (preserveDeviceLocal && name in DEVICE_LOCAL_PREF_NAMES) continue
                 when (pref.tag) {
                     BackupPref.BOOL -> store[booleanPreferencesKey(name)] = pref.value as Boolean
                     BackupPref.INT -> store[intPreferencesKey(name)] = pref.value as Int
@@ -580,45 +1104,5 @@ class BackupManager(
 
         private fun today(): String =
             java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
-    }
-}
-
-private fun ZipOutputStream.putTextEntry(name: String, text: String) {
-    putNextEntry(ZipEntry(name))
-    write(text.toByteArray(Charsets.UTF_8))
-    closeEntry()
-}
-
-private fun ZipOutputStream.putFileEntry(name: String, file: File) {
-    putNextEntry(ZipEntry(name))
-    file.inputStream().use { it.copyTo(this) }
-    closeEntry()
-}
-
-/** Reads the CURRENT zip entry (ZipInputStream ends the stream at each entry boundary). */
-private fun ZipInputStream.readEntryText(): String = readBytes().toString(Charsets.UTF_8)
-
-/**
- * Writes the current zip entry to [target] via a temporary file, so a failure part-way (a full
- * disk, an I/O error) leaves the previous file intact instead of a truncated one. This matters
- * most for the keystore: a half-written `renkinpack.keystore` cannot sign the packs the user
- * already installed, and no earlier copy exists to fall back on.
- *
- * Note this makes each individual file safe, NOT the restore as a whole — the databases,
- * preferences and the uploads gallery are still replaced in stages and a failure mid-restore
- * leaves a partially restored app.
- */
-private fun writeEntryTo(zip: ZipInputStream, target: File) {
-    val temp = File(target.parentFile, "${target.name}.tmp")
-    try {
-        temp.outputStream().use { zip.copyTo(it) }
-        if (!temp.renameTo(target)) {
-            // Rename can fail if the target is held open; fall back to replacing in place.
-            temp.inputStream().use { source ->
-                target.outputStream().use { source.copyTo(it) }
-            }
-        }
-    } finally {
-        temp.delete()
     }
 }

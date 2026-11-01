@@ -11,18 +11,22 @@ import org.junit.Test
 class ModifierPresetPayloadTest {
 
     private fun options() = GenerationOptions(
-        primarySource = Source.APPLICATION_ICON,
-        primaryImageEdit = ImageEdit.NONE,
-        primaryTextType = TextType.FULL_NAME,
-        primaryIconPack = "",
-        color = Color.BLACK,
-        bgColor = Color.TRANSPARENT,
-        vector = false,
-        materialYou = false,
-        themed = false,
+        source = IconSourceOptions(
+            primarySource = Source.APPLICATION_ICON,
+            primaryTextType = TextType.FULL_NAME,
+            primaryIconPack = ""
+        ),
+        export = IconExportOptions(
+            vector = false,
+            materialYou = false,
+            themed = false,
+            background = ColorFill(Color.TRANSPARENT)
+        ),
         override = true,
-        iconOffsetX = 0.2f,
-        iconOffsetY = -0.1f
+        modifiers = ModifierStack(
+            effect = EffectModifier(imageEdit = ImageEdit.NONE, colorizer = ColorizerStyle(firstColor = Color.BLACK)),
+            transform = TransformModifier(offsetX = 0.2f, offsetY = -0.1f),
+        )
     )
 
     @Test
@@ -89,12 +93,27 @@ class ModifierPresetPayloadTest {
             )
         )
 
-        assertEquals(ImageEdit.COLORIZE, result.primaryImageEdit)
-        assertEquals(Color.MAGENTA, result.color)
-        assertEquals(0.8f, result.iconScale)
-        assertEquals(OutlineMode.RECOLOR, result.outlineMode)
-        assertEquals(0.2f, result.iconOffsetX)
-        assertEquals(-0.1f, result.iconOffsetY)
+        assertEquals(ImageEdit.COLORIZE, result.modifiers.effect.imageEdit)
+        assertEquals(Color.MAGENTA, result.modifiers.effect.colorizer.firstColor)
+        assertEquals(0.8f, result.modifiers.transform.scale)
+        assertEquals(OutlineMode.RECOLOR, result.modifiers.outline?.mode)
+        assertEquals(0.2f, result.modifiers.transform.offsetX)
+        assertEquals(-0.1f, result.modifiers.transform.offsetY)
+    }
+
+    @Test
+    fun platePresetKeepsTheGeneratedMaterialYouBackgroundColour() {
+        val plate = ColorizerStyle(firstColor = Color.WHITE)
+        val payload = ModifierPresetPayload(shape = ModifierPresetShape(IconShape.COOKIE, false, 1f, plate))
+        val materialYou = options()
+            .withSource { copy(applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU) }
+            .withExport { copy(background = ColorFill(Color.BLACK)) }
+
+        val generated = materialYou.withModifierPreset(payload).export.background
+        val ordinary = options().withModifierPreset(payload).export.background
+
+        assertEquals(ColorFill(Color.BLACK, plate), generated)
+        assertEquals(ColorFill(Color.WHITE, plate), ordinary)
     }
 
     @Test

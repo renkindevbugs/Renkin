@@ -8,6 +8,7 @@ import android.content.pm.PackageManager.ResolveInfoFlags
 import android.content.pm.ResolveInfo
 import androidx.core.content.pm.PackageInfoCompat
 import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.apk.GeneratedPackIdentity
 import dev.renkinProject.renkin.util.Log
 
 internal const val ICON_PACK_ACTION = "org.adw.launcher.THEMES"
@@ -28,6 +29,7 @@ internal fun iconPackQueryIntent(
  * the much broader resource reader.
  */
 class IconPackCatalog internal constructor(context: Context) {
+    private val appContext = context.applicationContext
     private val packageManager = context.packageManager
 
     fun installedIconPacks(): List<IconPack> {
@@ -40,6 +42,7 @@ class IconPackCatalog internal constructor(context: Context) {
             try {
                 val packageName = resolve.activityInfo.packageName
                 val pack = packageInfo(packageName) ?: continue
+                GeneratedPackIdentity.isGenerated(appContext, packageName)
                 iconPacks.add(
                     IconPack(
                         packageName = packageName,

@@ -1,15 +1,14 @@
 package dev.renkinProject.renkin.apk
 
 import android.content.Context
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.VERDICT_UNKNOWN
 import dev.renkinProject.renkin.data.transfer.PackVerdictManager
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 
 /**
@@ -34,10 +33,11 @@ class IconLockManager(
     private val lockedRows = mutableMapOf<String, DbApplication>()
     private val orphanRows = mutableMapOf<String, DbApplication>()
 
-    /** Keys of the active profile's icons currently locked behind a missing pack. Compose
-     * state (snapshot of the internal map) so the list rows/badges react to lock changes. */
-    var lockedIconKeys: Set<String> by mutableStateOf(emptySet())
-        private set
+    private val mutableLockedIconKeys = MutableStateFlow<Set<String>>(emptySet())
+    val lockedIconKeysState = mutableLockedIconKeys.asStateFlow()
+
+    /** Action-time snapshot only; composables collect [lockedIconKeysState]. */
+    val lockedIconKeys: Set<String> get() = lockedIconKeysState.value
 
     /** Live keys of the held-back rows (refresh must not silently refill those slots). */
     val lockedKeys: Set<String> get() = lockedRows.keys
@@ -65,6 +65,9 @@ class IconLockManager(
         orphanRows[key] = row
     }
 
+    /** Hands an orphan row back once its component is a list entry again (an added app). */
+    fun takeOrphan(key: String): DbApplication? = orphanRows.remove(key)
+
     fun clear() {
         lockedRows.clear()
         orphanRows.clear()
@@ -80,9 +83,9 @@ class IconLockManager(
         publish()
     }
 
-    /** Pushes the current locked-key set into Compose state (call after a batch of changes). */
+    /** Publishes a snapshot after a batch of held-row changes. */
     fun publish() {
-        lockedIconKeys = lockedRows.keys.toSet()
+        mutableLockedIconKeys.value = lockedRows.keys.toSet()
     }
 
     // ---- Provenance -----------------------------------------------------------------
@@ -90,12 +93,19 @@ class IconLockManager(
     // Session cache of the provenance maps carried by installed Renkin-built packs
     // (component key → original source pack). Cleared when packs re-sync or rebuild.
     private val provenanceCache = mutableMapOf<String, Map<String, String>>()
+    private val generatedPackCache = mutableMapOf<String, Boolean>()
 
     private fun provenanceFor(packPackage: String): Map<String, String> =
         provenanceCache.getOrPut(packPackage) { PackProvenance.read(context, packPackage) }
 
     /** Drops cached provenance maps (packs were re-synced or rebuilt). */
-    fun clearProvenanceCache() = provenanceCache.clear()
+    fun clearProvenanceCache() {
+        provenanceCache.clear()
+        generatedPackCache.clear()
+    }
+
+    private fun isGeneratedPack(packageName: String): Boolean =
+        generatedPackCache.getOrPut(packageName) { GeneratedPackIdentity.isGenerated(context, packageName) }
 
     /**
      * The REAL origin of an icon sourced from [sourcePack]: our own built packs carry a
@@ -103,9 +113,13 @@ class IconLockManager(
      * X even when it arrives through a Renkin pack. Foreign packs pass through unchanged.
      */
     fun resolveOrigin(appKey: String, sourcePack: String?): String? {
-        val source = sourcePack?.takeIf { it.isNotEmpty() } ?: return sourcePack
-        if (!IconPackBuilder.isOwnPack(source)) return source
-        return provenanceFor(source)[appKey] ?: source
+        var source = sourcePack?.takeIf { it.isNotEmpty() } ?: return sourcePack
+        val visited = mutableSetOf<String>()
+        repeat(8) {
+            if (!visited.add(source) || !isGeneratedPack(source)) return source
+            source = provenanceFor(source)[appKey]?.takeIf(String::isNotEmpty) ?: return source
+        }
+        return source
     }
 
     /**
@@ -113,8 +127,8 @@ class IconLockManager(
      * device — precomputed so the (non-suspend) generation callbacks can gate on it.
      */
     suspend fun lockedOriginsFor(options: GenerationOptions): Set<String> {
-        val ownPacks = listOf(options.primaryIconPack, options.secondaryIconPack)
-            .filter { it.isNotEmpty() && IconPackBuilder.isOwnPack(it) }
+        val ownPacks = listOf(options.source.primaryIconPack, options.source.secondaryIconPack)
+            .filter { it.isNotEmpty() && isGeneratedPack(it) }
         if (ownPacks.isEmpty()) return emptySet()
         return lockedPacksAmong(ownPacks.flatMap { provenanceFor(it).values }.toSet())
     }

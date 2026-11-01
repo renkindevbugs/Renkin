@@ -1,0 +1,292 @@
+package dev.renkinProject.renkin.data.transfer
+
+import android.database.Cursor
+import android.util.Base64
+import android.util.JsonReader
+import android.util.JsonToken
+import android.util.JsonWriter
+import androidx.sqlite.db.SupportSQLiteDatabase
+import dev.renkinProject.renkin.data.OversizedText
+import dev.renkinProject.renkin.data.StorageRecoverySchemaException
+import dev.renkinProject.renkin.data.StorageRecoverySnapshotException
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.io.OutputStreamWriter
+import java.io.OutputStream
+
+internal object BackupDatabaseSnapshot {
+    suspend fun checkCompatibility(db: SupportSQLiteDatabase, file: File) {
+        file.reader(Charsets.UTF_8).use { input ->
+            JsonReader(input).use { reader ->
+                reader.beginObject()
+                requireField(reader, "version")
+                val snapshotVersion = reader.nextInt()
+                requireField(reader, "tables")
+                val expected = tables(db).toSet()
+                val omittedColumns = supportedOmittedColumns(snapshotVersion, db.version, expected)
+                val snapshotTables = expected - addedTablesSince(snapshotVersion, db.version)
+                val found = mutableSetOf<String>()
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    currentCoroutineContext().ensureActive()
+                    reader.beginObject()
+                    requireField(reader, "name")
+                    val table = reader.nextString()
+                    if (table !in snapshotTables || !found.add(table)) throw StorageRecoverySnapshotException("Invalid recovery table")
+                    requireField(reader, "columns")
+                    val columns = mutableListOf<String>()
+                    reader.beginArray()
+                    while (reader.hasNext()) columns.add(reader.nextString())
+                    reader.endArray()
+                    checkColumns(db, table, columns, omittedColumns[table].orEmpty())
+                    requireField(reader, "rows")
+                    reader.skipValue()
+                    reader.endObject()
+                }
+                reader.endArray()
+                reader.endObject()
+                if (found != snapshotTables || reader.peek() != JsonToken.END_DOCUMENT) throw StorageRecoverySnapshotException("Incomplete recovery snapshot")
+            }
+        }
+    }
+
+    suspend fun write(db: SupportSQLiteDatabase, file: File) = writeTables(db, file, tables(db))
+
+    // Diagnostic-only copy. Compatibility and restore still require the complete table set.
+    suspend fun writeProfileDiagnostics(db: SupportSQLiteDatabase, file: File) =
+        writeTables(db, file, listOf("Profile"))
+
+    private suspend fun writeTables(db: SupportSQLiteDatabase, file: File, tableNames: List<String>) {
+        FileOutputStream(file).use { output ->
+            val snapshotContext = currentCoroutineContext()
+            val checked = object : OutputStream() {
+                private var bytesUntilSpaceCheck = 0L
+                override fun write(value: Int) = write(byteArrayOf(value.toByte()), 0, 1)
+                override fun write(buffer: ByteArray, offset: Int, count: Int) {
+                    snapshotContext.ensureActive()
+                    if (bytesUntilSpaceCheck <= 0) {
+                        ensureBackupSpace(file.parentFile!!, 1024 * 1024L)
+                        bytesUntilSpaceCheck = 1024 * 1024L
+                    }
+                    output.write(buffer, offset, count)
+                    bytesUntilSpaceCheck -= count
+                }
+            }
+            // Android JsonWriter emits strings character by character. Buffer before UTF-8
+            // encoding so large icon payloads do not cause millions of encoder calls.
+            val writer = JsonWriter(OutputStreamWriter(checked, Charsets.UTF_8).buffered())
+            writer.beginObject().name("version").value(db.version.toLong()).name("tables").beginArray()
+            for (table in tableNames) {
+                currentCoroutineContext().ensureActive()
+                val columnNames = db.query("SELECT * FROM ${quoted(table)} LIMIT 0").use { it.columnNames.toList() }
+                db.query(windowSafeSelect(table, columnNames)).use { cursor ->
+                    writer.beginObject().name("name").value(table).name("columns").beginArray()
+                    columnNames.forEach { writer.value(it) }
+                    writer.endArray().name("rows").beginArray()
+                    while (cursor.moveToNext()) {
+                        currentCoroutineContext().ensureActive()
+                        writer.beginArray()
+                        for ((index, name) in columnNames.withIndex()) {
+                            val column = index + 1
+                            if (cursor.getInt(column + columnNames.size) != 0) {
+                                writer.beginArray().value(Cursor.FIELD_TYPE_STRING.toLong())
+                                writer.value(readOversizedText(db, table, name, cursor.getLong(0)))
+                                writer.endArray()
+                                continue
+                            }
+                            writer.beginArray().value(cursor.getType(column).toLong())
+                            when (cursor.getType(column)) {
+                                Cursor.FIELD_TYPE_NULL -> writer.nullValue()
+                                Cursor.FIELD_TYPE_INTEGER -> writer.value(cursor.getLong(column))
+                                Cursor.FIELD_TYPE_FLOAT -> writer.value(cursor.getDouble(column))
+                                Cursor.FIELD_TYPE_STRING -> writer.value(cursor.getString(column))
+                                Cursor.FIELD_TYPE_BLOB -> writer.value(Base64.encodeToString(cursor.getBlob(column), Base64.NO_WRAP))
+                            }
+                            writer.endArray()
+                        }
+                        writer.endArray()
+                    }
+                    writer.endArray().endObject()
+                }
+            }
+            writer.endArray().endObject()
+            writer.flush()
+            output.fd.sync()
+        }
+    }
+
+    /**
+     * Every row with its rowid first, long TEXT values replaced by NULL, then one flag per column
+     * marking those values. A whole stored icon can exceed a CursorWindow (issue #19).
+     */
+    private fun windowSafeSelect(table: String, columns: List<String>): String {
+        fun oversized(column: String) =
+            "(typeof(${quoted(column)}) = 'text' AND length(${quoted(column)}) > ${OversizedText.INLINE_CHARS})"
+        val values = columns.map { "CASE WHEN ${oversized(it)} THEN NULL ELSE ${quoted(it)} END" }
+        val flags = columns.map { oversized(it) }
+        return "SELECT rowid, ${(values + flags).joinToString()} FROM ${quoted(table)}"
+    }
+
+    private fun readOversizedText(db: SupportSQLiteDatabase, table: String, column: String, rowid: Long): String {
+        val select = "FROM ${quoted(table)} WHERE rowid = ?"
+        val length = db.query("SELECT length(${quoted(column)}) $select", arrayOf<Any>(rowid))
+            .use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        return OversizedText.read(length) { start, count ->
+            db.query("SELECT substr(${quoted(column)}, ?, ?) $select", arrayOf<Any>(start, count, rowid))
+                .use { if (it.moveToFirst()) it.getString(0).orEmpty() else "" }
+        }
+    }
+
+    // The caller holds a Room transaction. This internal format preserves every column,
+    // row identity and sqlite_sequence; it never passes through portable-backup normalization.
+    suspend fun restore(db: SupportSQLiteDatabase, file: File) {
+        file.reader(Charsets.UTF_8).use { input ->
+            JsonReader(input).use { reader ->
+                reader.beginObject()
+                requireField(reader, "version")
+                val snapshotVersion = reader.nextInt()
+                requireField(reader, "tables")
+                val expected = tables(db).toSet()
+                val omittedColumns = supportedOmittedColumns(snapshotVersion, db.version, expected)
+                // Tables added after the snapshot are emptied below and stay empty.
+                val snapshotTables = expected - addedTablesSince(snapshotVersion, db.version)
+                db.execSQL("PRAGMA defer_foreign_keys = ON")
+                expected.forEach { db.execSQL("DELETE FROM ${quoted(it)}") }
+                val restored = mutableSetOf<String>()
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    currentCoroutineContext().ensureActive()
+                    reader.beginObject()
+                    requireField(reader, "name")
+                    val table = reader.nextString()
+                    if (table !in snapshotTables || !restored.add(table)) throw StorageRecoverySnapshotException("Invalid recovery table")
+                    if (table == "sqlite_sequence") db.execSQL("DELETE FROM sqlite_sequence")
+                    requireField(reader, "columns")
+                    val columns = mutableListOf<String>()
+                    reader.beginArray()
+                    while (reader.hasNext()) columns.add(reader.nextString())
+                    reader.endArray()
+                    checkColumns(db, table, columns, omittedColumns[table].orEmpty())
+                    // Only audited additions can be omitted. SQL defaults retain old artwork
+                    // and leave pre-v21 profiles unconverted for the later shared bootstrap.
+                    val sql = "INSERT INTO ${quoted(table)} (${columns.joinToString(",", transform = ::quoted)}) " +
+                        "VALUES (${columns.joinToString(",") { "?" }})"
+                    requireField(reader, "rows")
+                    reader.beginArray()
+                    while (reader.hasNext()) {
+                        currentCoroutineContext().ensureActive()
+                        reader.beginArray()
+                        val values = Array<Any?>(columns.size) { column ->
+                            reader.beginArray()
+                            val value = when (reader.nextInt()) {
+                                Cursor.FIELD_TYPE_NULL -> { reader.nextNull(); null }
+                                Cursor.FIELD_TYPE_INTEGER -> reader.nextLong()
+                                Cursor.FIELD_TYPE_FLOAT -> reader.nextDouble()
+                                Cursor.FIELD_TYPE_STRING -> reader.nextString().let { text ->
+                                    if (table == "DbApplication" && columns[column] == "modifierInput") {
+                                        // Obsolete inline v20 metadata must not reintroduce huge rows.
+                                        StoredIconModifierInput.normalize(text).orEmpty()
+                                    } else text
+                                }
+                                Cursor.FIELD_TYPE_BLOB -> Base64.decode(reader.nextString(), Base64.NO_WRAP)
+                                else -> throw StorageRecoverySnapshotException("Invalid recovery value")
+                            }
+                            reader.endArray()
+                            value
+                        }
+                        reader.endArray()
+                        db.execSQL(sql, values)
+                    }
+                    reader.endArray()
+                    reader.endObject()
+                }
+                reader.endArray()
+                reader.endObject()
+                if (restored != snapshotTables || reader.peek() != JsonToken.END_DOCUMENT) throw StorageRecoverySnapshotException("Incomplete recovery snapshot")
+            }
+        }
+    }
+
+    private fun supportedOmittedColumns(snapshotVersion: Int, currentVersion: Int, tables: Set<String>): Map<String, List<String>> {
+        if (snapshotVersion == currentVersion) return emptyMap()
+        if (snapshotVersion > currentVersion) {
+            throw StorageRecoverySchemaException("Recovery database schema has changed")
+        }
+        // Compose only audited, table-specific ADD COLUMN migrations. A prefix/default
+        // match cannot prove compatibility with migrations that backfill or reinterpret data.
+        val auditedAdditions = mapOf(
+            18 to mapOf("DbApplication" to listOf("modifierRecipe")),
+            19 to mapOf("DbApplication" to listOf("modifierInput")),
+            20 to mapOf("Profile" to listOf("profileStyle")),
+            21 to mapOf("Profile" to listOf("appTargets")),
+            22 to mapOf("Profile" to listOf("customPackageName", "packIcon")),
+            23 to emptyMap()
+        )
+        val omitted = mutableMapOf<String, List<String>>()
+        for (version in snapshotVersion until currentVersion) {
+            val additions = auditedAdditions[version]
+                ?: throw StorageRecoverySchemaException("Recovery database schema has changed")
+            for ((table, columns) in additions) {
+                if (table !in tables) throw StorageRecoverySchemaException("Recovery database schema has changed")
+                omitted[table] = omitted[table].orEmpty() + columns
+            }
+        }
+        return omitted
+    }
+
+    // Audited CREATE TABLE migrations; an older snapshot cannot contain these tables.
+    private fun addedTablesSince(snapshotVersion: Int, currentVersion: Int): Set<String> {
+        val auditedTables = mapOf(23 to setOf("GlobalStyleHistoryEntry"))
+        return (snapshotVersion until currentVersion).flatMap { auditedTables[it].orEmpty() }.toSet()
+    }
+
+    private fun checkColumns(
+        db: SupportSQLiteDatabase,
+        table: String,
+        columns: List<String>,
+        omittedColumns: List<String>
+    ) {
+        db.query("SELECT * FROM ${quoted(table)} LIMIT 0").use { cursor ->
+            val current = cursor.columnNames.toList()
+            val expected = if (omittedColumns.isNotEmpty()) {
+                if (current.takeLast(omittedColumns.size) != omittedColumns) {
+                    throw StorageRecoverySchemaException("Recovery columns have changed")
+                }
+                current.dropLast(omittedColumns.size)
+            } else current
+            if (columns != expected) throw StorageRecoverySchemaException("Recovery columns have changed")
+        }
+        if (omittedColumns.isNotEmpty()) {
+            val validDefaults = mutableSetOf<String>()
+            db.query("PRAGMA table_info(${quoted(table)})").use { cursor ->
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(1) in omittedColumns && cursor.getString(2).equals("TEXT", ignoreCase = true) &&
+                        cursor.getInt(3) == 1 && cursor.getString(4) == "''") validDefaults.add(cursor.getString(1))
+                }
+            }
+            if (validDefaults != omittedColumns.toSet()) throw StorageRecoverySchemaException("Recovery metadata defaults have changed")
+        }
+    }
+
+    private fun tables(db: SupportSQLiteDatabase): List<String> = db.query(
+        "SELECT name FROM sqlite_master WHERE type = 'table' " +
+            "AND (name NOT LIKE 'sqlite_%' OR name = 'sqlite_sequence') " +
+            "AND name NOT IN ('android_metadata', 'room_master_table') ORDER BY name"
+    ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.getString(0)) } }
+
+    fun flush(db: SupportSQLiteDatabase) {
+        db.query("PRAGMA wal_checkpoint(FULL)").use { cursor ->
+            if (!cursor.moveToFirst() || cursor.getInt(0) != 0) throw IOException("Cannot flush restored database")
+        }
+    }
+
+    private fun quoted(name: String): String = "\"${name.replace("\"", "\"\"")}\""
+
+    private fun requireField(reader: JsonReader, expected: String) {
+        if (reader.nextName() != expected) throw StorageRecoverySnapshotException("Invalid recovery field")
+    }
+}

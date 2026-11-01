@@ -1,10 +1,13 @@
 package dev.renkinProject.renkin.data.online
 
 import android.content.Context
+import android.os.SystemClock
 import android.util.AtomicFile
 import android.util.LruCache
 import android.util.Xml
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.renkinProject.renkin.BuildConfig
+import dev.renkinProject.renkin.extension.toLowerHex
 import dev.renkinProject.renkin.util.Log
 import java.io.File
 import java.io.IOException
@@ -19,14 +22,20 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
 import org.json.JSONObject
 import org.xmlpull.v1.XmlPullParser
 
@@ -72,24 +81,35 @@ fun onlineAttributionLabel(url: String): String? {
  * instead of throwing — the browser shows a retryable error state.
  */
 @Singleton
-class OnlineIconRepository @Inject constructor(
-    @ApplicationContext private val context: Context
+class OnlineIconRepository internal constructor(
+    private val context: Context,
+    private val request: suspend (String, Int) -> HttpTextResponse,
+    private val monotonicMillis: () -> Long,
+    private val ioDispatcher: CoroutineDispatcher
 ) {
+    @Inject constructor(@ApplicationContext context: Context) : this(
+        context, ::executeHttpGet, SystemClock::elapsedRealtime, Dispatchers.IO
+    )
 
     @Volatile private var memoryCollections: List<IconifyCollection>? = null
     private val memoryIndexes = ConcurrentHashMap<String, List<OnlineIcon>>()
     private val indexLocks = ConcurrentHashMap<String, Mutex>()
     private val svgLocks = ConcurrentHashMap<String, Mutex>()
     private val svgFetchPermits = Semaphore(SVG_FETCH_CONCURRENCY)
+    private val requestTimingMutex = Mutex()
+    private var nextRequestAt = 0L
+    private val mutableRateLimitUntil = MutableStateFlow(0L)
+    val rateLimitUntil = mutableRateLimitUntil.asStateFlow()
     private val svgMemory = object : LruCache<String, String>(SVG_MEMORY_BYTES) {
         override fun sizeOf(key: String, value: String): Int = value.toByteArray(Charsets.UTF_8).size
     }
     private val searchMemory = LruCache<String, List<OnlineIcon>>(SEARCH_MEMORY_QUERIES)
+    @Volatile private var preferredApiHost = API_HOSTS.first()
 
     private val cacheRoot: File
         get() = File(context.cacheDir, "online-icons").apply { mkdirs() }
 
-    suspend fun collections(): List<IconifyCollection>? = withContext(Dispatchers.IO) {
+    suspend fun collections(): List<IconifyCollection>? = withContext(ioDispatcher) {
         memoryCollections?.let { return@withContext it }
         indexLocks.getOrPut("collections") { Mutex() }.withLock {
             memoryCollections ?: cachedOrFetch(
@@ -100,7 +120,7 @@ class OnlineIconRepository @Inject constructor(
         }
     }
 
-    suspend fun icons(collection: IconifyCollection): List<OnlineIcon>? = withContext(Dispatchers.IO) {
+    suspend fun icons(collection: IconifyCollection): List<OnlineIcon>? = withContext(ioDispatcher) {
         memoryIndexes[collection.prefix]?.let { return@withContext it }
         indexLocks.getOrPut("set:${collection.prefix}") { Mutex() }.withLock {
             memoryIndexes[collection.prefix] ?: cachedOrFetch(
@@ -117,7 +137,7 @@ class OnlineIconRepository @Inject constructor(
      * like the search box on iconify.design. Memory-cached per query for the session; an
      * empty list is a valid "no matches", null means the request failed.
      */
-    suspend fun search(query: String): List<OnlineIcon>? = withContext(Dispatchers.IO) {
+    suspend fun search(query: String): List<OnlineIcon>? = withContext(ioDispatcher) {
         val key = query.trim().lowercase()
         searchMemory.get(key)?.let { return@withContext it }
         val json = httpGetText(
@@ -128,31 +148,40 @@ class OnlineIconRepository @Inject constructor(
         parseSearch(json)?.also { searchMemory.put(key, it) }
     }
 
-    suspend fun svg(icon: OnlineIcon): String? = withContext(Dispatchers.IO) {
+    suspend fun svg(icon: OnlineIcon, cachedOnly: Boolean = false): String? = withContext(ioDispatcher) {
         svgMemory.get(icon.svgUrl)?.let { return@withContext it }
+        if (cachedOnly) {
+            return@withContext readCachedSvg(icon)?.also { svgMemory.put(icon.svgUrl, it) }
+        }
         val lock = svgLocks.getOrPut(icon.svgUrl) { Mutex() }
         try {
             lock.withLock {
                 svgMemory.get(icon.svgUrl)?.let { return@withLock it }
-                svgFetchPermits.withPermit {
-                    loadSvg(icon)?.also { svgMemory.put(icon.svgUrl, it) }
-                }
+                loadSvg(icon)?.also { svgMemory.put(icon.svgUrl, it) }
             }
         } finally {
             if (!lock.isLocked) svgLocks.remove(icon.svgUrl, lock)
         }
     }
 
-    private suspend fun loadSvg(icon: OnlineIcon): String? {
+    private fun svgCacheFile(icon: OnlineIcon): File {
         val dir = File(cacheRoot, "iconify-${cacheKey(icon.prefix)}").apply { mkdirs() }
-        val cache = File(dir, "${cacheKey(icon.svgUrl)}.svg")
-        if (cache.isFile) {
-            runCatching { cache.readText() }.getOrNull()?.takeIf(::isWellFormedSvg)?.let { return it }
-            cache.delete()
+        return File(dir, "${cacheKey(icon.svgUrl)}.svg")
+    }
+
+    private fun readCachedSvg(icon: OnlineIcon): String? = svgCacheFile(icon)
+        .takeIf { it.isFile }
+        ?.let { runCatching { it.readText() }.getOrNull() }
+        ?.takeIf(::isWellFormedSvg)
+
+    private suspend fun loadSvg(icon: OnlineIcon): String? {
+        readCachedSvg(icon)?.let { return it }
+        val markup = httpGetText(icon.svgUrl, MAX_SVG_BYTES, limitSvgRequests = true) ?: return null
+        if (!isWellFormedSvg(markup)) {
+            Log.error("OnlineIcons", "Invalid SVG response: ${icon.svgUrl}")
+            return null
         }
-        val markup = httpGetText(icon.svgUrl, MAX_SVG_BYTES)
-            ?.takeIf(::isWellFormedSvg) ?: return null
-        writeAtomically(cache, markup)
+        writeAtomically(svgCacheFile(icon), markup)
         return markup
     }
 
@@ -193,7 +222,92 @@ class OnlineIconRepository @Inject constructor(
 
     private fun File.ageMs(): Long = System.currentTimeMillis() - lastModified()
 
+    private suspend fun httpGetText(
+        url: String,
+        maxBytes: Int,
+        limitSvgRequests: Boolean = false
+    ): String? {
+        require(url.startsWith(API_HOSTS.first() + "/")) { "Expected a canonical Iconify API URL" }
+        var host = preferredApiHost
+        repeat(HTTP_ATTEMPTS) { attempt ->
+            currentCoroutineContext().ensureActive()
+            val requestUrl = host + url.removePrefix(API_HOSTS.first())
+            val response = try {
+                executeThrottledGet(requestUrl, maxBytes, limitSvgRequests)
+            } catch (e: IOException) {
+                currentCoroutineContext().ensureActive()
+                Log.error("OnlineIcons", "GET failed: $requestUrl", e)
+                HttpTextResponse(retryable = true)
+            }
+            response.body?.let {
+                preferredApiHost = host
+                return it
+            }
+            if (!response.retryable || attempt == HTTP_ATTEMPTS - 1) {
+                Log.error("OnlineIcons", "GET unavailable: $requestUrl (HTTP ${response.status ?: "unknown"})")
+                return null
+            }
+
+            // A rate limit applies to this request; do not evade it by changing hosts.
+            if (response.status == 429) return@repeat
+            host = API_HOSTS[(API_HOSTS.indexOf(host) + 1) % API_HOSTS.size]
+            val exponentialDelay = HTTP_RETRY_BASE_DELAY_MS * (1L shl attempt)
+            delay(response.retryAfterMs ?: exponentialDelay)
+        }
+        return null
+    }
+
+    private suspend fun executeThrottledGet(
+        url: String,
+        maxBytes: Int,
+        limitSvgRequests: Boolean
+    ): HttpTextResponse {
+        while (true) {
+            val waitMs = requestTimingMutex.withLock {
+                (maxOf(nextRequestAt, mutableRateLimitUntil.value) - monotonicMillis()).coerceAtLeast(0L)
+            }
+            if (waitMs > 0) {
+                delay(waitMs)
+                continue
+            }
+            if (limitSvgRequests) svgFetchPermits.acquire()
+            try {
+                // Recheck after acquiring a slot: another response may have imposed a shared pause.
+                val admitted = requestTimingMutex.withLock {
+                    val now = monotonicMillis()
+                    if (now < maxOf(nextRequestAt, mutableRateLimitUntil.value)) false else {
+                        nextRequestAt = now + HTTP_REQUEST_INTERVAL_MS
+                        true
+                    }
+                }
+                if (!admitted) continue
+                val response = request(url, maxBytes)
+                if (response.status == 429) {
+                    val pauseMs = (response.retryAfterMs ?: HTTP_RATE_LIMIT_FALLBACK_MS)
+                        .coerceIn(HTTP_REQUEST_INTERVAL_MS, HTTP_MAX_RATE_LIMIT_MS)
+                    requestTimingMutex.withLock {
+                        mutableRateLimitUntil.value = maxOf(
+                            mutableRateLimitUntil.value,
+                            monotonicMillis() + pauseMs
+                        )
+                    }
+                    if (BuildConfig.DEBUG) {
+                        Log.debug("OnlineIcons", "API rate limited; sharedPauseMs=$pauseMs")
+                    }
+                }
+                return response
+            } finally {
+                if (limitSvgRequests) svgFetchPermits.release()
+            }
+        }
+    }
+
     companion object {
+        private val API_HOSTS = listOf(
+            "https://api.iconify.design",
+            "https://api.simplesvg.com",
+            "https://api.unisvg.com"
+        )
         private const val INDEX_TTL_MS = 7L * 24 * 60 * 60 * 1000
         private const val MAX_INDEX_BYTES = 8 * 1024 * 1024
         private const val MAX_SVG_BYTES = 512 * 1024
@@ -204,6 +318,9 @@ class OnlineIconRepository @Inject constructor(
         private const val HTTP_ATTEMPTS = 3
         private const val HTTP_RETRY_BASE_DELAY_MS = 400L
         private const val HTTP_MAX_RETRY_AFTER_MS = 15_000L
+        private const val HTTP_REQUEST_INTERVAL_MS = 300L
+        private const val HTTP_RATE_LIMIT_FALLBACK_MS = 60_000L
+        private const val HTTP_MAX_RATE_LIMIT_MS = 5 * 60_000L
 
         fun parseSearch(json: String): List<OnlineIcon>? = runCatching {
             val array = JSONObject(json).optJSONArray("icons") ?: return null
@@ -237,7 +354,7 @@ class OnlineIconRepository @Inject constructor(
         private fun cacheKey(value: String): String =
             MessageDigest.getInstance("SHA-256")
                 .digest(value.toByteArray(Charsets.UTF_8))
-                .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+                .toLowerHex()
 
         fun parseCollections(json: String): List<IconifyCollection>? = runCatching {
             val root = JSONObject(json)
@@ -293,70 +410,75 @@ class OnlineIconRepository @Inject constructor(
                 .takeIf { it.isNotEmpty() }
         }.getOrNull()
 
-        private suspend fun httpGetText(url: String, maxBytes: Int): String? {
-            repeat(HTTP_ATTEMPTS) { attempt ->
-                val response = try {
-                    runInterruptible(Dispatchers.IO) { executeHttpGet(url, maxBytes) }
-                } catch (e: IOException) {
-                    if (attempt == HTTP_ATTEMPTS - 1) {
-                        Log.error("OnlineIcons", "GET failed after retries: $url", e)
-                    }
-                    HttpTextResponse(retryable = true)
-                }
-                response.body?.let { return it }
-                if (!response.retryable || attempt == HTTP_ATTEMPTS - 1) return null
-
-                val exponentialDelay = HTTP_RETRY_BASE_DELAY_MS * (1L shl attempt)
-                delay(response.retryAfterMs ?: exponentialDelay)
-            }
-            return null
-        }
-
-        private fun executeHttpGet(url: String, maxBytes: Int): HttpTextResponse {
-            var connection: HttpURLConnection? = null
-            return try {
-                connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 10_000
-                    readTimeout = 20_000
+        private suspend fun executeHttpGet(url: String, maxBytes: Int): HttpTextResponse =
+            withContext(Dispatchers.IO) {
+                val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 3_000
+                    readTimeout = 5_000
                     instanceFollowRedirects = true
                     setRequestProperty("User-Agent", "Renkin (Android)")
                     setRequestProperty("Accept-Encoding", "identity")
                 }
-                val status = connection.responseCode
-                if (status != HttpURLConnection.HTTP_OK) {
-                    return HttpTextResponse(
-                        retryable = status in TRANSIENT_HTTP_STATUSES,
-                        retryAfterMs = if (status == 429 || status == 503) {
-                            retryAfterDelayMs(connection.getHeaderField("Retry-After"))
-                        } else {
-                            null
-                        }
-                    )
+                // Disconnect while the blocking child is still running when its caller is cancelled.
+                coroutineScope {
+                    val request = async {
+                        runInterruptible { readHttpResponse(connection, maxBytes) }
+                    }
+                    try {
+                        request.await()
+                    } finally {
+                        connection.disconnect()
+                    }
                 }
-                val body = connection.inputStream.use { stream ->
-                    val bytes = stream.readNBytesCompat(maxBytes + 1)
-                    if (bytes.size > maxBytes) null else String(bytes, Charsets.UTF_8)
-                }
-                HttpTextResponse(body = body)
-            } finally {
-                connection?.disconnect()
             }
+
+        private fun readHttpResponse(connection: HttpURLConnection, maxBytes: Int): HttpTextResponse {
+            val startedAt = System.nanoTime()
+            val status = connection.responseCode
+            if (BuildConfig.DEBUG) {
+                val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+                Log.debug("OnlineIcons", "GET HTTP $status headersMs=$elapsedMs ${connection.url}")
+            }
+            if (status != HttpURLConnection.HTTP_OK) {
+                return HttpTextResponse(
+                    status = status,
+                    retryable = status in TRANSIENT_HTTP_STATUSES,
+                    retryAfterMs = if (status == 429 || status == 503) {
+                        retryAfterDelayMs(
+                            connection.getHeaderField("Retry-After"),
+                            maxDelayMs = if (status == 429) HTTP_MAX_RATE_LIMIT_MS else HTTP_MAX_RETRY_AFTER_MS
+                        )
+                    } else {
+                        null
+                    }
+                )
+            }
+            val body = connection.inputStream.use { stream ->
+                val bytes = stream.readNBytesCompat(maxBytes + 1)
+                if (bytes.size > maxBytes) null else String(bytes, Charsets.UTF_8)
+            }
+            if (BuildConfig.DEBUG) {
+                val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000
+                Log.debug("OnlineIcons", "GET complete HTTP $status totalMs=$elapsedMs ${connection.url}")
+            }
+            return HttpTextResponse(body = body, status = status)
         }
 
         internal fun retryAfterDelayMs(
             value: String?,
-            nowMillis: Long = System.currentTimeMillis()
+            nowMillis: Long = System.currentTimeMillis(),
+            maxDelayMs: Long = HTTP_MAX_RETRY_AFTER_MS
         ): Long? {
             val raw = value?.trim().takeUnless { it.isNullOrEmpty() } ?: return null
             val delayMs = raw.toLongOrNull()?.let { seconds ->
-                seconds.coerceIn(0L, HTTP_MAX_RETRY_AFTER_MS / 1_000L) * 1_000L
+                seconds.coerceIn(0L, maxDelayMs / 1_000L) * 1_000L
             }
                 ?: runCatching {
                     ZonedDateTime.parse(raw, DateTimeFormatter.RFC_1123_DATE_TIME)
                         .toInstant()
                         .toEpochMilli() - nowMillis
                 }.getOrNull()
-            return delayMs?.coerceIn(0L, HTTP_MAX_RETRY_AFTER_MS)
+            return delayMs?.coerceIn(0L, maxDelayMs)
         }
 
         /** InputStream.readNBytes needs API 33 on Android; minSdk is lower. */
@@ -374,8 +496,9 @@ class OnlineIconRepository @Inject constructor(
             return buffer.toByteArray()
         }
 
-        private data class HttpTextResponse(
+        internal data class HttpTextResponse(
             val body: String? = null,
+            val status: Int? = null,
             val retryable: Boolean = false,
             val retryAfterMs: Long? = null
         )

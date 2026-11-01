@@ -1,12 +1,29 @@
 package dev.renkinProject.renkin
 
+import android.app.ActivityManager
 import android.app.Application
+import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.Process
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import dagger.hilt.android.HiltAndroidApp
+import dev.renkinProject.renkin.feature.language.AppLocales
+import dev.renkinProject.renkin.data.transfer.BackupManagerEntryPoint
+import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.data.ProfileStyleAccess
+import dev.renkinProject.renkin.service.BackgroundWorkScheduler
+import dagger.hilt.android.EntryPointAccessors
 import dev.renkinProject.renkin.util.CrashReporter
+import dev.renkinProject.renkin.util.Log
+import dev.renkinProject.renkin.util.enableDebugStrictMode
+import dev.renkinProject.renkin.util.timeProfilePhase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Application entry point for Hilt. [HiltAndroidApp] triggers Hilt's code generation and
@@ -14,12 +31,53 @@ import dev.renkinProject.renkin.util.CrashReporter
  */
 @HiltAndroidApp
 class RenkinApplication : Application() {
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(AppLocales.loadForApplication(base))
+        if (isMainProcess()) {
+            ProfileStyleAccess.install {
+                EntryPointAccessors.fromApplication(this, BackupManagerEntryPoint::class.java).profileStyleStore()
+            }
+            // WorkManager's provider starts before onCreate. Install the barrier before any
+            // provider can launch a worker that touches persisted state.
+            StorageOperationGate.installRecovery {
+                timeProfilePhase("startup recovery and maintenance") {
+                    EntryPointAccessors.fromApplication(this, BackupManagerEntryPoint::class.java)
+                        .backupManager().recoverPendingRestore()
+                }
+                timeProfilePhase("startup profile styles") { ProfileStyleAccess.initialize() }
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.DEBUG) enableDebugStrictMode()
         // Capture uncaught exceptions to a local file so the next launch can offer to email
         // the log (see CrashReporter / the crash dialog in MainActivity).
         CrashReporter.install(this)
         registerCrashLogsShortcut()
+        if (isMainProcess()) {
+            applicationScope.launch {
+                try {
+                    StorageOperationGate.run { }
+                    BackgroundWorkScheduler.reconcile(this@RenkinApplication)
+                } catch (error: Exception) {
+                    Log.error("RenkinApplication", "Could not finish recovery and startup maintenance", error)
+                }
+            }
+        }
+    }
+
+    private fun isMainProcess(): Boolean {
+        val processName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            Application.getProcessName()
+        } else {
+            getSystemService(ActivityManager::class.java)?.runningAppProcesses
+                ?.firstOrNull { it.pid == Process.myPid() }?.processName
+        }
+        return processName == packageName
     }
 
     /**

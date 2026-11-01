@@ -20,10 +20,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ContentCopy
@@ -34,12 +32,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,7 +47,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -61,7 +55,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.CardShape
@@ -97,65 +90,45 @@ fun CrashLogsScreen(onDismiss: () -> Unit) {
     var selected by remember { mutableStateOf<CrashReporter.CrashEntry?>(null) }
     var confirmClearAll by remember { mutableStateOf(false) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                topBar = {
-                    TopAppBar(
-                        title = { Text(stringResource(R.string.crashLogs)) },
-                        navigationIcon = {
-                            IconButton(onClick = onDismiss) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.close))
-                            }
-                        },
-                        actions = {
-                            if (entries.isNotEmpty()) {
-                                IconButton(onClick = { confirmClearAll = true }) {
-                                    Icon(
-                                        Icons.Filled.DeleteSweep,
-                                        stringResource(R.string.crashLogsClearAll),
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background,
-                            titleContentColor = MaterialTheme.colorScheme.primary
-                        )
+    FullscreenDialogScaffold(
+        title = stringResource(R.string.crashLogs),
+        onDismiss = onDismiss,
+        actions = {
+            if (entries.isNotEmpty()) {
+                IconButton(onClick = { confirmClearAll = true }) {
+                    Icon(
+                        Icons.Filled.DeleteSweep,
+                        stringResource(R.string.crashLogsClearAll),
+                        tint = MaterialTheme.colorScheme.error
                     )
                 }
-            ) { innerPadding ->
-                if (entries.isEmpty()) {
-                    EmptyState(Modifier.padding(innerPadding))
-                } else {
-                    val logsListState = rememberLazyListState()
-                    LazyColumn(
-                        state = logsListState,
-                        modifier = Modifier
-                            .padding(innerPadding)
-                            .drawVerticalScrollbar(logsListState),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        item {
-                            GithubReportLink()
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = stringResource(R.string.crashLogsSubtitle),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 4.dp)
-                            )
-                        }
-                        items(entries, key = { it.id }) { entry ->
-                            CrashLogCard(entry) { selected = entry }
-                        }
-                    }
+            }
+        }
+    ) { innerPadding ->
+        if (entries.isEmpty()) {
+            EmptyState(Modifier.padding(innerPadding))
+        } else {
+            val logsListState = rememberLazyListState()
+            LazyColumn(
+                state = logsListState,
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .drawVerticalScrollbar(logsListState),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    GithubReportLink()
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.crashLogsSubtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
+                items(entries, key = { it.id }) { entry ->
+                    CrashLogCard(entry) { selected = entry }
                 }
             }
         }
@@ -178,6 +151,8 @@ fun CrashLogsScreen(onDismiss: () -> Unit) {
         ConfirmDialog(
             title = stringResource(R.string.crashLogsClearAllTitle),
             text = stringResource(R.string.crashLogsClearAllText),
+            confirmLabel = stringResource(R.string.crashLogsClearAll),
+            icon = Icons.Filled.DeleteSweep,
             onConfirm = {
                 CrashReporter.clearAll(context)
                 confirmClearAll = false
@@ -192,13 +167,13 @@ fun CrashLogsScreen(onDismiss: () -> Unit) {
 /** Prominent, centered link to the GitHub issues page so a stored crash can be reported. */
 @Composable
 private fun GithubReportLink() {
-    val uriHandler = LocalUriHandler.current
+    val openLink = rememberLinkOpener()
     val url = stringResource(R.string.crashGithubUrl)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(FieldShape)
-            .clickable(role = Role.Button) { uriHandler.openUri(url) }
+            .clickable(role = Role.Button) { openLink(url) }
             .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
@@ -272,7 +247,7 @@ private fun CrashLogCard(entry: CrashReporter.CrashEntry, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CrashLogDetailDialog(
+internal fun CrashLogDetailDialog(
     entry: CrashReporter.CrashEntry,
     onDismiss: () -> Unit,
     onDelete: () -> Unit

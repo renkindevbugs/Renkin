@@ -1,7 +1,7 @@
 package dev.renkinProject.renkin
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import dev.renkinProject.renkin.feature.language.LocalizedActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -19,7 +19,7 @@ import dev.renkinProject.renkin.ui.theme.RenkinTheme
  * [MainActivity]: when a startup failure is what needs reporting, the screen that reports it must
  * not need the thing that failed. It only reads files — no database, no icon packs, no view model.
  */
-class CrashLogsActivity : ComponentActivity() {
+class CrashLogsActivity : LocalizedActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

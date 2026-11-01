@@ -1,15 +1,17 @@
 package dev.renkinProject.renkin.packages
 
 import android.graphics.drawable.Drawable
+import dev.renkinProject.renkin.data.AppTargetState
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.icon.creator.IconModifierInput
 import java.text.Normalizer
 
 class PackageInfoStruct(
     val appName: String,
     val packageName: String,
     val activityName: String,
-    val icon: Drawable,
+    icon: Drawable? = null,
     val iconID: Int,
     val createdIcon: IconPackDrawable? = null,
     val internalVersion: Int = 0,
@@ -45,14 +47,22 @@ class PackageInfoStruct(
     val isCustom: Boolean = false,
     /** Existing row whose generated-vs-custom origin predates the persisted classification. */
     val isLegacy: Boolean = false,
-    /** Unmodified icon persisted to Room; [createdIcon] is its current global render. */
+    /** Icon with local edits baked in; [createdIcon] is its current global render. */
     val baseIcon: IconPackDrawable? = createdIcon,
     /**
      * Attribution reference for icons picked from an online FOSS library: the source file's
      * public URL. Informational only — the drawable itself is stored; this records origin.
      */
-    val sourceUrl: String? = null
+    val sourceUrl: String? = null,
+    /** Last local modifier stage for [baseIcon]. Informational; never applied onto that base. */
+    val modifierRecipe: String? = null,
+    val modifierInput: IconModifierInput? = null,
+    val iconSource: ApplicationIconSource = ApplicationIconSource.Inline(requireNotNull(icon), iconID),
+    /** Non-null for an entry the user added to the profile; the launcher list does not have it. */
+    val targetState: AppTargetState? = null
 ) : Comparable<PackageInfoStruct> {
+    val isAddedTarget: Boolean get() = targetState != null
+
     private val normalizedSortName by lazy {
         Normalizer.normalize(appName, Normalizer.Form.NFD)
             .replace(DIACRITICS_REGEX, "")
@@ -75,7 +85,7 @@ class PackageInfoStruct(
 
     // Single place that rebuilds the struct, so callers (changeExport/changeCalendar) only name
     // the fields they touch — this isn't a data class (custom equals), so there's no copy().
-    // Every edit bumps internalVersion so the SnapshotStateList sees a distinct element.
+    // Every edit bumps internalVersion so equality-based observers see a distinct element.
     private fun copyWith(
         createdIcon: IconPackDrawable? = this.createdIcon,
         calendarEnabled: Boolean = this.calendarEnabled,
@@ -87,9 +97,16 @@ class PackageInfoStruct(
         isCustom: Boolean = this.isCustom,
         isLegacy: Boolean = this.isLegacy,
         baseIcon: IconPackDrawable? = this.baseIcon,
-        sourceUrl: String? = this.sourceUrl
+        sourceUrl: String? = this.sourceUrl,
+        modifierRecipe: String? = this.modifierRecipe,
+        modifierInput: IconModifierInput? = this.modifierInput,
+        iconSource: ApplicationIconSource = this.iconSource,
+        internalVersion: Int = this.internalVersion + 1
     ): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon, sourceUrl)
+        PackageInfoStruct(appName, packageName, activityName, null, iconID, createdIcon, internalVersion, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon, sourceUrl, modifierRecipe, modifierInput, iconSource, targetState)
+
+    internal fun withLoadedApplicationIcon(icon: LoadedApplicationIcon): PackageInfoStruct =
+        copyWith(iconSource = ApplicationIconSource.Prepared(icon), internalVersion = internalVersion)
 
     // Clearing the icon (createdIcon == null) also drops the recorded source pack and the
     // refresh-made flag, so a removed icon never lingers in the usage counts.
@@ -103,7 +120,10 @@ class PackageInfoStruct(
         baseIcon: IconPackDrawable? = createdIcon,
         // A replaced icon must not inherit the previous one's online attribution, so the
         // reference travels explicitly with each new icon (null unless it came from a library).
-        sourceUrl: String? = null
+        sourceUrl: String? = null,
+        // Replacing the base drops metadata unless it explicitly travels with the new artwork.
+        modifierRecipe: String? = null,
+        modifierInput: IconModifierInput? = null
     ): PackageInfoStruct =
         copyWith(
             createdIcon = createdIcon,
@@ -113,12 +133,18 @@ class PackageInfoStruct(
             isCustom = if (createdIcon == null) false else isCustom,
             isLegacy = if (createdIcon == null) false else isLegacy,
             baseIcon = if (createdIcon == null) null else baseIcon,
-            sourceUrl = if (createdIcon == null) null else sourceUrl
+            sourceUrl = if (createdIcon == null) null else sourceUrl,
+            modifierRecipe = if (createdIcon == null || baseIcon == null) null else modifierRecipe,
+            modifierInput = if (createdIcon == null || baseIcon == null) null else modifierInput
         )
 
     /** Replaces only the derived global render and keeps the persisted base untouched. */
     fun changeRenderedIcon(renderedIcon: IconPackDrawable?): PackageInfoStruct =
         copyWith(createdIcon = renderedIcon)
+
+    /** Replaces the stored base (and the derived render) while keeping provenance and modifier metadata. */
+    fun changeBaseAndRender(baseIcon: IconPackDrawable, renderedIcon: IconPackDrawable): PackageInfoStruct =
+        copyWith(createdIcon = renderedIcon, baseIcon = baseIcon)
 
     /** The built/saved copy of this icon: identical, but no longer refresh-replaceable. */
     fun locked(): PackageInfoStruct = copyWith(isRefreshMade = false)
@@ -161,3 +187,9 @@ class PackageInfoStruct(
         val DIACRITICS_REGEX = "\\p{Mn}+".toRegex()
     }
 }
+
+/**
+ * No icon and not held back by a locked pack. The missing filter, the hero card count and the
+ * Global options "without an icon" group must all agree on this.
+ */
+fun PackageInfoStruct.isMissingIcon(lockedKeys: Set<String>): Boolean = createdIcon == null && key !in lockedKeys

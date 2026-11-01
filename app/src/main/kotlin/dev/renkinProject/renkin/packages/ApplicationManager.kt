@@ -1,7 +1,6 @@
 package dev.renkinProject.renkin.packages
 
 import android.content.Context
-import android.content.res.Resources
 import android.graphics.drawable.Drawable
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawCalendar
@@ -32,6 +31,13 @@ internal fun lastAppFilterItem(
 ): RawItem? =
     elements.asReversed()
         .firstOrNull { it is RawItem && it.component == component } as? RawItem
+
+// A pack may declare one component several times; like the drawable lookup, the last one wins.
+internal fun appFilterDrawableName(elements: List<RawElement>, component: String): String? =
+    lastAppFilterItem(elements, component)?.drawableLink
+
+internal fun appFilterDrawableNames(elements: List<RawElement>): Map<String, String> =
+    elements.filterIsInstance<RawItem>().associate { it.component to it.drawableLink }
 
 internal data class NamedResourceDrawable(val name: String, val resource: ResourceDrawable)
 
@@ -79,24 +85,24 @@ internal class ApplicationManager(
     }
     override fun getAppFilterRawElements(iconPackName: String, applications: List<InstalledApplication>): List<RawElement> {
         val res = resourceResolver.getResources(iconPackName) ?: return emptyList()
-        val xmlParser = getAppfilter(res, iconPackName)
-
         val components = applications.map { it.toComponentInfo() }
+        return resourceResolver.withPackXml(res, iconPackName, "appfilter") { getAppFilterRawElements(it, components) }
+            ?: emptyList()
+    }
 
-        if (xmlParser != null) {
-            return getAppFilterRawElements(xmlParser, components)
-        }
-
-        return emptyList()
+    /** Every component [iconPackName] themes, installed or not — the Add app sheet's candidates. */
+    fun allAppFilterItems(iconPackName: String): List<RawItem> {
+        val res = resourceResolver.getResources(iconPackName) ?: return emptyList()
+        return resourceResolver.withPackXml(res, iconPackName, "appfilter") {
+            getAppFilterRawElements(it, components = null).filterIsInstance<RawItem>()
+        } ?: emptyList()
     }
 
     /** The drawable name [iconPackName]'s appfilter maps to [application]'s component, if any. */
     fun appFilterDrawableName(iconPackName: String, application: InstalledApplication): String? =
         runCatching { getAppFilterRawElements(iconPackName, listOf(application)) }
             .getOrDefault(emptyList())
-            .filterIsInstance<RawItem>()
-            .firstOrNull { it.component == application.toComponentInfo() }
-            ?.drawableLink
+            .let { appFilterDrawableName(it, application.toComponentInfo()) }
 
     /**
      * Parses the pack's classic fallback styling (`<iconback>`, `<iconmask>`, `<iconupon>`,
@@ -105,8 +111,11 @@ internal class ApplicationManager(
      */
     fun getIconPackFallback(iconPackName: String): IconPackFallback {
         val res = resourceResolver.getResources(iconPackName) ?: return IconPackFallback()
-        val xmlParser = getAppfilter(res, iconPackName) ?: return IconPackFallback()
+        return resourceResolver.withPackXml(res, iconPackName, "appfilter", ::parseIconPackFallback)
+            ?: IconPackFallback()
+    }
 
+    private fun parseIconPackFallback(xmlParser: XmlPullParser): IconPackFallback {
         val backs = mutableListOf<String>()
         var mask: String? = null
         var upon: String? = null
@@ -172,17 +181,16 @@ internal class ApplicationManager(
         val map = mutableMapOf<String, ResourceDrawable>()
         val res = resourceResolver.getResources(iconPackName) ?: return map
 
-        for (element in elements) {
-            if (element is RawItem) {
-                val resourceId = runCatching {
-                    res.getIdentifierByName(element.drawableLink, "drawable", iconPackName)
-                }.getOrNull() ?: continue
+        // Resolve only the winning declaration; a broken winner must not revive an older icon.
+        for ((component, drawableName) in appFilterDrawableNames(elements)) {
+            val resourceId = runCatching {
+                res.getIdentifierByName(drawableName, "drawable", iconPackName)
+            }.getOrNull() ?: continue
 
-                if (resourceId > 0) {
-                    val drawable = runCatching { resourceResolver.getDrawable(res, resourceId) }.getOrNull()
-                    if (drawable != null)
-                        map[element.component] = ResourceDrawable(resourceId, drawable)
-                }
+            if (resourceId > 0) {
+                val drawable = runCatching { resourceResolver.getDrawable(res, resourceId) }.getOrNull()
+                if (drawable != null)
+                    map[component] = ResourceDrawable(resourceId, drawable)
             }
         }
 
@@ -191,8 +199,10 @@ internal class ApplicationManager(
 
     override fun getIconPackDrawableNames(iconPackName: String): List<String> {
         val res = resourceResolver.getResources(iconPackName) ?: return emptyList()
-        val xmlParser = getDrawable(res, iconPackName) ?: return emptyList()
+        return resourceResolver.withPackXml(res, iconPackName, "drawable", ::parseDrawableNames) ?: emptyList()
+    }
 
+    private fun parseDrawableNames(xmlParser: XmlPullParser): List<String> {
         val list = mutableListOf<String>()
         var type = xmlParser.eventType
 
@@ -240,9 +250,11 @@ internal class ApplicationManager(
         return map
     }
 
-    private fun getAppFilterRawElements(xmlParser: XmlPullParser, components: List<String>): List<RawElement> {
+    // Null [components] keeps every declaration instead of only the listed ones.
+    private fun getAppFilterRawElements(xmlParser: XmlPullParser, components: List<String>?): List<RawElement> {
         val list = mutableListOf<RawElement>()
-        val componentSet = components.toHashSet()
+        val componentSet = components?.toHashSet()
+        fun wanted(component: String) = componentSet == null || component in componentSet
 
         var type = xmlParser.eventType
 
@@ -252,7 +264,7 @@ internal class ApplicationManager(
                     val xmlDrawable = xmlParser.getAttributeValue(null, "drawable")
                     val xmlComponent = xmlParser.getAttributeValue(null, "component")
 
-                    if (xmlComponent in componentSet && xmlDrawable != null) {
+                    if (xmlComponent != null && wanted(xmlComponent) && xmlDrawable != null) {
                         list.add(RawItem(xmlComponent, xmlDrawable))
                     }
                 }
@@ -261,7 +273,7 @@ internal class ApplicationManager(
                     val xmlPrefix = xmlParser.getAttributeValue(null, "prefix")
                     val xmlComponent = xmlParser.getAttributeValue(null, "component")
 
-                    if (xmlComponent in componentSet && xmlPrefix != null) {
+                    if (xmlComponent != null && wanted(xmlComponent) && xmlPrefix != null) {
                         list.add(RawCalendar(xmlComponent, xmlPrefix))
                     }
                 }
@@ -294,81 +306,4 @@ internal class ApplicationManager(
         return list
     }
 
-    fun checkAppFilter(xmlParser: XmlPullParser): Array<String> {
-        val badlyFormattedComponents = mutableListOf<String>()
-        var type = xmlParser.eventType
-
-        while (type != XmlPullParser.END_DOCUMENT) {
-            if (type == XmlPullParser.START_TAG) {
-                if (xmlParser.name == "item") {
-                    val iconName = xmlParser.getAttributeValue(null, "drawable")
-                    val componentInfo = xmlParser.getAttributeValue(null, "component")
-
-                    if (iconName == null || componentInfo == null || !componentIsValid(componentInfo)) {
-                        var item = ""
-                        for (i in 0 until  xmlParser.attributeCount) {
-                            item += "${xmlParser.getAttributeName(i)}=\"${xmlParser.getAttributeValue(i)}\" "
-                        }
-                        badlyFormattedComponents.add(item.trimEnd())
-                    }
-                }
-            }
-
-            type = xmlParser.next()
-        }
-
-        return badlyFormattedComponents.toTypedArray()
-    }
-
-    private fun componentIsValid(text: String): Boolean {
-        var newText = text
-
-        if (!text.startsWith("ComponentInfo", true))
-            return false
-
-        newText = newText.replace("(", "{")
-        newText = newText.replace(")", "}")
-
-        val firstSplit = newText.split("{")
-        if (firstSplit.count() != 2)
-            return false
-
-        val secondSplit = firstSplit[1].split("}")
-        if (secondSplit.count() != 2)
-            return false
-
-        val thirdSplit = secondSplit[0].split("/")
-        return thirdSplit.count() >= 2
-    }
-
-    private fun getAppfilter(res: Resources, packageName: String): XmlPullParser? {
-        val xmlParser = getResAppfilter(res, packageName)
-
-        if (xmlParser != null) return xmlParser
-        return getAssetAppfilter(res)
-    }
-
-    private fun getResAppfilter(res: Resources, packageName: String): XmlPullParser? {
-        return resourceResolver.getXml(res, packageName, "appfilter")
-    }
-
-    private fun getAssetAppfilter(res: Resources): XmlPullParser? {
-        return resourceResolver.getAssetXml(res, "appfilter.xml")
-    }
-
-    private fun getDrawable(res: Resources, packageName: String): XmlPullParser? {
-        val xmlParser = getResDrawable(res, packageName)
-
-        if (xmlParser != null) return xmlParser
-        return getAssetDrawable(res)
-    }
-
-    private fun getResDrawable(res: Resources, packageName: String): XmlPullParser? {
-        return resourceResolver.getXml(res, packageName, "drawable")
-    }
-
-    private fun getAssetDrawable(res: Resources): XmlPullParser? {
-        return resourceResolver.getAssetXml(res, "drawable.xml")
-    }
-    
 }

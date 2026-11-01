@@ -72,31 +72,39 @@ class IconGeneratorTest {
         themed: Boolean = false,
         colorizeLayers: List<SegmentLayer> = emptyList()
     ) = GenerationOptions(
-        primarySource = source,
-        primaryImageEdit = imageEdit,
-        primaryTextType = TextType.ONE_LETTER,
-        primaryIconPack = "",
-        color = color,
-        bgColor = bgColor,
-        vector = false,
-        materialYou = false,
-        themed = themed,
+        source = IconSourceOptions(
+            primarySource = source,
+            primaryTextType = TextType.ONE_LETTER,
+            primaryIconPack = "",
+            applicationIconVariant = applicationIconVariant,
+            invertMonochrome = invertMonochrome,
+            useFullApplicationIcon = useFullApplicationIcon
+        ),
+        export = IconExportOptions(
+            vector = false,
+            materialYou = false,
+            themed = themed,
+            background = ColorFill(bgColor)
+        ),
         override = override,
-        iconScale = iconScale,
-        iconOffsetX = iconOffsetX,
-        iconOffsetY = iconOffsetY,
-        applicationIconVariant = applicationIconVariant,
-        invertMonochrome = invertMonochrome,
-        iconShape = iconShape,
-        colorizeFlat = colorizeFlat,
-        colorizeMonochrome = colorizeMonochrome,
-        colorizeInverse = colorizeInverse,
-        colorizerMode = colorizerMode,
-        colorizerGradientType = colorizerGradientType,
-        colorizerGradientColors = colorizerGradientColors,
-        colorizerGradientAngle = colorizerGradientAngle,
-        useFullApplicationIcon = useFullApplicationIcon,
-        colorizeLayers = colorizeLayers
+        modifiers = ModifierStack(
+            effect = EffectModifier(
+                imageEdit = imageEdit,
+                colorizer = ColorizerStyle(
+                    firstColor = color,
+                    flat = colorizeFlat,
+                    monochrome = colorizeMonochrome,
+                    inverse = colorizeInverse,
+                    mode = colorizerMode,
+                    gradientType = colorizerGradientType,
+                    gradientStops = colorizerGradientColors,
+                    gradientAngle = colorizerGradientAngle
+                ),
+                segments = colorizeLayers
+            ),
+            transform = TransformModifier(scale = iconScale, offsetX = iconOffsetX, offsetY = iconOffsetY),
+            shape = ShapeModifier(shape = iconShape, crop = true, scale = 1f),
+        )
     )
 
     private fun app(
@@ -379,6 +387,21 @@ class IconGeneratorTest {
 
         assertEquals(Color.TRANSPARENT, result.getPixel(0, 0))
         assertEquals(Color.RED, result.getPixel(1, 0))
+    }
+
+    @Test
+    @Config(sdk = [26, 32])
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun adaptiveApplicationUsesGeneratedMaterialYouFallbackBeforeMonochromeApi() {
+        val generated = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU
+            ),
+            app(icon = lawniconsStyleDrawable())
+        )
+        assertNotNull(generated)
+        assertTrue(generated!!.isAdaptiveIcon())
     }
 
     @Test

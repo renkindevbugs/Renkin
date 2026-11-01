@@ -32,7 +32,7 @@ internal fun mergeApplicationReload(
             appName = fresh.appName,
             packageName = fresh.packageName,
             activityName = fresh.activityName,
-            icon = fresh.icon,
+            iconSource = fresh.iconSource,
             iconID = fresh.iconID,
             createdIcon = session.createdIcon,
             internalVersion = maxOf(fresh.internalVersion, session.internalVersion) + 1,
@@ -46,7 +46,10 @@ internal fun mergeApplicationReload(
             isCustom = session.isCustom,
             isLegacy = session.isLegacy,
             baseIcon = session.baseIcon,
-            sourceUrl = session.sourceUrl
+            sourceUrl = session.sourceUrl,
+            modifierRecipe = session.modifierRecipe,
+            modifierInput = session.modifierInput,
+            targetState = fresh.targetState
         )
     }
 }

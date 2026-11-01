@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.icon.creator
 
 import android.content.Context
+import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import androidx.core.content.res.ResourcesCompat
 import dev.renkinProject.renkin.R
@@ -31,10 +32,10 @@ internal fun twoLetterInitials(appName: String): String {
     }
 }
 
-class LetterGenerator(ctx: Context, fontPath: String = "") {
+class LetterGenerator(ctx: Context, fontPath: String = "", ownedTypeface: Typeface? = null) {
     // The bundled Arcticons Sans by default; a picked system font replaces it. A stale path
     // (font removed by an OS update) falls back instead of crashing generation.
-    private val font = fontPath.takeIf { it.isNotEmpty() }
+    private val font = ownedTypeface ?: fontPath.takeIf { it.isNotEmpty() }
         ?.let { FontCatalog.typeface(it) }
         ?: ResourcesCompat.getFont(ctx, R.font.arcticonssans_regular)!!
 

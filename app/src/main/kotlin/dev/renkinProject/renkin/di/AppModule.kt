@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.di
 
+import dev.renkinProject.renkin.packages.InstalledIconLoader
+
 import android.content.Context
 import dagger.Module
 import dagger.Provides
@@ -14,6 +16,9 @@ import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ProfileManager
 import dev.renkinProject.renkin.apk.RenkinPackStore
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.ProfileStyleStore
+import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.packages.ApplicationManager
@@ -29,6 +34,11 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+
+    @Provides
+    @Singleton
+    fun provideProfileStyleStore(@ApplicationContext context: Context, repository: RenkinPackRepository): ProfileStyleStore =
+        ProfileStyleStore(repository, context.dataStore)
 
     @Provides
     @Singleton
@@ -60,12 +70,14 @@ object AppModule {
         @ApplicationContext context: Context,
         renkinPackRepository: RenkinPackRepository,
         watchRepository: WatchRepository,
-        iconPackCatalog: IconPackCatalog
+        iconPackCatalog: IconPackCatalog,
+        editorDraftInvalidation: EditorDraftInvalidation
     ): BackupManager = BackupManager(
         context,
         renkinPackRepository,
         watchRepository,
-        iconPackCatalog
+        iconPackCatalog,
+        editorDraftInvalidation = editorDraftInvalidation
     )
 
     @Provides
@@ -86,19 +98,22 @@ object AppModule {
     @Singleton
     fun provideProfileManager(
         @ApplicationContext context: Context,
-        repository: RenkinPackRepository
-    ): ProfileManager = ProfileManager(context, repository)
+        repository: RenkinPackRepository,
+        watchRepository: WatchRepository = WatchRepository(context)
+    ): ProfileManager = ProfileManager(context, repository, watchRepository)
 
     @Provides
     @Singleton
     fun provideIconGenerationService(
         @ApplicationContext context: Context,
         iconPackRepository: IconPackRepository,
-        iconPackCatalog: IconPackCatalog
+        iconPackCatalog: IconPackCatalog,
+        installedIconLoader: InstalledIconLoader
     ): IconGenerationService = IconGenerationService(
         context,
         iconPackRepository,
-        iconPackCatalog
+        iconPackCatalog,
+        installedIconLoader
     )
 
     @Provides
@@ -129,7 +144,9 @@ object AppModule {
         iconLockManager: IconLockManager,
         profileManager: ProfileManager,
         iconGenerationService: IconGenerationService,
-        iconPackBuildService: IconPackBuildService
+        iconPackBuildService: IconPackBuildService,
+        editorDraftInvalidation: EditorDraftInvalidation,
+        installedIconLoader: InstalledIconLoader
     ): ApplicationProvider = ApplicationProvider(
         context = context,
         renkinPackStore = renkinPackStore,
@@ -140,6 +157,8 @@ object AppModule {
         iconGenService = iconGenerationService,
         iconPackBuildService = iconPackBuildService,
         appManager = ApplicationManager(context),
-        installedAppCatalog = InstalledAppCatalog(context)
+        installedAppCatalog = InstalledAppCatalog(context),
+        editorDraftInvalidation = editorDraftInvalidation,
+        installedIcons = installedIconLoader
     )
 }

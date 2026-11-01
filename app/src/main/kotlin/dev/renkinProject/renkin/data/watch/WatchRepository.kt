@@ -2,6 +2,9 @@ package dev.renkinProject.renkin.data.watch
 
 import android.content.Context
 import androidx.room.withTransaction
+import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.data.transfer.BackupDatabaseSnapshot
+import java.io.File
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -14,16 +17,45 @@ class WatchRepository(private val db: WatchDatabase) {
      * constructor with an in-memory [WatchDatabase] instead. */
     constructor(context: Context) : this(WatchDatabase.get(context))
 
+    private suspend fun <T> access(block: suspend () -> T): T = StorageOperationGate.run(block)
+
+    private suspend fun <T> transaction(block: suspend () -> T): T = StorageOperationGate.run {
+        db.withTransaction { block() }
+    }
+
+    /**
+     * Commits one checked rule — its validation, baselines, component moves, splits and
+     * suggestions — as a single transaction. A baseline that lands without its suggestion would
+     * make the next check skip the same pack version and lose the suggestion.
+     */
+    internal suspend fun <T> commitCheckedRule(block: suspend () -> T): T = transaction(block)
+
+    internal suspend fun writeRecoverySnapshot(file: File) = transaction {
+        BackupDatabaseSnapshot.write(db.openHelper.writableDatabase, file)
+    }
+
+    internal suspend fun restoreRecoverySnapshot(file: File) = transaction {
+        BackupDatabaseSnapshot.restore(db.openHelper.writableDatabase, file)
+    }
+
+    internal suspend fun checkRecoveryCompatibility(file: File) = access {
+        BackupDatabaseSnapshot.checkCompatibility(db.openHelper.writableDatabase, file)
+    }
+
+    internal suspend fun flushRecoveryWrites() = access {
+        BackupDatabaseSnapshot.flush(db.openHelper.writableDatabase)
+    }
+
     private val dao = db.watchDao()
 
-    fun rules(profileId: Long): Flow<List<RuleWithDetails>> = dao.observeRules(profileId)
-    fun completedCount(profileId: Long): Flow<Int> = dao.observeCompletedCount(profileId)
+    fun rules(profileId: Long): Flow<List<RuleWithDetails>> = StorageOperationGate.observe(dao.observeRules(profileId))
+    fun completedCount(profileId: Long): Flow<Int> = StorageOperationGate.observe(dao.observeCompletedCount(profileId))
 
-    suspend fun getRule(ruleId: Long): RuleWithDetails? = dao.getRuleWithDetails(ruleId)
+    suspend fun getRule(ruleId: Long): RuleWithDetails? = access { dao.getRuleWithDetails(ruleId) }
 
-    suspend fun getActiveRules(): List<RuleWithDetails> = dao.getActiveRules()
+    suspend fun getActiveRules(): List<RuleWithDetails> = access { dao.getActiveRules() }
 
-    suspend fun getCompletedRules(): List<RuleWithDetails> = dao.getCompletedRules()
+    suspend fun getCompletedRules(): List<RuleWithDetails> = access { dao.getCompletedRules() }
 
     /**
      * Creates or updates an active rule and replaces its baseline in one transaction. Icon
@@ -37,12 +69,12 @@ class WatchRepository(private val db: WatchDatabase) {
         packPackages: List<String>,
         profileId: Long,
         baseline: List<BaselineInput> = emptyList()
-    ): Long = db.withTransaction {
+    ): Long = transaction {
         val savedRuleId = if (ruleId == null) {
             dao.insertRule(WatchRule(watchAllPacks = watchAllPacks, profileId = profileId))
         } else {
-            val rule = dao.getRule(ruleId) ?: return@withTransaction -1L
-            if (rule.completed) return@withTransaction -1L
+            val rule = dao.getRule(ruleId) ?: return@transaction -1L
+            if (rule.completed) return@transaction -1L
             dao.updateRule(rule.copy(watchAllPacks = watchAllPacks))
             dao.deleteAppsForRule(ruleId)
             dao.deletePacksForRule(ruleId)
@@ -70,42 +102,78 @@ class WatchRepository(private val db: WatchDatabase) {
     /** Deletes a rule and returns the notification-backed suggestion ids removed with it. */
     suspend fun deleteRule(ruleId: Long): List<Long> = deleteRules(listOf(ruleId))
 
-    /**
-     * Deletes every rule owned by [profileId] — called when the profile itself is deleted, so
-     * the worker stops firing notifications for a profile that no longer exists.
-     */
-    suspend fun deleteRulesForProfile(profileId: Long): List<Long> = deleteRules(dao.ruleIdsForProfile(profileId))
+    suspend fun ruleIdsForProfile(profileId: Long): List<Long> = access { dao.ruleIdsForProfile(profileId) }
+
+    /** Rules whose profile is not among [profileIds]: leftovers of an interrupted profile deletion. */
+    suspend fun ruleIdsOutsideProfiles(profileIds: Collection<Long>): List<Long> = access { dao.ruleIdsOutsideProfiles(profileIds) }
+
+    suspend fun suggestionIdsForRules(ruleIds: List<Long>): List<Long> = access { dao.suggestionIdsForRules(ruleIds) }
 
     /** Deletes several rules atomically and returns their removed suggestion ids. */
     suspend fun deleteRules(ruleIds: List<Long>): List<Long> {
         if (ruleIds.isEmpty()) return emptyList()
-        return db.withTransaction {
-            val suggestionIds = dao.suggestionIdsForRules(ruleIds)
-            ruleIds.forEach { ruleId ->
-                dao.deleteCandidatesForRule(ruleId)
-                dao.deleteSuggestionsForRule(ruleId)
-                dao.deleteAppsForRule(ruleId)
-                dao.deletePacksForRule(ruleId)
-                dao.deleteRule(ruleId)
-            }
-            dao.pruneOrphanStates()
-            suggestionIds
+        return transaction { deleteRuleRows(ruleIds) }
+    }
+
+    private suspend fun deleteRuleRows(ruleIds: List<Long>): List<Long> {
+        val suggestionIds = dao.suggestionIdsForRules(ruleIds)
+        ruleIds.forEach { ruleId ->
+            dao.deleteCandidatesForRule(ruleId)
+            dao.deleteSuggestionsForRule(ruleId)
+            dao.deleteAppsForRule(ruleId)
+            dao.deletePacksForRule(ruleId)
+            dao.deleteRule(ruleId)
         }
+        dao.pruneOrphanStates()
+        return suggestionIds
+    }
+
+    internal suspend fun loadApplySnapshot(suggestionId: Long): WatchApplySnapshot? = transaction {
+        readApplySnapshot(suggestionId)
+    }
+
+    private suspend fun readApplySnapshot(suggestionId: Long): WatchApplySnapshot? {
+        val suggestion = dao.getSuggestion(suggestionId) ?: return null
+        val details = dao.getRuleWithDetails(suggestion.ruleId) ?: return null
+        val canonical = details.copy(
+            apps = details.apps.sortedBy { it.packageName + "/" + it.activityName },
+            packs = details.packs.sortedBy { it.iconPackPackage },
+            suggestions = details.suggestions.sortedBy { it.id }
+        )
+        return WatchApplySnapshot(canonical, suggestion,
+            dao.getCandidates(suggestionId).sortedBy { it.iconPackPackage }, StorageOperationGate.epoch,
+            canonical.suggestions.flatMap { dao.getCandidates(it.id) }
+                .sortedWith(compareBy<IconSuggestionCandidate> { it.suggestionId }.thenBy { it.iconPackPackage }))
+    }
+
+    internal suspend fun isCurrentApplySnapshot(snapshot: WatchApplySnapshot): Boolean = transaction {
+        StorageOperationGate.epoch == snapshot.storageEpoch && readApplySnapshot(snapshot.suggestion.id) == snapshot
+    }
+
+    // A retry may run after deletion committed but notification cancellation or the return failed.
+    internal suspend fun deleteAppliedRule(snapshot: WatchApplySnapshot): List<Long> = transaction {
+        if (StorageOperationGate.epoch != snapshot.storageEpoch) throw WatchApplyTargetChangedException()
+        val current = readApplySnapshot(snapshot.suggestion.id)
+        if (current == null && dao.getRule(snapshot.rule.rule.id) == null) {
+            return@transaction snapshot.rule.suggestions.map { it.id }
+        }
+        if (current != snapshot) throw WatchApplyTargetChangedException()
+        deleteRuleRows(listOf(snapshot.rule.rule.id))
     }
 
     // --- Backup ---------------------------------------------------------------
 
     /** Every profile's rules with their children. */
-    suspend fun getAllRules(): List<RuleWithDetails> = dao.getAllRulesWithDetails()
+    suspend fun getAllRules(): List<RuleWithDetails> = access { dao.getAllRulesWithDetails() }
 
-    suspend fun getStatesForRule(ruleId: Long): List<WatchState> = dao.getStatesForRule(ruleId)
+    suspend fun getStatesForRule(ruleId: Long): List<WatchState> = access { dao.getStatesForRule(ruleId) }
 
     /**
      * Backup import: wipes the whole watch store and inserts [rules] under fresh ids.
      * Rule ids are regenerated, so every baseline, suggestion and candidate is re-owned by the
      * inserted rule. Legacy completed entries without candidates are skipped.
      */
-    suspend fun replaceAllRules(rules: List<WatchRuleImport>) = db.withTransaction {
+    suspend fun replaceAllRules(rules: List<WatchRuleImport>) = transaction {
         dao.deleteAllCandidates()
         dao.deleteAllSuggestions()
         dao.deleteAllRuleApps()
@@ -116,7 +184,7 @@ class WatchRepository(private val db: WatchDatabase) {
     }
 
     /** Adds active [rules] without touching existing ones — a shared-profile import is additive. */
-    suspend fun insertRules(rules: List<WatchRuleImport>) = db.withTransaction {
+    suspend fun insertRules(rules: List<WatchRuleImport>) = transaction {
         insertImportedRules(rules)
     }
 
@@ -157,11 +225,13 @@ class WatchRepository(private val db: WatchDatabase) {
     // --- Detection (phase 3) -------------------------------------------------
 
     suspend fun getState(ruleId: Long, packageName: String, activityName: String, iconPackPackage: String): WatchState? =
-        dao.getState(ruleId, packageName, activityName, iconPackPackage)
+        access { dao.getState(ruleId, packageName, activityName, iconPackPackage) }
 
-    suspend fun upsertState(state: WatchState) = dao.upsertState(state)
+    suspend fun upsertState(state: WatchState) = access { dao.upsertState(state) }
 
-    suspend fun upsertStates(ruleId: Long, states: List<BaselineInput>) {
+    suspend fun upsertStates(states: List<WatchState>) = access { dao.upsertStates(states) }
+
+    suspend fun upsertStates(ruleId: Long, states: List<BaselineInput>): Unit = access {
         dao.upsertStates(states.map { it.toWatchState(ruleId) })
     }
 
@@ -171,11 +241,11 @@ class WatchRepository(private val db: WatchDatabase) {
         oldApp: AppComponent,
         newApp: AppComponent,
         baseline: List<BaselineInput>
-    ): Boolean = db.withTransaction {
-        val rule = dao.getRuleWithDetails(ruleId) ?: return@withTransaction false
+    ): Boolean = transaction {
+        val rule = dao.getRuleWithDetails(ruleId) ?: return@transaction false
         if (rule.rule.completed || rule.apps.none {
                 it.packageName == oldApp.packageName && it.activityName == oldApp.activityName
-            }) return@withTransaction false
+            }) return@transaction false
 
         val replacementAlreadyWatched = rule.apps.any {
             it.packageName == newApp.packageName && it.activityName == newApp.activityName
@@ -191,18 +261,18 @@ class WatchRepository(private val db: WatchDatabase) {
     }
 
     /** Debug only: stale all baselines so the next check fires for any app with an icon. */
-    suspend fun debugStaleAllStates() = dao.debugStaleAllStates()
+    suspend fun debugStaleAllStates() = access { dao.debugStaleAllStates() }
 
-    suspend fun getSuggestion(id: Long): IconSuggestion? = dao.getSuggestion(id)
+    suspend fun getSuggestion(id: Long): IconSuggestion? = access { dao.getSuggestion(id) }
 
-    suspend fun getCandidates(suggestionId: Long): List<IconSuggestionCandidate> = dao.getCandidates(suggestionId)
+    suspend fun getCandidates(suggestionId: Long): List<IconSuggestionCandidate> = access { dao.getCandidates(suggestionId) }
 
     suspend fun replaceCandidates(
         suggestionId: Long,
         candidates: List<CandidateInput>
-    ): Boolean = db.withTransaction {
+    ): Boolean = transaction {
         if (dao.getSuggestion(suggestionId) == null || candidates.isEmpty()) {
-            return@withTransaction false
+            return@transaction false
         }
         dao.deleteCandidates(suggestionId)
         dao.insertCandidates(candidates.map {
@@ -211,9 +281,9 @@ class WatchRepository(private val db: WatchDatabase) {
         true
     }
 
-    suspend fun suggestionCount(): Int = dao.suggestionCount()
+    suspend fun suggestionCount(): Int = access { dao.suggestionCount() }
 
-    suspend fun deleteSuggestion(id: Long) = db.withTransaction {
+    suspend fun deleteSuggestion(id: Long) = transaction {
         dao.deleteCandidates(id)
         dao.deleteSuggestion(id)
     }
@@ -227,11 +297,11 @@ class WatchRepository(private val db: WatchDatabase) {
         originalRuleId: Long,
         app: AppComponent,
         candidates: List<CandidateInput>
-    ): Long = db.withTransaction {
-        val original = dao.getRuleWithDetails(originalRuleId) ?: return@withTransaction -1L
+    ): Long = transaction {
+        val original = dao.getRuleWithDetails(originalRuleId) ?: return@transaction -1L
         if (original.rule.completed || original.apps.none {
                 it.packageName == app.packageName && it.activityName == app.activityName
-            }) return@withTransaction -1L
+            }) return@transaction -1L
         val matchedPacks = candidates.map { it.iconPackPackage }.distinct()
         val now = System.currentTimeMillis()
 

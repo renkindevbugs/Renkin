@@ -1,8 +1,12 @@
 package dev.renkinProject.renkin.data.transfer
 
+import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.Profile
+import dev.renkinProject.renkin.data.ProfilePackIconCodec
 import dev.renkinProject.renkin.data.watch.AppComponent
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -114,10 +118,14 @@ data class BackupPref(val tag: String, val value: Any) {
  * round-trip is unit-testable; [BackupManager] owns the surrounding ZIP and stores.
  */
 object BackupCodec {
-    // Version 3 preserves watch baselines and pending completed suggestions.
-    const val FORMAT_VERSION = 3
+    // Version 4 carries authoritative profile styles alongside their legacy projections.
+    const val FORMAT_VERSION = 4
+    internal const val LEGACY_FORMAT_VERSION = 3
 
-    fun encode(data: BackupData): String {
+    fun encode(data: BackupData, formatVersion: Int): String = encodeJson(data, formatVersion).toString()
+
+    internal fun encodeJson(data: BackupData, formatVersion: Int): JSONObject {
+        ProfileStyleBackup.requireSupportedFormat(formatVersion)
         val root = JSONObject()
 
         val prefs = JSONObject()
@@ -136,33 +144,20 @@ object BackupCodec {
                 .put("name", bp.profile.name)
                 .put("description", bp.profile.description)
                 .put("packLabel", bp.profile.packLabel)
+                .put("customPackageName", bp.profile.customPackageName)
+                .put("packIcon", ProfilePackIconCodec.normalize(bp.profile.packIcon))
                 .put("prefsSnapshot", bp.profile.prefsSnapshot)
                 .put("hasUnbuiltChanges", bp.profile.hasUnbuiltChanges)
                 .put("hideMissingPackWarning", bp.profile.hideMissingPackWarning)
+                // Optional within format 4: older readers ignore it and keep the icons as orphans.
+                .put("appTargets", AppTargetCodec.normalize(bp.profile.appTargets))
+            if (formatVersion > LEGACY_FORMAT_VERSION) {
+                ProfileStyleBackup.validatedStyle(bp.profile)
+                p.put("profileStyle", bp.profile.profileStyle)
+            }
 
             val icons = JSONArray()
-            for (icon in bp.icons) {
-                icons.put(
-                    JSONObject()
-                        .put("packageName", icon.packageName)
-                        .put("activityName", icon.activityName)
-                        .put("isAdaptiveIcon", icon.isAdaptiveIcon)
-                        .put("isXml", icon.isXml)
-                        .put("drawable", icon.drawable)
-                        .put("calendarEnabled", icon.calendarEnabled)
-                        .put("calendarPrefix", icon.calendarPrefix)
-                        .put("calendarPackName", icon.calendarPackName)
-                        .put("sourcePackName", icon.sourcePackName)
-                        .put("sourceDrawableName", icon.sourceDrawableName)
-                        .put("isCustomIcon", icon.isCustomIcon)
-                        .put("isLegacyIcon", icon.isLegacyIcon)
-                        .put("baseDrawable", icon.baseDrawable)
-                        .put("baseIsAdaptiveIcon", icon.baseIsAdaptiveIcon)
-                        .put("baseIsXml", icon.baseIsXml)
-                        .put("sourceUrl", icon.sourceUrl)
-                        .put("isFallbackIcon", icon.isFallbackIcon)
-                )
-            }
+            for (icon in bp.icons) icons.put(encodeIcon(icon))
             p.put("icons", icons)
 
             val rules = JSONArray()
@@ -248,17 +243,79 @@ object BackupCodec {
         }
         root.put("modifierPresets", modifierPresets)
 
-        return root.toString()
+        return root
     }
 
-    /** Throws (JSONException) on malformed input — callers surface that as a failed import. */
-    fun decode(json: String): BackupData {
-        val root = JSONObject(json)
+    internal fun encodeIcon(icon: DbApplication): JSONObject =
+        JSONObject()
+            .put("packageName", icon.packageName)
+            .put("activityName", icon.activityName)
+            .put("isAdaptiveIcon", icon.isAdaptiveIcon)
+            .put("isXml", icon.isXml)
+            .put("drawable", icon.drawable)
+            .put("calendarEnabled", icon.calendarEnabled)
+            .put("calendarPrefix", icon.calendarPrefix)
+            .put("calendarPackName", icon.calendarPackName)
+            .put("sourcePackName", icon.sourcePackName)
+            .put("sourceDrawableName", icon.sourceDrawableName)
+            .put("isCustomIcon", icon.isCustomIcon)
+            .put("isLegacyIcon", icon.isLegacyIcon)
+            .put("baseDrawable", icon.baseDrawable)
+            .put("baseIsAdaptiveIcon", icon.baseIsAdaptiveIcon)
+            .put("baseIsXml", icon.baseIsXml)
+            .put("sourceUrl", icon.sourceUrl)
+            .put("isFallbackIcon", icon.isFallbackIcon)
+            .put("modifierRecipe", StoredIconModifierRecipe.normalize(icon.modifierRecipe).orEmpty())
+            .put("modifierInput", StoredIconModifierInput.normalize(icon.modifierInput).orEmpty())
+
+    internal fun decodeIcon(icon: JSONObject, profileId: Long): DbApplication = DbApplication(
+        packageName = icon.getString("packageName"),
+        activityName = icon.getString("activityName"),
+        isAdaptiveIcon = icon.getBoolean("isAdaptiveIcon"),
+        isXml = icon.getBoolean("isXml"),
+        drawable = icon.getString("drawable"),
+        calendarEnabled = icon.optBoolean("calendarEnabled"),
+        calendarPrefix = icon.optString("calendarPrefix"),
+        calendarPackName = icon.optString("calendarPackName"),
+        sourcePackName = icon.optString("sourcePackName"),
+        profileId = profileId,
+        sourceDrawableName = icon.optString("sourceDrawableName"),
+        // The separate legacy flag below protects pre-classification files.
+        isCustomIcon = icon.optBoolean("isCustomIcon"),
+        isLegacyIcon = if (icon.has("isLegacyIcon")) {
+            icon.optBoolean("isLegacyIcon")
+        } else {
+            // Files created before classification cannot be inferred safely.
+            !icon.has("isCustomIcon")
+        },
+        baseDrawable = icon.optString("baseDrawable", icon.getString("drawable")),
+        baseIsAdaptiveIcon = if (icon.has("baseIsAdaptiveIcon")) {
+            icon.optBoolean("baseIsAdaptiveIcon")
+        } else icon.getBoolean("isAdaptiveIcon"),
+        baseIsXml = if (icon.has("baseIsXml")) {
+            icon.optBoolean("baseIsXml")
+        } else icon.getBoolean("isXml"),
+        // Absent in pre-v13 files — no online attribution to carry.
+        sourceUrl = icon.optString("sourceUrl"),
+        // Absent in pre-v14 files — safe default: not fallback-styled.
+        isFallbackIcon = icon.optBoolean("isFallbackIcon"),
+        // Optional metadata must never prevent restoration of valid artwork.
+        modifierRecipe = StoredIconModifierRecipe.normalize(icon.optString("modifierRecipe")).orEmpty(),
+        modifierInput = StoredIconModifierInput.normalize(icon.optString("modifierInput")).orEmpty()
+    )
+
+
+    /** Archive callers pass the manifest version; malformed input is surfaced as a failed import. */
+    fun decode(json: String, formatVersion: Int): BackupData = decodeJson(parseBackupJson(json), formatVersion)
+
+    internal fun decodeJson(root: JSONObject, formatVersion: Int): BackupData {
+        ProfileStyleBackup.requireSupportedFormat(formatVersion)
 
         val prefs = mutableMapOf<String, BackupPref>()
         val prefsJson = root.getJSONObject("prefs")
         for (name in prefsJson.keys()) {
             val entry = prefsJson.getJSONObject(name)
+            if (formatVersion > LEGACY_FORMAT_VERSION) ProfileStyleBackup.validateRawPreference(name, entry)
             // Unknown tags (a future format extension) are skipped, not fatal.
             val pref = when (entry.getString("t")) {
                 BackupPref.BOOL -> BackupPref(BackupPref.BOOL, entry.getBoolean("v"))
@@ -288,47 +345,18 @@ object BackupCodec {
                 packLabel = p.optString("packLabel"),
                 prefsSnapshot = p.optString("prefsSnapshot"),
                 hasUnbuiltChanges = p.optBoolean("hasUnbuiltChanges"),
-                hideMissingPackWarning = p.optBoolean("hideMissingPackWarning")
+                hideMissingPackWarning = p.optBoolean("hideMissingPackWarning"),
+                profileStyle = ProfileStyleBackup.readDocument(p, formatVersion),
+                appTargets = AppTargetCodec.normalize(p.optString("appTargets")),
+                customPackageName = p.optString("customPackageName"),
+                packIcon = ProfilePackIconCodec.normalize(p.optString("packIcon"))
             )
 
             val icons = mutableListOf<DbApplication>()
             val iconsJson = p.getJSONArray("icons")
             for (j in 0 until iconsJson.length()) {
                 val icon = iconsJson.getJSONObject(j)
-                icons.add(
-                    DbApplication(
-                        packageName = icon.getString("packageName"),
-                        activityName = icon.getString("activityName"),
-                        isAdaptiveIcon = icon.getBoolean("isAdaptiveIcon"),
-                        isXml = icon.getBoolean("isXml"),
-                        drawable = icon.getString("drawable"),
-                        calendarEnabled = icon.optBoolean("calendarEnabled"),
-                        calendarPrefix = icon.optString("calendarPrefix"),
-                        calendarPackName = icon.optString("calendarPackName"),
-                        sourcePackName = icon.optString("sourcePackName"),
-                        profileId = profileId,
-                        sourceDrawableName = icon.optString("sourceDrawableName"),
-                        // The separate legacy flag below protects pre-classification files.
-                        isCustomIcon = icon.optBoolean("isCustomIcon"),
-                        isLegacyIcon = if (icon.has("isLegacyIcon")) {
-                            icon.optBoolean("isLegacyIcon")
-                        } else {
-                            // Files created before classification cannot be inferred safely.
-                            !icon.has("isCustomIcon")
-                        },
-                        baseDrawable = icon.optString("baseDrawable", icon.getString("drawable")),
-                        baseIsAdaptiveIcon = if (icon.has("baseIsAdaptiveIcon")) {
-                            icon.optBoolean("baseIsAdaptiveIcon")
-                        } else icon.getBoolean("isAdaptiveIcon"),
-                        baseIsXml = if (icon.has("baseIsXml")) {
-                            icon.optBoolean("baseIsXml")
-                        } else icon.getBoolean("isXml"),
-                        // Absent in pre-v13 files — no online attribution to carry.
-                        sourceUrl = icon.optString("sourceUrl"),
-                        // Absent in pre-v14 files — safe default: not fallback-styled.
-                        isFallbackIcon = icon.optBoolean("isFallbackIcon")
-                    )
-                )
+                icons.add(decodeIcon(icon, profileId))
             }
 
             val rules = mutableListOf<BackupWatchRule>()
@@ -343,7 +371,7 @@ object BackupCodec {
                 }
                 val packsJson = r.getJSONArray("packs")
                 val packs = (0 until packsJson.length()).map { packsJson.getString(it) }
-                val baselinesJson = r.optJSONArray("baselines") ?: JSONArray()
+                val baselinesJson = r.optionalArray("baselines") ?: JSONArray()
                 val baselines = (0 until baselinesJson.length()).map { index ->
                     val state = baselinesJson.getJSONObject(index)
                     BackupWatchState(
@@ -356,7 +384,7 @@ object BackupCodec {
                         lastCheckedAt = state.getLong("lastCheckedAt")
                     )
                 }
-                val suggestionsJson = r.optJSONArray("suggestions") ?: JSONArray()
+                val suggestionsJson = r.optionalArray("suggestions") ?: JSONArray()
                 val suggestions = (0 until suggestionsJson.length()).map { index ->
                     val suggestion = suggestionsJson.getJSONObject(index)
                     val candidatesJson = suggestion.getJSONArray("candidates")
@@ -392,12 +420,12 @@ object BackupCodec {
         }
 
         val packLabels = mutableMapOf<String, String>()
-        root.optJSONObject("packs")?.let { packs ->
+        (if (root.has("packs")) root.getJSONObject("packs") else null)?.let { packs ->
             for (name in packs.keys()) packLabels[name] = packs.getString(name)
         }
 
         val colorPresets = mutableListOf<BackupColorPreset>()
-        root.optJSONArray("colorPresets")?.let { presets ->
+        root.optionalArray("colorPresets")?.let { presets ->
             for (i in 0 until presets.length()) {
                 val preset = presets.getJSONObject(i)
                 colorPresets.add(
@@ -411,7 +439,7 @@ object BackupCodec {
         }
 
         val modifierPresets = mutableListOf<BackupModifierPreset>()
-        root.optJSONArray("modifierPresets")?.let { presets ->
+        root.optionalArray("modifierPresets")?.let { presets ->
             for (i in 0 until presets.length()) {
                 val preset = presets.getJSONObject(i)
                 modifierPresets.add(
@@ -429,3 +457,6 @@ object BackupCodec {
         return BackupData(profiles, prefs, packLabels, colorPresets, modifierPresets)
     }
 }
+
+private fun JSONObject.optionalArray(name: String): JSONArray? =
+    if (has(name)) getJSONArray(name) else null

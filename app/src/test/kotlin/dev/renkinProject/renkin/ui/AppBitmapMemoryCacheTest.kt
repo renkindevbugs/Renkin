@@ -1,5 +1,8 @@
 package dev.renkinProject.renkin.ui
 
+import dev.renkinProject.renkin.packages.AppBitmapCacheKey
+import dev.renkinProject.renkin.packages.AppBitmapMemoryCache
+
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.drawable.ColorDrawable

@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="dev.renkinProject.renkin.debug.ConfirmationGuardProbeActivity"
+            android:exported="true" />
+    </application>
+</manifest>

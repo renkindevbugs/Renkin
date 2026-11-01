@@ -7,9 +7,14 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.SavedStateHandle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.ApplicationRuntimeState
+import dev.renkinProject.renkin.apk.ProfileOperationBusyException
+import dev.renkinProject.renkin.apk.ProfileSessionToken
+import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.data.BackgroundStyleKeys
 import dev.renkinProject.renkin.data.CalendarIconsKey
 import dev.renkinProject.renkin.data.ColorStyleKeys
@@ -36,14 +41,27 @@ import dev.renkinProject.renkin.data.SecondaryTextTypeKey
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextFontKey
 import dev.renkinProject.renkin.data.TextType
+import dev.renkinProject.renkin.data.observePreferences
 import dev.renkinProject.renkin.data.setBooleanValue
+import dev.renkinProject.renkin.data.AppIconFullIconKey
+import dev.renkinProject.renkin.data.AppIconInvertMonochromeKey
+import dev.renkinProject.renkin.data.AppIconMaterialYouBackgroundStyleKeys
+import dev.renkinProject.renkin.data.AppIconMaterialYouForegroundStyleKeys
+import dev.renkinProject.renkin.data.AppIconMaterialYouSchemeKey
+import dev.renkinProject.renkin.data.AppIconVariantKey
 import dev.renkinProject.renkin.data.setColorStyle
 import dev.renkinProject.renkin.data.setColorValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.setStringValue
+import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.drawable.ResourceDrawable
+import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.FontLibrary
+import dev.renkinProject.renkin.icon.creator.SystemFontLibrary
+import dev.renkinProject.renkin.util.Log
 import javax.inject.Inject
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +69,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 
 /**
  * Shared owner for the option controls hosted by both MainActivity and GlobalOptionsActivity.
@@ -61,10 +82,27 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class OptionsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val appProvider: ApplicationProvider
+    private val appProvider: ApplicationProvider,
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     private val preferences = context.dataStore
+    val fonts: FontLibrary = SystemFontLibrary
+
+    val runtimeState = appProvider.runtimeState
+
+    /** Action-time snapshot; UI passes its collected runtime to [sessionFor]. */
+    val sessionToken: ProfileSessionToken
+        get() = sessionFor(runtimeState.value)
+
+    fun sessionFor(runtime: ApplicationRuntimeState): ProfileSessionToken =
+        savedStateHandle.profileSession() ?: runtime.sessionToken
+
+    /** Each pack's own icon for the secondary icon-pack dropdown, keyed by package. */
+    suspend fun iconPackDropdownIcons(): Map<String, ResourceDrawable> = appProvider.getIconPackDropdownIcons()
+
+    private val _toastEvents = Channel<Int>(Channel.BUFFERED)
+    val toastEvents = _toastEvents.receiveAsFlow()
 
     /**
      * Activity-scoped preference snapshot for option UIs that can temporarily leave composition.
@@ -72,7 +110,7 @@ class OptionsViewModel @Inject constructor(
      * reopened; that made enabled switches briefly appear off while their persisted value was
      * still on. StateFlow retains the last real snapshot across those UI transitions.
      */
-    val preferenceSnapshot = preferences.data.stateIn(
+    val preferenceSnapshot = preferences.observePreferences().stateIn(
         viewModelScope,
         SharingStarted.Eagerly,
         emptyPreferences()
@@ -126,9 +164,27 @@ class OptionsViewModel @Inject constructor(
 
     fun setBackgroundStyle(style: ColorizerStyle) = writeColorStyle(BackgroundStyleKeys, style)
 
+    fun setAppIconVariant(value: ApplicationIconVariant) = write { setEnumValue(AppIconVariantKey, value) }
+
+    fun setAppIconFullIcon(enabled: Boolean) = write { setBooleanValue(AppIconFullIconKey, enabled) }
+
+    fun setAppIconInvertMonochrome(enabled: Boolean) = write { setBooleanValue(AppIconInvertMonochromeKey, enabled) }
+
+    fun setAppIconMaterialYouScheme(index: Int) = write { setIntValue(AppIconMaterialYouSchemeKey, index) }
+
+    fun setAppIconMaterialYouForeground(style: ColorizerStyle) =
+        writeColorStyle(AppIconMaterialYouForegroundStyleKeys, style)
+
+    fun setAppIconMaterialYouBackground(style: ColorizerStyle) =
+        writeColorStyle(AppIconMaterialYouBackgroundStyleKeys, style)
+
     fun setOutlineEnabled(enabled: Boolean) = write { setBooleanValue(OutlineAddKey, enabled) }
 
-    fun setOutlineWidth(width: Float) = write {
+    fun setOutlineWidth(
+        width: Float,
+        expected: ProfileSessionToken,
+        onComplete: (Boolean) -> Unit
+    ) = write(expected, onComplete) {
         setIntValue(OutlineWidthKey, width.roundToInt())
     }
 
@@ -159,7 +215,34 @@ class OptionsViewModel @Inject constructor(
         )
     }
 
-    private fun write(block: suspend DataStore<Preferences>.() -> Unit) {
-        viewModelScope.launch { preferences.block() }
+    private fun write(
+        expected: ProfileSessionToken = sessionToken,
+        onComplete: (Boolean) -> Unit = {},
+        block: suspend DataStore<Preferences>.() -> Unit
+    ) {
+        if (!appProvider.startupComplete || appProvider.isProfileSwitching) {
+            _toastEvents.trySend(R.string.profileStillLoading)
+            onComplete(false)
+            return
+        }
+        viewModelScope.launch {
+            val saved = try {
+                appProvider.updateProfilePreferences(expected, block)
+                true
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: ProfileSessionChangedException) {
+                _toastEvents.trySend(error.userMessage())
+                false
+            } catch (error: ProfileOperationBusyException) {
+                _toastEvents.trySend(R.string.profileOperationBusy)
+                false
+            } catch (error: Exception) {
+                Log.error("OptionsViewModel", "Could not save profile options", error)
+                _toastEvents.trySend(R.string.profileOperationFailed)
+                false
+            }
+            onComplete(saved)
+        }
     }
 }

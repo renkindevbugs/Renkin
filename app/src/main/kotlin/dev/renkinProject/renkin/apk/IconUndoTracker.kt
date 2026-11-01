@@ -1,9 +1,7 @@
 package dev.renkinProject.renkin.apk
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * The single "take that back" step the app offers. Holding the previous [PackageInfoStruct] rows
@@ -13,8 +11,8 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 class IconUndoStep(
     val profileId: Long,
     val rows: List<PackageInfoStruct>,
-    /** Whether the change had reached the database, so undoing it has to be saved as well. */
-    val persisted: Boolean
+    val operationId: Long = 0L,
+    val unsavedBefore: Set<String> = emptySet()
 )
 
 /**
@@ -23,20 +21,37 @@ class IconUndoStep(
  * database, a package manager or an icon generator.
  */
 class IconUndoTracker {
+    private var nextOperationId = 0L
 
-    // Compose state: the UI hides a stale offer without being told.
-    var step by mutableStateOf<IconUndoStep?>(null)
-        private set
+    private val mutableStep = MutableStateFlow<IconUndoStep?>(null)
+    /** Operation-time snapshot; provider UI observes the completed application aggregate. */
+    val step: IconUndoStep? get() = mutableStep.value
 
     /** Number of rows the current offer would restore; 0 when there is nothing to offer. */
     val size: Int get() = step?.rows?.size ?: 0
 
     /** Records rows about to be overwritten. An empty list withdraws the offer entirely. */
-    fun capture(rows: List<PackageInfoStruct>, profileId: Long, persisted: Boolean) {
-        step = if (rows.isEmpty()) null else IconUndoStep(profileId, rows, persisted)
+    fun capture(
+        rows: List<PackageInfoStruct>, profileId: Long,
+        unsavedBefore: Set<String> = emptySet()
+    ) {
+        mutableStep.value = if (rows.isEmpty()) null else IconUndoStep(
+            profileId, rows.toList(), ++nextOperationId,
+            rows.map { it.key }.toSet().intersect(unsavedBefore)
+        )
     }
 
-    fun clear() { step = null }
+    fun discard(key: String) {
+        val pending = step ?: return
+        if (pending.rows.none { it.key == key }) return
+        val remaining = pending.rows.filterNot { it.key == key }
+        mutableStep.value = if (remaining.isEmpty()) null else IconUndoStep(
+            pending.profileId, remaining, pending.operationId,
+            pending.unsavedBefore - key
+        )
+    }
+
+    fun clear() { mutableStep.value = null }
 
     /**
      * The rows to put back, paired with where they sit in [current]. Empty when the step no

@@ -30,7 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.feature.presets.SavedColorToggle
 import dev.renkinProject.renkin.OptionsViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.GradientFamily
@@ -68,7 +69,7 @@ internal fun GradientGalleryDialog(
     onDismiss: () -> Unit
 ) {
     val viewModel: OptionsViewModel = hiltViewModel()
-    val presets by viewModel.gradientPresets.collectAsState()
+    val presets by viewModel.gradientPresets.collectAsStateWithLifecycle()
     LaunchedEffect(viewModel) { viewModel.loadGradientPresets() }
     var query by rememberSaveable { mutableStateOf("") }
     var family by rememberSaveable { mutableStateOf<GradientFamily?>(null) }

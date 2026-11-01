@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.preferencesOf
 import androidx.room.Room
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
+import dev.renkinProject.renkin.data.BuiltIcon
 import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
@@ -72,6 +73,70 @@ class ProfileManagerTest {
             temporaryFolder.newFile("profile.preferences_pb")
         }
     )
+
+    @Test
+    fun metadataUpdatesChangeOnlyTheirOwnColumns() = runBlocking {
+        val original = Profile(
+            id = DEFAULT_PROFILE_ID, name = "Renkin", description = "Main", packLabel = "Pack",
+            prefsSnapshot = "{\"legacy\":1}", hasUnbuiltChanges = false, hideMissingPackWarning = false,
+            profileStyle = "style-document", appTargets = "targets-document"
+        )
+        repo.replaceEverything(listOf(original), emptyList())
+        val profiles = manager()
+
+        profiles.updateProfileDetails(DEFAULT_PROFILE_ID, "Renamed", "Changed", "Label")
+        profiles.markUnbuilt(DEFAULT_PROFILE_ID, true)
+        profiles.setHideMissingPackWarning(true)
+
+        assertEquals(
+            original.copy(
+                name = "Renamed", description = "Changed", packLabel = "Label",
+                hasUnbuiltChanges = true, hideMissingPackWarning = true
+            ),
+            repo.profile(DEFAULT_PROFILE_ID)
+        )
+    }
+
+    @Test
+    fun metadataUpdatesOfAMissingProfileWriteNothing() = runBlocking {
+        repo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
+        val profiles = manager()
+
+        profiles.updateProfileDetails(42L, "Ghost", "", "")
+        profiles.markUnbuilt(42L, true)
+
+        assertEquals(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), repo.profiles())
+    }
+
+    @Test
+    fun markUnbuiltKeepsAColumnWrittenAfterTheProfileWasRead() = runBlocking {
+        val concurrentRename = java.util.concurrent.atomic.AtomicBoolean(false)
+        lateinit var racingDb: RenkinPackDatabase
+        racingDb = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java)
+            .allowMainThreadQueries()
+            .setQueryCallback({ sql, _ ->
+                // Runs right before the profile write executes, as a concurrent rename would.
+                if (sql.startsWith("UPDATE") && sql.contains("Profile") && concurrentRename.getAndSet(false)) {
+                    racingDb.openHelper.writableDatabase.execSQL("UPDATE Profile SET name = 'Renamed' WHERE id = 1")
+                }
+            }, java.util.concurrent.Executor { it.run() })
+            .build()
+        try {
+            val racingRepo = RenkinPackRepository(racingDb)
+            racingRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
+            concurrentRename.set(true)
+
+            ProfileManager(context, racingRepo, PreferenceDataStoreFactory.create(scope = scope) {
+                temporaryFolder.newFile("racing.preferences_pb")
+            }).markUnbuilt(DEFAULT_PROFILE_ID, true)
+
+            val stored = racingRepo.profile(DEFAULT_PROFILE_ID)
+            assertEquals("Renamed", stored?.name)
+            assertEquals(true, stored?.hasUnbuiltChanges)
+        } finally {
+            racingDb.close()
+        }
+    }
 
     @Test
     fun initRepairsMissingDefaultProfileWithoutDeletingItsIcons() = runBlocking {
@@ -160,6 +225,38 @@ class ProfileManagerTest {
 
         assertEquals(null, repo.profile(profileId))
         assertEquals(emptyList<DbApplication>(), repo.getAll(profileId))
+    }
+
+    @Test
+    fun deleteProfileRemovesItsBuildRecordAndEarlierOrphans() = runBlocking {
+        repo.ensureDefaultProfile()
+        val kept = repo.createProfile(Profile(name = "Kept"))
+        val deleted = repo.createProfile(Profile(name = "Disposable"))
+        val orphan = deleted + 100
+        listOf(DEFAULT_PROFILE_ID, kept, deleted, orphan).forEach { id ->
+            repo.replaceBuiltIcons(id, listOf(BuiltIcon(id, "com.example", "com.example.Main", "hash$id")))
+        }
+
+        repo.deleteProfile(deleted)
+
+        assertEquals(emptyList<BuiltIcon>(), repo.builtIcons(deleted))
+        assertEquals(emptyList<BuiltIcon>(), repo.builtIcons(orphan))
+        assertEquals(listOf("hash$kept"), repo.builtIcons(kept).map { it.iconHash })
+        assertEquals(listOf("hash$DEFAULT_PROFILE_ID"), repo.builtIcons(DEFAULT_PROFILE_ID).map { it.iconHash })
+    }
+
+    @Test
+    fun backupImportDropsBuildRecordsOfProfilesItDoesNotContain() = runBlocking {
+        repo.ensureDefaultProfile()
+        val gone = repo.createProfile(Profile(name = "Local only"))
+        listOf(DEFAULT_PROFILE_ID, gone).forEach { id ->
+            repo.replaceBuiltIcons(id, listOf(BuiltIcon(id, "com.example", "com.example.Main", "hash$id")))
+        }
+
+        repo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Restored")), emptyList())
+
+        assertEquals(emptyList<BuiltIcon>(), repo.builtIcons(gone))
+        assertEquals(listOf("hash$DEFAULT_PROFILE_ID"), repo.builtIcons(DEFAULT_PROFILE_ID).map { it.iconHash })
     }
 
     @Test

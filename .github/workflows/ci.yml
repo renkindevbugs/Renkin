@@ -5,15 +5,26 @@ on:
     branches: [dev, main]
   pull_request:
     branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
+    name: Debug, tests and lint
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
-          # Arcticons-Font ships as a git submodule; the build copies the font from it.
+          # The font and pinned Ackpine core sources are Git submodules.
           submodules: recursive
+          persist-credentials: false
 
       - uses: actions/setup-java@v4
         with:
@@ -22,15 +33,69 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Compile
-        run: ./gradlew compileDebugKotlin
+      - name: Compile, test, lint and assemble debug
+        run: ./gradlew compileDebugKotlin testDebugUnitTest lintDebug assembleDebug --continue --stacktrace
 
-      - name: Unit tests
-        run: ./gradlew testDebugUnitTest
-
-      - name: Upload test reports on failure
-        if: failure()
+      - name: Upload verification reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-reports
-          path: app/build/reports/tests/
+          name: debug-verification-reports-${{ github.sha }}
+          retention-days: 7
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/lint-results-debug.*
+            app/build/reports/roborazzi/
+            app/build/outputs/screenshots_comparison/
+            compat/ackpine-core/build/reports/tests/
+            compat/ackpine-core/build/test-results/testDebugUnitTest/
+            compat/ackpine-core/build/reports/lint-results-debug.*
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apk-${{ github.sha }}
+          retention-days: 7
+          if-no-files-found: error
+          path: app/build/outputs/apk/debug/*.apk
+
+  release:
+    name: Unsigned release with R8
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Assemble unsigned release
+        run: ./gradlew assembleRelease -Prenkin.unsignedRelease=true --stacktrace
+
+      - name: Upload release diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-verification-reports-${{ github.sha }}
+          retention-days: 90
+          path: |
+            app/build/outputs/mapping/release/
+            app/build/reports/lint-results-release*.*
+            app/build/reports/lint-results-*Release*.*
+            app/build/intermediates/lint_vital_intermediate_text_report/release/
+
+      - name: Upload unsigned release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-release-apk-${{ github.sha }}
+          retention-days: 90
+          if-no-files-found: error
+          path: app/build/outputs/apk/release/*.apk

@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.ui
 
 import dev.renkinProject.renkin.data.AppSortOrder
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.packages.isMissingIcon
 
 private data class AppNameSortEntry<T>(
     val value: T,
@@ -39,7 +40,7 @@ fun <T> List<T>.sortedFilteredApps(
     if (filterNoIcon || filterFallback || filterLocked) {
         seq = seq.filter {
             val app = selector(it)
-            (filterNoIcon && app.createdIcon == null && app.key !in lockedKeys) ||
+            (filterNoIcon && app.isMissingIcon(lockedKeys)) ||
                 (filterFallback && app.isFallback) ||
                 (filterLocked && app.key in lockedKeys)
         }
