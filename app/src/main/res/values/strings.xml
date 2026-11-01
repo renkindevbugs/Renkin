@@ -523,6 +523,18 @@
     <string name="eyedropperHint">Or pick a colour straight from the app\'s icon — tap or drag on it.</string>
     <string name="optionsHint">These options apply to all apps at once. After changing them, tap the refresh button in the top bar to regenerate the icons.</string>
     <string name="completionProgress">%1$d / %2$d apps have a custom icon</string>
+    <plurals name="completionProgressSpoken">
+        <item quantity="one">%1$d of %2$d app has a custom icon</item>
+        <item quantity="other">%1$d of %2$d apps have a custom icon</item>
+    </plurals>
+    <plurals name="pendingAddedSpoken">
+        <item quantity="one">%1$d icon added since the last build</item>
+        <item quantity="other">%1$d icons added since the last build</item>
+    </plurals>
+    <plurals name="pendingRemovedSpoken">
+        <item quantity="one">%1$d icon removed since the last build</item>
+        <item quantity="other">%1$d icons removed since the last build</item>
+    </plurals>
     <string name="selectIconFirst">Select an icon before opening the modifier</string>
     <string name="adjustments">Adjustments</string>
     <string name="iconScale">Icon scale</string>

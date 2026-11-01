@@ -168,10 +168,20 @@ fun Modifier.tappableIcon(onClick: () -> Unit): Modifier {
     )
     return this
         .graphicsLayer { scaleX = scale; scaleY = scale }
-        .clickable(interactionSource = interactionSource, indication = null) {
+        .clickable(interactionSource = interactionSource, indication = null, role = Role.Button) {
             view.performTapHaptic()
             onClick()
         }
+}
+
+/** Keeps the display on while composed, so the screen timeout cannot lock the phone mid build or install. */
+@Composable
+fun KeepScreenOn() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
 }
 
 /**

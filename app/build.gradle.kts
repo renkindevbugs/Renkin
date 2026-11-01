@@ -109,6 +109,8 @@ android {
         debug {
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
+            // en-XA (longer, accented) and ar-XB (RTL) expose clipped or mirrored layouts on device.
+            isPseudoLocalesEnabled = true
         }
         release {
             isMinifyEnabled = true

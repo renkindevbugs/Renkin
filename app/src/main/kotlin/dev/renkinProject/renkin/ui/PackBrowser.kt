@@ -406,10 +406,11 @@ private fun PackIconItem(
     ) {
         val badged = isCalendarGroup || isDynamicClock
         // Long-pressing the icon shows the icon's name the way the pack's own app displays it.
-        RenkinTooltipBox(item.drawableName.prettyDrawableName()) {
+        val iconName = item.drawableName.prettyDrawableName()
+        RenkinTooltipBox(iconName) {
         Image(
             bitmap = item.preview,
-            contentDescription = null,
+            contentDescription = iconName,
             modifier = Modifier
                 .fillMaxSize()
                 // Full-bleed previews (adaptive backgrounds) must not poke out of the
