@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -143,7 +144,8 @@ fun sortedColorPresets(
 @Composable
 internal fun ColorPresetDialog(
     onPick: (ColorizerStyle) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    embedded: Boolean = false
 ) {
     val store = LocalColorPresets.current
     var query by rememberSaveable { mutableStateOf("") }
@@ -158,13 +160,13 @@ internal fun ColorPresetDialog(
         sortedColorPresets(store.presets, query, sort)
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = DialogShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+    val content: @Composable () -> Unit = {
+        Surface(shape = DialogShape, color = if (embedded) MaterialTheme.colorScheme.surfaceContainerLow else MaterialTheme.colorScheme.surfaceContainerHigh) {
             Column(
-                modifier = Modifier.padding(20.dp),
+                modifier = if (embedded) Modifier.fillMaxSize() else Modifier.padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
+                if (!embedded) Text(
                     text = stringResource(R.string.savedColorsTitle),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
@@ -193,7 +195,7 @@ internal fun ColorPresetDialog(
                         )
                     }
                     LazyColumn(
-                        modifier = Modifier.heightIn(max = 320.dp),
+                        modifier = if (embedded) Modifier.weight(1f) else Modifier.heightIn(max = 320.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(shown, key = { it.id }) { preset ->
@@ -255,6 +257,7 @@ internal fun ColorPresetDialog(
             }
         }
     }
+    if (embedded) content() else Dialog(onDismissRequest = onDismiss) { content() }
 
     store.presets.firstOrNull { it.id == deletingId }?.let { preset ->
         ConfirmDialog(

@@ -38,7 +38,9 @@ remain upstream code. Review with:
 git diff --no-index third_party/ackpine-source/ackpine-core/src/main/kotlin/ru/solrudev/ackpine/impl/installer/activity/SessionBasedInstallConfirmationActivity.kt compat/ackpine-core/patched/kotlin/ru/solrudev/ackpine/impl/installer/activity/SessionBasedInstallConfirmationActivity.kt
 ```
 
-The global dependency substitution covers transitive core references from installer plugins
-too. Verify with `:app:dependencyInsight --dependency ackpine-core --configuration debugRuntimeClasspath`.
-Remove the adapter, substitution and submodule when a reviewed upstream release includes
+The app depends directly on this adapter and excludes the published `ackpine-core` module from
+its configurations, including transitive references from installer plugins. This avoids the
+early resolution caused by global project-substitution rules. Verify with
+`:app:dependencyInsight --dependency ackpine-core --configuration debugRuntimeClasspath`.
+Remove the adapter, exclusion and submodule when a reviewed upstream release includes
 the guard. No upstream fork or pull request is published by this change.

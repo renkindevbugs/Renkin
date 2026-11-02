@@ -165,6 +165,11 @@ android {
     }
 }
 
+// The guarded source build supplies core; published installer plugins must not pull in a second copy.
+configurations.configureEach {
+    exclude(group = "ru.solrudev.ackpine", module = "ackpine-core")
+}
+
 dependencies {
     implementation(libs.kotlinx.collections.immutable)
     implementation(libs.androidx.core.ktx)
@@ -176,7 +181,7 @@ dependencies {
 
     //Apk related
     implementation(libs.arscLib)
-    implementation(libs.ackpine.core)
+    implementation(project(":ackpine-core-compat"))
     implementation(libs.ackpine.ktx)
     implementation(libs.ackpine.shizuku)
     implementation(libs.shizuku.api)

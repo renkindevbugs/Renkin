@@ -1,4 +1,7 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class
+)
 
 package dev.renkinProject.renkin.ui
 
@@ -12,20 +15,23 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -35,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,11 +62,9 @@ import dev.renkinProject.renkin.data.getSourceLabels
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconShape
-import dev.renkinProject.renkin.ui.modifier.ShadowEditorSheet
+import dev.renkinProject.renkin.ui.modifier.ShadowEditorControls
 import dev.renkinProject.renkin.ui.modifier.ShadowPresetChips
 import dev.renkinProject.renkin.ui.modifier.ShapeSwatch
-import dev.renkinProject.renkin.ui.modifier.decodeShadowForCancel
-import dev.renkinProject.renkin.ui.modifier.encodeForCancel
 import dev.renkinProject.renkin.ui.modifier.matchingPreset
 import dev.renkinProject.renkin.ui.modifier.shapeLabel
 import dev.renkinProject.renkin.ui.modifier.shadowUiPresets
@@ -71,9 +76,12 @@ import kotlin.math.roundToInt
 private enum class GlobalStyleEffect { SHAPE, SCALE, OUTLINE, SHADOW, COLORIZE }
 
 @Composable
-private fun GlobalShadowCard(state: GlobalModifierState, expanded: Boolean, onExpand: () -> Unit) {
-    var editorOpen by rememberSaveable { mutableStateOf(false) }
-    var cancelSnapshot by rememberSaveable { mutableStateOf<String?>(null) }
+private fun GlobalShadowCard(
+    state: GlobalModifierState,
+    expanded: Boolean,
+    onExpand: () -> Unit,
+    onCustomize: () -> Unit
+) {
     val presets = shadowUiPresets()
     val shadow = state.shadow
     val summary = when {
@@ -99,10 +107,7 @@ private fun GlobalShadowCard(state: GlobalModifierState, expanded: Boolean, onEx
                 ShadowPresetChips(shadow, presets, state::updateShadow)
                 OptionCard(
                     label = stringResource(R.string.globalShadowCustomize),
-                    onClick = {
-                        cancelSnapshot = shadow.encodeForCancel()
-                        editorOpen = true
-                    },
+                    onClick = onCustomize,
                     trailing = {
                         Text(
                             text = stringResource(
@@ -122,32 +127,6 @@ private fun GlobalShadowCard(state: GlobalModifierState, expanded: Boolean, onEx
                 )
             }
         }
-    }
-
-    if (editorOpen) {
-        ShadowEditorSheet(
-            shadow = shadow,
-            onShadowChange = state::updateShadow,
-            presets = presets,
-            preview = null,
-            previewGenerating = false,
-            renderPreview = null,
-            showRemove = true,
-            onDismiss = {
-                cancelSnapshot?.let(::decodeShadowForCancel)?.let(state::updateShadow)
-                cancelSnapshot = null
-                editorOpen = false
-            },
-            onApply = {
-                cancelSnapshot = null
-                editorOpen = false
-            },
-            onRemove = {
-                state.updateShadow(shadow.copy(enabled = false))
-                cancelSnapshot = null
-                editorOpen = false
-            }
-        )
     }
 }
 
@@ -334,20 +313,96 @@ internal fun GlobalStyleControlPanel(
     activeEffectCount: Int,
     iconPacks: List<IconPack>,
     resetEnabled: Boolean,
-    onTargetsClick: () -> Unit,
-    onSourcesClick: () -> Unit,
-    onReset: () -> Unit
+    onReset: () -> Unit,
+    navigation: GlobalStylePanelState,
+    onNavigate: (GlobalStylePanel) -> Unit,
+    loadPackIcons: suspend () -> Map<String, ResourceDrawable>,
+    historyContent: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    leadingContent: @Composable () -> Unit = {}
 ) {
-    TargetSummaryCard(
-        state = state,
-        categories = categories,
-        targetCount = targetCount,
-        activeEffectCount = activeEffectCount,
-        onClick = onTargetsClick
-    )
-    GenerationSourcesCard(state, iconPacks, onSourcesClick)
-    GlobalStyleEffects(state)
-    ResetGlobalStyleButton(resetEnabled, onReset)
+    val panelState = rememberSaveableStateHolder()
+    val page = navigation.page
+    val contentScrolls = page != GlobalStylePanel.HISTORY && page != GlobalStylePanel.GRADIENTS &&
+        page != GlobalStylePanel.SAVED_COLORS
+    Column(modifier) {
+        if (page != GlobalStylePanel.OPTIONS) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                IconButton(onClick = { navigation.back() }) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(
+                            R.string.globalPanelBackTo, stringResource(navigation.parent.title)
+                        )
+                    )
+                }
+                Text(
+                    text = stringResource(page.title),
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f)
+                )
+                if (page == GlobalStylePanel.SHADOW) TextButton(onClick = {
+                    state.updateShadow(state.shadow.copy(enabled = false))
+                    navigation.back()
+                }) {
+                    Text(stringResource(R.string.shadowRemove), color = MaterialTheme.colorScheme.error)
+                }
+            }
+            HorizontalDivider()
+        }
+        val contentKey = when (page) {
+            GlobalStylePanel.GRADIENTS, GlobalStylePanel.SAVED_COLORS -> "${page.name}:${navigation.colorTarget.name}"
+            else -> page.name
+        }
+        panelState.SaveableStateProvider(contentKey) {
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .then(if (contentScrolls) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                    .padding(top = if (page != GlobalStylePanel.OPTIONS) 12.dp else 0.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                when (page) {
+                    GlobalStylePanel.OPTIONS -> {
+                        leadingContent()
+                        TargetSummaryCard(state, categories, targetCount, activeEffectCount) {
+                            onNavigate(GlobalStylePanel.TARGETS)
+                        }
+                        GenerationSourcesCard(state, iconPacks) { onNavigate(GlobalStylePanel.SOURCES) }
+                        GlobalStyleEffects(state, onNavigate)
+                        ResetGlobalStyleButton(resetEnabled, onReset)
+                    }
+                    GlobalStylePanel.SHADOW -> {
+                        ShadowEditorControls(
+                            shadow = state.shadow,
+                            onShadowChange = state::updateShadow,
+                            presets = shadowUiPresets(),
+                            renderPreview = null,
+                            onColorClick = { onNavigate(GlobalStylePanel.SHADOW_COLOR) }
+                        )
+                        Text(
+                            text = stringResource(R.string.globalShadowFlattenHint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    GlobalStylePanel.TARGETS -> GlobalTargetsControls(state, categories, targetCount) { navigation.back() }
+                    GlobalStylePanel.SOURCES -> GenerationSourcesControls(state, iconPacks, loadPackIcons) { navigation.back() }
+                    GlobalStylePanel.HISTORY -> historyContent()
+                    else -> GlobalStyleColorControls(state, navigation)
+                }
+            }
+        }
+        if (page.isColorEditor) {
+            HorizontalDivider()
+            GlobalStyleColorActions(state, navigation)
+        }
+    }
 }
 
 @Composable
@@ -363,85 +418,71 @@ private fun sourceDisplayName(
 }
 
 @Composable
-internal fun GenerationSourcesSheet(
+internal fun GenerationSourcesControls(
     state: GlobalModifierState,
     iconPacks: List<IconPack>,
     loadPackIcons: suspend () -> Map<String, ResourceDrawable>,
-    onDismiss: () -> Unit
+    onDone: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 12.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.globalSourcesTitle),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
-            )
-            Text(
-                text = stringResource(R.string.globalSourcesDescription),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp)
-            )
-            SourceDropdown(R.string.primarySource, state.primarySource) { source ->
-                state.primarySource = source
+    Text(
+        text = stringResource(R.string.globalSourcesDescription),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp)
+    )
+    SourceDropdown(R.string.primarySource, state.primarySource) { source ->
+        state.primarySource = source
+        state.normalizeFallbackSource()
+    }
+    if (state.primarySource == Source.ICON_PACK) {
+        IconPackDropdown(
+            labelId = R.string.primaryIconPack,
+            iconPacks = iconPacks,
+            packageName = state.primaryIconPack,
+            loadIcons = loadPackIcons
+        ) { packageName ->
+            state.primaryIconPack = packageName
+            state.normalizeFallbackSource()
+        }
+
+        SourceDropdown(R.string.secondarySource, state.secondarySource) { source ->
+            state.secondarySource = source
+            state.normalizeFallbackSource()
+        }
+        if (state.secondarySource == Source.ICON_PACK) {
+            IconPackDropdown(
+                labelId = R.string.secondaryIconPack,
+                iconPacks = iconPacks,
+                packageName = state.secondaryIconPack,
+                loadIcons = loadPackIcons
+            ) { packageName ->
+                state.secondaryIconPack = packageName
                 state.normalizeFallbackSource()
             }
-            if (state.primarySource == Source.ICON_PACK) {
-                IconPackDropdown(
-                    labelId = R.string.primaryIconPack,
-                    iconPacks = iconPacks,
-                    packageName = state.primaryIconPack,
-                    loadIcons = loadPackIcons
-                ) { packageName ->
-                    state.primaryIconPack = packageName
-                    state.normalizeFallbackSource()
-                }
-
-                SourceDropdown(R.string.secondarySource, state.secondarySource) { source ->
-                    state.secondarySource = source
-                    state.normalizeFallbackSource()
-                }
-                if (state.secondarySource == Source.ICON_PACK) {
-                    IconPackDropdown(
-                        labelId = R.string.secondaryIconPack,
-                        iconPacks = iconPacks,
-                        packageName = state.secondaryIconPack,
-                        loadIcons = loadPackIcons
-                    ) { packageName ->
-                        state.secondaryIconPack = packageName
-                        state.normalizeFallbackSource()
-                    }
-                }
-            }
-
-            val primaryPackEnabled = state.primarySource == Source.ICON_PACK &&
-                state.primaryIconPack.isNotBlank()
-            val secondaryPackEnabled = needSecondarySource(state.primarySource) &&
-                state.secondarySource == Source.ICON_PACK &&
-                state.secondaryIconPack.isNotBlank()
-            if (primaryPackEnabled || secondaryPackEnabled) {
-                FallbackSourceSelector(
-                    selected = state.fallbackSource,
-                    primaryEnabled = primaryPackEnabled,
-                    secondaryEnabled = secondaryPackEnabled
-                ) { state.fallbackSource = it }
-            }
-
-            Button(
-                onClick = onDismiss,
-                shape = FieldShape,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
-            ) {
-                Text(stringResource(R.string.done))
-            }
         }
+    }
+
+    val primaryPackEnabled = state.primarySource == Source.ICON_PACK &&
+        state.primaryIconPack.isNotBlank()
+    val secondaryPackEnabled = needSecondarySource(state.primarySource) &&
+        state.secondarySource == Source.ICON_PACK &&
+        state.secondaryIconPack.isNotBlank()
+    if (primaryPackEnabled || secondaryPackEnabled) {
+        FallbackSourceSelector(
+            selected = state.fallbackSource,
+            primaryEnabled = primaryPackEnabled,
+            secondaryEnabled = secondaryPackEnabled
+        ) { state.fallbackSource = it }
+    }
+
+    Button(
+        onClick = onDone,
+        shape = FieldShape,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+    ) {
+        Text(stringResource(R.string.done))
     }
 }
 
@@ -457,10 +498,7 @@ private fun GlobalModifierState.normalizeFallbackSource() {
 }
 
 @Composable
-internal fun GlobalStyleEffects(state: GlobalModifierState) {
-    var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
-    var shapeColorPickerOpen by rememberSaveable { mutableStateOf(false) }
-    var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
+internal fun GlobalStyleEffects(state: GlobalModifierState, onNavigate: (GlobalStylePanel) -> Unit) {
     var expandedName by rememberSaveable { mutableStateOf(GlobalStyleEffect.SCALE.name) }
 
     val expanded = GlobalStyleEffect.entries.firstOrNull { it.name == expandedName }
@@ -532,21 +570,9 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
                         ColorStyleCard(
                             label = stringResource(R.string.shapeColor),
                             style = shapeStyle,
-                            onClick = { shapeColorPickerOpen = true }
+                            onClick = { onNavigate(GlobalStylePanel.SHAPE_COLOR) }
                         )
-                        if (shapeColorPickerOpen) {
-                            ColorStyleSheet(
-                                title = stringResource(R.string.shapeColor),
-                                initialStyle = shapeStyle,
-                                sampleBitmap = null,
-                                showSingleColorEffects = false,
-                                onDismiss = { shapeColorPickerOpen = false },
-                                onApply = { style ->
-                                    state.updateShape { copy(fill = style.asFill()) }
-                                    shapeColorPickerOpen = false
-                                }
-                            )
-                        }
+
                     }
                 }
             }
@@ -599,27 +625,16 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
                     ColorStyleCard(
                         label = stringResource(R.string.outlineColor),
                         style = outlineStyle,
-                        onClick = { outlineSheetOpen = true }
+                        onClick = { onNavigate(GlobalStylePanel.OUTLINE_COLOR) }
                     )
-                    if (outlineSheetOpen) {
-                        ColorStyleSheet(
-                            title = stringResource(R.string.outlineColor),
-                            initialStyle = outlineStyle,
-                            sampleBitmap = null,
-                            showSingleColorEffects = false,
-                            onDismiss = { outlineSheetOpen = false },
-                            onApply = { style ->
-                                state.updateOutline { copy(fill = style.asFill()) }
-                                outlineSheetOpen = false
-                            }
-                        )
-                    }
+
                 }
             }
         }
 
         GlobalShadowCard(
             state = state,
+            onCustomize = { onNavigate(GlobalStylePanel.SHADOW) },
             expanded = expanded == GlobalStyleEffect.SHADOW,
             onExpand = {
                 expandedName = if (expanded == GlobalStyleEffect.SHADOW) ""
@@ -646,20 +661,9 @@ internal fun GlobalStyleEffects(state: GlobalModifierState) {
                 ColorStyleCard(
                     label = stringResource(R.string.colorize),
                     style = colorizerStyle,
-                    onClick = { colorizeSheetOpen = true }
+                    onClick = { onNavigate(GlobalStylePanel.COLORIZE) }
                 )
-                if (colorizeSheetOpen) {
-                    ColorStyleSheet(
-                        title = stringResource(R.string.colorize),
-                        initialStyle = colorizerStyle,
-                        sampleBitmap = null,
-                        onDismiss = { colorizeSheetOpen = false },
-                        onApply = { style ->
-                            state.updateEffect { copy(colorizer = style) }
-                            colorizeSheetOpen = false
-                        }
-                    )
-                }
+
             }
         }
     }
@@ -763,76 +767,63 @@ internal fun ResetGlobalStyleButton(enabled: Boolean, onReset: () -> Unit) {
 }
 
 @Composable
-internal fun GlobalTargetsSheet(
+internal fun GlobalTargetsControls(
     state: GlobalModifierState,
     categories: GlobalIconCategories,
     targetCount: Int,
-    onDismiss: () -> Unit
+    onDone: () -> Unit
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.globalTargetsTitle),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = pluralStringResource(
-                        R.plurals.globalTargetCount,
-                        targetCount,
-                        targetCount
-                    ),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-            GlobalTargetRow(
-                title = stringResource(R.string.globalToggleGenerated),
-                description = stringResource(R.string.globalTargetGeneratedDescription),
-                count = categories.generated.size,
-                checked = state.applyGenerated,
-                onCheckedChange = { state.applyGenerated = it }
-            )
-            GlobalTargetRow(
-                title = stringResource(R.string.globalTargetExistingTitle),
-                description = stringResource(R.string.globalTargetExistingDescription),
-                count = categories.existing.size,
-                checked = state.applyExisting,
-                onCheckedChange = { state.applyExisting = it }
-            )
-            GlobalTargetRow(
-                title = stringResource(R.string.globalToggleCustom),
-                description = stringResource(R.string.globalTargetCustomDescription),
-                count = categories.custom.size,
-                checked = state.applyCustom,
-                onCheckedChange = { state.applyCustom = it }
-            )
-            GlobalTargetRow(
-                title = stringResource(R.string.globalToggleEmpty),
-                description = stringResource(R.string.globalTargetEmptyDescription),
-                count = categories.iconless.size,
-                checked = state.includeEmpty,
-                onCheckedChange = { state.includeEmpty = it }
-            )
-            Button(
-                onClick = onDismiss,
-                shape = FieldShape,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
-            ) {
-                Text(stringResource(R.string.done))
-            }
-        }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        Text(
+            text = pluralStringResource(
+                R.plurals.globalTargetCount,
+                targetCount,
+                targetCount
+            ),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+    GlobalTargetRow(
+        title = stringResource(R.string.globalToggleGenerated),
+        description = stringResource(R.string.globalTargetGeneratedDescription),
+        count = categories.generated.size,
+        checked = state.applyGenerated,
+        onCheckedChange = { state.applyGenerated = it }
+    )
+    GlobalTargetRow(
+        title = stringResource(R.string.globalTargetExistingTitle),
+        description = stringResource(R.string.globalTargetExistingDescription),
+        count = categories.existing.size,
+        checked = state.applyExisting,
+        onCheckedChange = { state.applyExisting = it }
+    )
+    GlobalTargetRow(
+        title = stringResource(R.string.globalToggleCustom),
+        description = stringResource(R.string.globalTargetCustomDescription),
+        count = categories.custom.size,
+        checked = state.applyCustom,
+        onCheckedChange = { state.applyCustom = it }
+    )
+    GlobalTargetRow(
+        title = stringResource(R.string.globalToggleEmpty),
+        description = stringResource(R.string.globalTargetEmptyDescription),
+        count = categories.iconless.size,
+        checked = state.includeEmpty,
+        onCheckedChange = { state.includeEmpty = it }
+    )
+    Button(
+        onClick = onDone,
+        shape = FieldShape,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+    ) {
+        Text(stringResource(R.string.done))
     }
 }
 

@@ -932,6 +932,8 @@
     <string name="globalShapeSummary">%1$s · %2$d%%</string>
     <string name="globalOutlineSummary">%1$d px</string>
     <string name="globalShadowCustomize">Customize</string>
+    <string name="globalShadowEditorTitle">Customize shadow</string>
+    <string name="globalPanelBackTo">Back to %1$s</string>
     <string name="globalShadowFlattenHint">Like a shape, a shadow turns adaptive and Material You icons into flat icons.</string>
     <string name="globalOneColor">One color</string>
     <string name="globalResetChanges">Reset changes</string>

@@ -126,8 +126,9 @@ cancellable verification window preserves prompt cancellation; recognized dead s
 the existing 8 s allowance before compatibility fallback. Broadcasts only wake the verifier.
 Ordinary success avoids hashing. A Shizuku abort never triggers another installer after verification.
 The confirmation launch is guarded in a pinned source build of Ackpine core; API, runtime,
-KTX and Shizuku retain their published versions. The adapter replaces transitive core references
-as well. Its provenance, verification and removal conditions are recorded in
+KTX and Shizuku retain their published versions. The app declares the adapter directly and
+excludes the published core from its configurations, covering plugin transitives without
+forcing early dependency resolution. Its provenance, verification and removal conditions are recorded in
 [installer-confirmation-guard-checkpoint.md](installer-confirmation-guard-checkpoint.md).
 
 Shevery 14.6 uses its native `com.hamondev.shevery.permission.PRIVILEGED_API` declaration to
@@ -2411,6 +2412,15 @@ reverts icons a later Apply changed; the main screen's Undo snackbar applies the
 same way (`ApplicationProvider.applyGlobalStyleHistory`). The history is device-local: portable
 backups and shares do not carry it, a full restore clears it, deleting a profile deletes its
 entries, and recovery snapshots older than v24 restore it empty (audited added table).
+
+Global Style settings replace the contents of the compact dock or wide panel, leaving the icon
+grid visible. This includes shadow, colour/gradient editors and their libraries, sources,
+targets and Apply history. `GlobalStylePanelState` saves the current page and colour target;
+its fixed header and Android Back return through the parent pages without discarding the draft.
+Colour changes update the grid live; the screen's Apply commits the global draft. Separate
+saveable UI scopes retain each page's scroll and expanded controls. Pick a color uses the shared
+modal picker for easier scrolling. Destructive confirmations
+and preset name prompts remain dialogs; per-icon editors retain their existing dialog hosts.
 
 ### Keeping Global style through an editor Apply
 

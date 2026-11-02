@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -66,7 +67,8 @@ import dev.renkinProject.renkin.ui.theme.InnerShape
 @Composable
 internal fun GradientGalleryDialog(
     onUse: (ColorizerStyle) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    embedded: Boolean = false
 ) {
     val viewModel: OptionsViewModel = hiltViewModel()
     val presets by viewModel.gradientPresets.collectAsStateWithLifecycle()
@@ -83,21 +85,55 @@ internal fun GradientGalleryDialog(
     // A new filter shows a different list; staying scrolled where the old one was reads as empty.
     LaunchedEffect(query, family, stops) { gridState.scrollToItem(0) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
+    val filters: @Composable () -> Unit = {
+        SearchField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = stringResource(R.string.gradientGallerySearch),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        GradientFilterChips(
+            family = family,
+            onFamilyChange = { family = it },
+            stops = stops,
+            onStopsChange = { stops = it },
+            availableStops = remember(presets) { gradientStopCounts(presets) }
+        )
+        // The collection is someone else's work under the MIT licence; the credit belongs
+        // where the presets are used, not only buried in the about dialog.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.gradientGalleryCredit),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            LinkText(
+                text = stringResource(R.string.gradientGalleryCreditLink),
+                url = UI_GRADIENTS_URL
+            )
+        }
+        HorizontalDivider()
+    }
+    val content: @Composable () -> Unit = {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
             Column(
-                modifier = Modifier
+                modifier = if (embedded) Modifier.fillMaxSize() else Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
                     .navigationBarsPadding()
             ) {
-                Row(
+                if (!embedded) Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(start = 4.dp, end = 16.dp, top = 4.dp),
@@ -121,41 +157,7 @@ internal fun GradientGalleryDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                SearchField(
-                    value = query,
-                    onValueChange = { query = it },
-                    placeholder = stringResource(R.string.gradientGallerySearch),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-                GradientFilterChips(
-                    family = family,
-                    onFamilyChange = { family = it },
-                    stops = stops,
-                    onStopsChange = { stops = it },
-                    availableStops = remember(presets) { gradientStopCounts(presets) }
-                )
-                // The collection is someone else's work under the MIT licence; the credit belongs
-                // where the presets are used, not only buried in the about dialog.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.gradientGalleryCredit),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    LinkText(
-                        text = stringResource(R.string.gradientGalleryCreditLink),
-                        url = UI_GRADIENTS_URL
-                    )
-                }
-                HorizontalDivider()
+                if (!embedded) filters()
                 if (shown.isEmpty()) {
                     Text(
                         text = stringResource(R.string.gradientGalleryEmpty),
@@ -167,7 +169,7 @@ internal fun GradientGalleryDialog(
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(GalleryCardWidth),
                     state = gridState,
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(if (embedded) 0.dp else 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier
@@ -175,16 +177,28 @@ internal fun GradientGalleryDialog(
                         .fillMaxWidth()
                         .drawVerticalScrollbar(gridState)
                 ) {
+                    if (embedded) item(key = "filters", span = { GridItemSpan(maxLineSpan) }) {
+                        Column { filters() }
+                    }
                     items(shown, key = { it.name }) { preset ->
                         GradientPresetCard(
                             preset = preset,
-                            onClick = { detail = preset }
+                            onClick = {
+                                if (embedded) {
+                                    onUse(preset.asStyle())
+                                    onDismiss()
+                                } else detail = preset
+                            }
                         )
                     }
                 }
             }
         }
     }
+    if (embedded) content() else Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) { content() }
 
     detail?.let { preset ->
         GradientPresetDetailDialog(
