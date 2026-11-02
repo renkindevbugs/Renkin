@@ -97,10 +97,10 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     val cleanupFailed = operation?.phase == WatchApplyPhase.APPLIED_CLEANUP_FAILED
     val hasReceipt = operation != null && operation.phase != WatchApplyPhase.APPLYING && operation.phase != WatchApplyPhase.NOT_APPLIED
     // Cleanup may already have removed Room rows before a notification failure. Keep its receipt visible.
-    val displayedSnapshot = if (hasReceipt) operation?.request?.snapshot else snapshot
+    val displayedSnapshot = if (hasReceipt) operation.request.snapshot else snapshot
     val suggestion = displayedSnapshot?.suggestion
     val candidates = displayedSnapshot?.candidates.orEmpty().filter { !IconPackBuilder.isOwnPack(it.iconPackPackage) }
-    val displayedPack = if (hasReceipt) operation?.request?.candidate?.iconPackPackage else selectedPack
+    val displayedPack = if (hasReceipt) operation.request.candidate.iconPackPackage else selectedPack
     LaunchedEffect(operation?.request?.id, operation?.phase) {
         val result = operation ?: return@LaunchedEffect
         if (result.phase == WatchApplyPhase.APPLIED_CLEANED || result.phase == WatchApplyPhase.NOT_APPLIED) {
@@ -124,7 +124,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     val previewKey = WatchPreviewKey(displayedSnapshot, candidates.find { it.iconPackPackage == displayedPack }, app, suggestionSession)
     var renderedPreview by remember(suggestionId) { mutableStateOf<WatchPreview?>(null) }
     val preview = renderedPreview?.takeIf { it.key == previewKey }
-    val newIcon = if (hasReceipt) operation?.request?.icon else preview?.icon
+    val newIcon = if (hasReceipt) operation.request.icon else preview?.icon
     val generating = !hasReceipt && previewKey.app != null && previewKey.candidate != null && preview == null
     val candidateChanged = preview?.sourceChanged == true
     LaunchedEffect(previewKey, hasReceipt) {
@@ -146,7 +146,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = app?.appName ?: suggestion!!.packageName,
+                    text = app?.appName ?: suggestion.packageName,
                     style = MaterialTheme.typography.titleSmallEmphasized,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -222,7 +222,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                     FilledIconButton(
                         onClick = {
                             view.performConfirmHaptic()
-                            if (cleanupFailed && operation != null) {
+                            if (cleanupFailed) {
                                 viewModel.retryWatchCleanup(operation.request.id, suggestionId)
                             } else {
                                 val reviewed = preview

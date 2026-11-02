@@ -324,7 +324,7 @@ internal fun ModifierTab(
                                             sampleBitmap = sampleBitmap,
                                             layers = adjustments.colorizeLayers,
                                             onLayersChange = { adjustments.colorizeLayers = it },
-                                            renderLayersPreview = previews?.layers,
+                                            renderLayersPreview = previews.layers,
                                             appBackground = appBackground
                                         )
                                     }

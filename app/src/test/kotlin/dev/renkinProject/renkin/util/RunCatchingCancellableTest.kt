@@ -16,6 +16,7 @@ import org.junit.Test
  * A best-effort call may swallow its own failure, but a cancelled coroutine must stay cancelled:
  * turning the cancellation into a failure lets the caller carry on and publish a stale result.
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class RunCatchingCancellableTest {
 
     @Test

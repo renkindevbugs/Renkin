@@ -53,7 +53,6 @@ internal class IconModifierStageRenderer(resources: Resources, val options: Gene
             ModifierInputPipeline.BITMAP_IMAGE_EDIT -> imageEdits.applyToBitmap(
                 input.toBitmap(), imageEdit, options.modifiers.effect.colorizer.blendMode
             )
-            else -> error("Unsupported source stage pipeline")
         }
         return adjustments.apply(edited)
     }

@@ -48,7 +48,6 @@ import dev.renkinProject.renkin.feature.presets.shadowPreset
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
-import dev.renkinProject.renkin.icon.creator.ModifierPresetShadow
 import dev.renkinProject.renkin.icon.creator.ShadowModifier
 import dev.renkinProject.renkin.icon.creator.SHADOW_BLUR_MAX
 import dev.renkinProject.renkin.icon.creator.SHADOW_BLUR_MIN
@@ -115,15 +114,6 @@ private fun ShadowModifier.withPreset(preset: ShadowUiPreset): ShadowModifier = 
     opacity = preset.opacity,
     allDirections = preset.allDirections
 )
-
-// Cancel snapshots travel encoded so they survive process death together with the open sheet.
-internal fun ShadowModifier.encodeForCancel(): String = encodeModifierPreset(
-    ModifierPresetPayload(shadow = ModifierPresetShadow(enabled, blur, distance, angle, allDirections, style, opacity))
-)
-
-internal fun decodeShadowForCancel(encoded: String): ShadowModifier? = decodeModifierPreset(encoded)?.shadow?.let {
-    ShadowModifier(it.blur, it.distance, it.angle, it.allDirections, it.style, it.opacity, it.enabled)
-}
 
 private fun AdjustmentState.setShadow(shadow: ShadowModifier) {
     shadowBlur = shadow.blur
@@ -386,13 +376,14 @@ internal fun ShadowPresetChips(
 }
 
 @Composable
-private fun ShadowEditorControls(
+internal fun ShadowEditorControls(
     shadow: ShadowModifier,
     onShadowChange: (ShadowModifier) -> Unit,
     presets: List<ShadowUiPreset>,
     renderPreview: (suspend (ColorizerStyle) -> Bitmap?)?,
     // The host rasterises [preview] only while the editor that shows it is open.
-    onEditorOpenChange: (Boolean) -> Unit = {}
+    onEditorOpenChange: (Boolean) -> Unit = {},
+    onColorClick: (() -> Unit)? = null
 ) {
     var selectedControlOrdinal by rememberSaveable { mutableIntStateOf(ShadowControl.BLUR.ordinal) }
     var colorSheetOpen by rememberSaveable { mutableStateOf(false) }
@@ -488,7 +479,7 @@ private fun ShadowEditorControls(
         ColorStyleCard(
             label = stringResource(R.string.shadowColor),
             style = shadow.style,
-            onClick = { colorSheetOpen = true }
+            onClick = { if (onColorClick != null) onColorClick() else colorSheetOpen = true }
         )
     }
 

@@ -111,7 +111,7 @@ internal fun launcherActivityIconId(context: Context, app: LauncherActivityInfo)
     }.getOrNull(), app.applicationInfo.icon)
 
 @Singleton
-class InstalledIconLoader @Inject constructor(@ApplicationContext private val context: Context) {
+class InstalledIconLoader @Inject constructor(@param:ApplicationContext private val context: Context) {
     private companion object {
         val cache = AppBitmapMemoryCache()
         val pending = mutableMapOf<AppBitmapCacheKey, CompletableDeferred<Bitmap?>>()

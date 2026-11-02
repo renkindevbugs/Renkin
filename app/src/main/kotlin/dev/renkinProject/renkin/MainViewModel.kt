@@ -466,7 +466,7 @@ class MainViewModel @Inject constructor(
      * cannot be acted on.
      */
     data class UndoPrompt(
-        @androidx.annotation.StringRes val messageRes: Int,
+        @get:androidx.annotation.StringRes val messageRes: Int,
         val session: ProfileSessionToken,
         val step: IconUndoStep
     )

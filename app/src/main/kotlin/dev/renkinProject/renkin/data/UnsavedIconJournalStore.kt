@@ -35,7 +35,7 @@ data class UnsavedIconJournal(
  * backup or the install-confirmation snapshot.
  */
 @Singleton
-class UnsavedIconJournalStore @Inject constructor(@ApplicationContext private val context: Context) {
+class UnsavedIconJournalStore @Inject constructor(@param:ApplicationContext private val context: Context) {
     private val root by lazy { File(context.noBackupFilesDir, "unsaved-journal") }
     private val current by lazy { AtomicFile(File(root, "current.json")) }
     private val offer by lazy { AtomicFile(File(root, "offer.json")) }

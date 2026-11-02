@@ -1,13 +1,18 @@
 package dev.renkinProject.renkin
 
 import android.app.Application
+import android.net.Uri
+import androidx.compose.runtime.MutableState
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.room.Room
 import androidx.lifecycle.SavedStateHandle
 import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
 import dev.renkinProject.renkin.data.UnsavedIconJournalStore
 import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.ApkBuildArtifacts
+import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.InstallerSelection
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
@@ -24,12 +29,14 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -41,6 +48,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.util.ReflectionHelpers
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33])
@@ -49,6 +57,7 @@ class BuildInstallCoordinatorTest {
     private lateinit var application: Application
     private lateinit var database: RenkinPackDatabase
     private lateinit var provider: ApplicationProvider
+    private lateinit var artifacts: ApkBuildArtifacts
     private val notifications = mutableListOf<Int>()
 
     @Before
@@ -63,11 +72,13 @@ class BuildInstallCoordinatorTest {
         val locks = AppModule.provideIconLockManager(application, repository)
         val profiles = AppModule.provideProfileManager(application, repository)
         val installedIcons = dev.renkinProject.renkin.packages.InstalledIconLoader(application)
+        val buildService = AppModule.provideIconPackBuildService(application, icons, repository, locks, profiles, catalog)
+        artifacts = ReflectionHelpers.getField(buildService, "artifacts")
         provider = AppModule.provideApplicationProvider(
             application, AppModule.provideRenkinPackStore(application, repository), repository,
             icons, locks, profiles,
             AppModule.provideIconGenerationService(application, icons, catalog, installedIcons),
-            AppModule.provideIconPackBuildService(application, icons, repository, locks, profiles, catalog),
+            buildService,
             editorDraftInvalidation = draftInvalidation,
             installedIconLoader = installedIcons
         )
@@ -76,9 +87,12 @@ class BuildInstallCoordinatorTest {
     @After
     fun tearDown() { database.close() }
 
-    private fun coordinator(scope: CoroutineScope) = BuildInstallCoordinator(
+    private fun coordinator(
+        scope: CoroutineScope,
+        syncBaselines: suspend (BuiltIconPack) -> Unit = { error("A rejected build has no baseline to synchronize") }
+    ) = BuildInstallCoordinator(
         application, provider, scope,
-        syncBaselines = { error("A rejected build has no baseline to synchronize") },
+        syncBaselines = syncBaselines,
         refreshMissingPacks = { error("A rejected build must not refresh installed packs") },
         notify = { notifications += it },
         notifyText = { error("A rejected build must not emit installer notices") },
@@ -86,6 +100,92 @@ class BuildInstallCoordinatorTest {
     )
 
     private suspend fun Job.awaitChildren() = withTimeout(5_000) { children.toList().joinAll() }
+
+    private fun pendingRequest(): PackInstallRequest {
+        val apk = artifacts.create().resolve("pack.apk").apply { writeText("test APK") }
+        return PackInstallRequest(
+            BuiltIconPack(Uri.fromFile(apk), "dev.renkinProject.renkinpack", true, -1, "Test pack",
+                emptyPreferences(), emptyList(), emptyList()),
+            wasUpdate = false, InstallerSelection(InstallMethod.SYSTEM)
+        )
+    }
+
+    private fun BuildInstallCoordinator.restorePendingState(pending: BuildInstallState) {
+        ReflectionHelpers.getField<MutableState<BuildInstallState>>(this, "state\$delegate").value = pending
+    }
+
+    @Test
+    fun dismissConflictKeepsCleanupAttachedUntilArtifactsAreReleased() = runBlocking {
+        val owner = SupervisorJob(coroutineContext[Job])
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val coordinator = coordinator(CoroutineScope(coroutineContext + owner)) {
+            entered.complete(Unit)
+            release.await()
+        }
+        val request = pendingRequest()
+        coordinator.restorePendingState(BuildInstallState.Conflict(request))
+        try {
+            coordinator.dismissInstallFallback()
+            withTimeout(5_000) { entered.await() }
+            owner.cancel()
+            assertFalse("The owner must wait for cleanup", owner.isCompleted)
+            release.complete(Unit)
+            withTimeout(5_000) { owner.join() }
+            assertTrue(java.io.File(requireNotNull(request.pack.uri.path)).parentFile!!.resolve(".finished").isFile)
+        } finally {
+            release.complete(Unit)
+            coordinator.close()
+            owner.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun dismissPickerFinishesItsBuildDespiteOwnerCancellation() = runBlocking {
+        val owner = SupervisorJob(coroutineContext[Job])
+        val scope = CoroutineScope(coroutineContext + owner)
+        val release = CompletableDeferred<Unit>()
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { withContext(NonCancellable) { release.await() } }
+        val synchronized = CompletableDeferred<Unit>()
+        val coordinator = coordinator(scope) { synchronized.complete(Unit) }
+        val request = pendingRequest()
+        coordinator.restorePendingState(BuildInstallState.ChoosingInstaller(request, InstallerChoiceReason.FIRST_CHOICE))
+        try {
+            owner.cancel()
+            coordinator.dismissInstallerSelection()
+            release.complete(Unit)
+            withTimeout(5_000) { owner.join() }
+            assertTrue("The captured build baseline must be synchronized", synchronized.isCompleted)
+            assertTrue(java.io.File(requireNotNull(request.pack.uri.path)).parentFile!!.resolve(".finished").isFile)
+            assertTrue(notifications.isEmpty())
+        } finally {
+            release.complete(Unit)
+            coordinator.close()
+            owner.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun closeReleasesPendingArtifactsEvenWhenOwnerIsAlreadyCancelled() = runBlocking {
+        val owner = SupervisorJob(coroutineContext[Job])
+        val scope = CoroutineScope(coroutineContext + owner)
+        val release = CompletableDeferred<Unit>()
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { withContext(NonCancellable) { release.await() } }
+        val coordinator = coordinator(scope)
+        val request = pendingRequest()
+        coordinator.restorePendingState(BuildInstallState.ChoosingInstaller(request, InstallerChoiceReason.FIRST_CHOICE))
+        try {
+            owner.cancel()
+            coordinator.close()
+            release.complete(Unit)
+            withTimeout(5_000) { owner.join() }
+            assertTrue(java.io.File(requireNotNull(request.pack.uri.path)).parentFile!!.resolve(".finished").isFile)
+            assertEquals(BuildInstallState.Idle, coordinator.state)
+        } finally {
+            release.complete(Unit)
+            owner.cancelAndJoin()
+        }
+    }
 
     @Test
     fun buildClaimsBusyBeforeItsCoroutineAndDuplicateTapIsRejected() = runBlocking {

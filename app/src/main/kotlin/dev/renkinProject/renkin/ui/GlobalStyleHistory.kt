@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -28,7 +28,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,7 +65,7 @@ import kotlin.math.roundToInt
 private val HistoryPreviewSize = 24.dp
 private const val HISTORY_PREVIEW_APPS = 3
 
-/** Opens [GlobalStyleHistorySheet]. */
+/** Opens the Global Style history panel. */
 @Composable
 internal fun GlobalHistoryButton(enabled: Boolean, onClick: () -> Unit) {
     IconButton(onClick = onClick, enabled = enabled) {
@@ -80,7 +79,7 @@ internal fun GlobalHistoryButton(enabled: Boolean, onClick: () -> Unit) {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-internal fun GlobalStyleHistorySheet(
+internal fun GlobalStyleHistoryContent(
     history: List<GlobalStyleHistoryItem>,
     current: GlobalModifierSnapshot?,
     previewApps: List<PackageInfoStruct>,
@@ -90,8 +89,7 @@ internal fun GlobalStyleHistorySheet(
     onDelete: (GlobalStyleHistoryItem) -> Unit,
     canBake: Boolean,
     onBake: () -> Unit,
-    onUndoBake: (GlobalStyleHistoryItem) -> Unit,
-    onDismiss: () -> Unit
+    onUndoBake: (GlobalStyleHistoryItem) -> Unit
 ) {
     val looks = remember(history) {
         history.map { item -> item to GlobalModifierState().apply { seedFrom(item.recipe) } }
@@ -103,86 +101,81 @@ internal fun GlobalStyleHistorySheet(
     val apps = remember(previewApps) { previewApps.take(HISTORY_PREVIEW_APPS) }
     // Only the newest entry can be what is applied now; an older identical look is just history.
     val currentId = looks.firstOrNull()?.takeIf { (_, look) -> current != null && look.snapshot() == current }?.first?.id
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .navigationBarsPadding()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 12.dp)
-        ) {
-            Text(stringResource(R.string.globalHistoryTitle), style = MaterialTheme.typography.titleLarge)
-            Text(
-                text = stringResource(R.string.globalHistoryHint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-            )
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                looks.forEachIndexed { index, (item, look) ->
-                    if (newestBakeIndex >= 0 && index == newestBakeIndex + 1) item(key = "beforeBake") {
-                        Text(
-                            text = stringResource(R.string.globalHistoryBeforeBake),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-                    item(key = item.id) {
-                        val isCurrent = item.id == currentId
-                        val bakedLook = bakedLooks[item.id]
-                        if (bakedLook != null) {
-                            // The baked icons already carry this look, so the preview shows them as they are.
-                            HistoryRow(
-                                title = stringResource(R.string.globalHistoryBaked, formatHistoryTime(item.appliedAt)),
-                                chips = historyChips(bakedLook),
-                                options = null,
-                                apps = apps,
-                                viewModel = viewModel,
-                                highlighted = isCurrent,
-                                onClick = { onUndoBake(item) },
-                                onDelete = null,
-                                leading = Icons.Filled.LocalFireDepartment
-                            )
-                        } else {
-                            HistoryRow(
-                                title = if (isCurrent) {
-                                    stringResource(R.string.globalHistoryCurrent, formatHistoryTime(item.appliedAt))
-                                } else formatHistoryTime(item.appliedAt),
-                                chips = historyChips(look),
-                                options = if (look.hasAnyEffect) look.toModifierOptions() else null,
-                                apps = apps,
-                                viewModel = viewModel,
-                                highlighted = isCurrent,
-                                onClick = if (isCurrent) null else { { onLoad(item) } },
-                                onDelete = if (isCurrent) null else { { onDelete(item) } },
-                                bake = if (isCurrent && look.hasAnyEffect) {
-                                    { BakeButton(enabled = canBake, onClick = onBake) }
-                                } else null
-                            )
-                        }
-                    }
-                }
-                item(key = "noStyle") {
-                    HistoryRow(
-                        title = stringResource(R.string.globalHistoryNoStyle),
-                        chips = listOf(stringResource(R.string.globalHistoryNoStyleHint)),
-                        options = null,
-                        apps = apps,
-                        viewModel = viewModel,
-                        highlighted = false,
-                        onClick = onLoadNoStyle,
-                        onDelete = null
-                    )
-                }
-                item(key = "limit") {
+    Column(
+        Modifier
+            .fillMaxSize()
+    ) {
+        Text(
+            text = stringResource(R.string.globalHistoryHint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+        )
+        LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            looks.forEachIndexed { index, (item, look) ->
+                if (newestBakeIndex >= 0 && index == newestBakeIndex + 1) item(key = "beforeBake") {
                     Text(
-                        text = if (history.isEmpty()) stringResource(R.string.globalHistoryEmpty)
-                        else pluralStringResource(R.plurals.globalHistoryLimit, GLOBAL_STYLE_HISTORY_LIMIT, GLOBAL_STYLE_HISTORY_LIMIT),
+                        text = stringResource(R.string.globalHistoryBeforeBake),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
+                item(key = item.id) {
+                    val isCurrent = item.id == currentId
+                    val bakedLook = bakedLooks[item.id]
+                    if (bakedLook != null) {
+                        // The baked icons already carry this look, so the preview shows them as they are.
+                        HistoryRow(
+                            title = stringResource(R.string.globalHistoryBaked, formatHistoryTime(item.appliedAt)),
+                            chips = historyChips(bakedLook),
+                            options = null,
+                            apps = apps,
+                            viewModel = viewModel,
+                            highlighted = isCurrent,
+                            onClick = { onUndoBake(item) },
+                            onDelete = null,
+                            leading = Icons.Filled.LocalFireDepartment
+                        )
+                    } else {
+                        HistoryRow(
+                            title = if (isCurrent) {
+                                stringResource(R.string.globalHistoryCurrent, formatHistoryTime(item.appliedAt))
+                            } else formatHistoryTime(item.appliedAt),
+                            chips = historyChips(look),
+                            options = if (look.hasAnyEffect) look.toModifierOptions() else null,
+                            apps = apps,
+                            viewModel = viewModel,
+                            highlighted = isCurrent,
+                            onClick = if (isCurrent) null else { { onLoad(item) } },
+                            onDelete = if (isCurrent) null else { { onDelete(item) } },
+                            bake = if (isCurrent && look.hasAnyEffect) {
+                                { BakeButton(enabled = canBake, onClick = onBake) }
+                            } else null
+                        )
+                    }
+                }
+            }
+            item(key = "noStyle") {
+                HistoryRow(
+                    title = stringResource(R.string.globalHistoryNoStyle),
+                    chips = listOf(stringResource(R.string.globalHistoryNoStyleHint)),
+                    options = null,
+                    apps = apps,
+                    viewModel = viewModel,
+                    highlighted = false,
+                    onClick = onLoadNoStyle,
+                    onDelete = null
+                )
+            }
+            item(key = "limit") {
+                Text(
+                    text = if (history.isEmpty()) stringResource(R.string.globalHistoryEmpty)
+                    else pluralStringResource(R.plurals.globalHistoryLimit, GLOBAL_STYLE_HISTORY_LIMIT, GLOBAL_STYLE_HISTORY_LIMIT),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
             }
         }
     }

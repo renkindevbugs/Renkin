@@ -378,7 +378,7 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         profileDao.update(styled.copy(appTargets = current?.appTargets ?: styled.appTargets,
             customPackageName = current?.customPackageName ?: styled.customPackageName,
             packIcon = current?.packIcon ?: styled.packIcon,
-            hasUnbuiltChanges = styled.hasUnbuiltChanges || (staleIdentity && current?.hasUnbuiltChanges == true)))
+            hasUnbuiltChanges = styled.hasUnbuiltChanges || (staleIdentity && current.hasUnbuiltChanges)))
     }
 
     suspend fun updateProfileDetails(

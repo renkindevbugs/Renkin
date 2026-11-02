@@ -28,7 +28,7 @@ data class UnsavedSessionMarker(
  * portable and Android backups, and is never part of a profile save.
  */
 @Singleton
-class UnsavedSessionMarkerStore @Inject constructor(@ApplicationContext private val context: Context) {
+class UnsavedSessionMarkerStore @Inject constructor(@param:ApplicationContext private val context: Context) {
     private val file by lazy { AtomicFile(File(context.noBackupFilesDir, "unsaved-session.json")) }
     // AtomicFile.openRead deletes an unfinished write, so reads must not overlap writes.
     private val mutex = Mutex()

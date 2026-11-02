@@ -185,17 +185,20 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
     val previewJobs by viewModel.previewJobs.collectAsStateWithLifecycle()
     val dirty by remember(viewModel) { derivedStateOf { viewModel.isDirty } }
     var confirmDiscard by remember { mutableStateOf(false) }
-    var showTargets by rememberSaveable { mutableStateOf(false) }
-    var showSources by rememberSaveable { mutableStateOf(false) }
     var showBefore by rememberSaveable { mutableStateOf(false) }
-    var showHistory by rememberSaveable { mutableStateOf(false) }
+    val panel = rememberSaveable(saver = GlobalStylePanelState.Saver) { GlobalStylePanelState() }
     var confirmBake by rememberSaveable { mutableStateOf(false) }
     var undoBakeId by rememberSaveable { mutableStateOf<Long?>(null) }
     var previewDebouncing by remember { mutableStateOf(false) }
     val close: () -> Unit = {
         if (applying) Unit
+        else if (panel.back()) Unit
         else if (dirty) confirmDiscard = true
         else onClose()
+    }
+    val openPanel: (GlobalStylePanel) -> Unit = { destination ->
+        panel.open(destination)
+        showBefore = false
     }
     androidx.activity.compose.BackHandler(enabled = true) { close() }
 
@@ -267,6 +270,36 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
         )
     }
 
+    LaunchedEffect(panel.page) {
+        if (panel.page == GlobalStylePanel.HISTORY) viewModel.refreshHistory()
+    }
+    val historyContent: @Composable () -> Unit = {
+        GlobalStyleHistoryContent(
+            history = viewModel.history,
+            current = viewModel.baseline,
+            previewApps = remember(categories) { categories.generated + categories.existing + categories.custom },
+            viewModel = viewModel,
+            onLoad = { item ->
+                viewModel.loadHistory(item)
+                panel.open(GlobalStylePanel.OPTIONS)
+            },
+            onLoadNoStyle = {
+                viewModel.loadNoGlobalStyle()
+                panel.open(GlobalStylePanel.OPTIONS)
+            },
+            onDelete = viewModel::deleteHistory,
+            canBake = !dirty && !applying,
+            onBake = {
+                panel.open(GlobalStylePanel.OPTIONS)
+                confirmBake = true
+            },
+            onUndoBake = { item ->
+                panel.open(GlobalStylePanel.OPTIONS)
+                undoBakeId = item.id
+            }
+        )
+    }
+
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     // Tiles are the blur sources; the pinned section headers frost whatever scrolls beneath them.
     val hazeState = remember { HazeState() }
@@ -300,7 +333,7 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                         style = MaterialTheme.typography.titleMediumEmphasized,
                         modifier = Modifier.weight(1f)
                     )
-                    GlobalHistoryButton(enabled = !applying && state.initialized) { showHistory = true }
+                    GlobalHistoryButton(enabled = !applying && state.initialized) { openPanel(GlobalStylePanel.HISTORY) }
                     Button(
                         onClick = {
                             view.performConfirmHaptic()
@@ -448,25 +481,23 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                             .fillMaxHeight()
                     ) {
                         Box(Modifier.fillMaxSize()) {
-                            Column(
-                                Modifier
-                                    .verticalScroll(rememberScrollState())
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                viewModel.historyLoad?.let { GlobalHistoryLoadedBanner(it, viewModel::undoHistoryLoad) }
-                                GlobalStyleControlPanel(
-                                    state = state,
-                                    categories = categories,
-                                    targetCount = targetCount,
-                                    activeEffectCount = activeEffectCount,
-                                    iconPacks = iconPacks,
-                                    resetEnabled = dirty,
-                                    onTargetsClick = { showTargets = true },
-                                    onSourcesClick = { showSources = true },
-                                    onReset = viewModel::resetDraft
-                                )
-                            }
+                            GlobalStyleControlPanel(
+                                state = state,
+                                categories = categories,
+                                targetCount = targetCount,
+                                activeEffectCount = activeEffectCount,
+                                iconPacks = iconPacks,
+                                resetEnabled = dirty,
+                                onReset = viewModel::resetDraft,
+                                navigation = panel,
+                                onNavigate = openPanel,
+                                loadPackIcons = viewModel::iconPackDropdownIcons,
+                                historyContent = historyContent,
+                                modifier = Modifier.fillMaxSize().padding(12.dp),
+                                leadingContent = {
+                                    viewModel.historyLoad?.let { GlobalHistoryLoadedBanner(it, viewModel::undoHistoryLoad) }
+                                }
+                            )
                             GlobalPreviewProgressIndicator(
                                 visible = previewRefreshing,
                                 modifier = Modifier.align(Alignment.TopCenter)
@@ -497,9 +528,8 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                             Column(
                                 Modifier
                                     .heightIn(max = dockMaxHeight)
-                                    .verticalScroll(rememberScrollState())
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Box(
                                     Modifier
@@ -508,7 +538,6 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                                         .background(MaterialTheme.colorScheme.outlineVariant)
                                         .align(Alignment.CenterHorizontally)
                                 )
-                                viewModel.historyLoad?.let { GlobalHistoryLoadedBanner(it, viewModel::undoHistoryLoad) }
                                 GlobalStyleControlPanel(
                                     state = state,
                                     categories = categories,
@@ -516,9 +545,15 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
                                     activeEffectCount = activeEffectCount,
                                     iconPacks = iconPacks,
                                     resetEnabled = dirty,
-                                    onTargetsClick = { showTargets = true },
-                                    onSourcesClick = { showSources = true },
-                                    onReset = viewModel::resetDraft
+                                    onReset = viewModel::resetDraft,
+                                    navigation = panel,
+                                    onNavigate = openPanel,
+                                    loadPackIcons = viewModel::iconPackDropdownIcons,
+                                    historyContent = historyContent,
+                                    modifier = Modifier.weight(1f, fill = false),
+                                    leadingContent = {
+                                        viewModel.historyLoad?.let { GlobalHistoryLoadedBanner(it, viewModel::undoHistoryLoad) }
+                                    }
                                 )
                             }
                             GlobalPreviewProgressIndicator(
@@ -532,43 +567,9 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
         }
     }
 
-    if (showTargets) {
-        GlobalTargetsSheet(
-            state = state,
-            categories = categories,
-            targetCount = targetCount,
-            onDismiss = { showTargets = false }
-        )
-    }
 
-    LaunchedEffect(showHistory) { if (showHistory) viewModel.refreshHistory() }
-    if (showHistory) {
-        GlobalStyleHistorySheet(
-            history = viewModel.history,
-            current = viewModel.baseline,
-            previewApps = remember(categories) { categories.generated + categories.existing + categories.custom },
-            viewModel = viewModel,
-            onLoad = { item ->
-                viewModel.loadHistory(item)
-                showHistory = false
-            },
-            onLoadNoStyle = {
-                viewModel.loadNoGlobalStyle()
-                showHistory = false
-            },
-            onDelete = viewModel::deleteHistory,
-            canBake = !dirty && !applying,
-            onBake = {
-                showHistory = false
-                confirmBake = true
-            },
-            onUndoBake = { item ->
-                showHistory = false
-                undoBakeId = item.id
-            },
-            onDismiss = { showHistory = false }
-        )
-    }
+
+
     if (confirmBake) {
         GlobalStyleBakeDialog(
             onConfirm = {
@@ -591,14 +592,7 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
         )
     }
 
-    if (showSources) {
-        GenerationSourcesSheet(
-            state = state,
-            iconPacks = iconPacks,
-            loadPackIcons = viewModel::iconPackDropdownIcons,
-            onDismiss = { showSources = false }
-        )
-    }
+
 
     if (confirmDiscard) {
         ConfirmDialog(

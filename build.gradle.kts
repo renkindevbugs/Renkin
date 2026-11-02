@@ -8,13 +8,3 @@ plugins {
     alias(libs.plugins.hilt.android) apply false
     alias(libs.plugins.roborazzi) apply false
 }
-
-allprojects {
-    configurations.configureEach {
-        resolutionStrategy.dependencySubstitution {
-            substitute(module("ru.solrudev.ackpine:ackpine-core"))
-                .using(project(":ackpine-core-compat"))
-                .because("Guard the confirmation Activity launch in pinned Ackpine 0.25.4 sources")
-        }
-    }
-}

@@ -50,7 +50,7 @@ private data class WhatsNewRelease(
 )
 
 private data class WhatsNewSection(
-    @StringRes val title: Int,
+    @get:StringRes val title: Int,
     val changes: List<Int>
 )
 

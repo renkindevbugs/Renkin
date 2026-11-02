@@ -90,8 +90,8 @@ internal fun Modifier.introTarget(target: IntroTarget): Modifier = composed {
 
 private data class IntroStep(
     val targets: List<IntroTarget>,
-    @StringRes val title: Int,
-    @StringRes val text: Int
+    @get:StringRes val title: Int,
+    @get:StringRes val text: Int
 )
 
 // The order a first pack actually happens in, then the places people come back to.

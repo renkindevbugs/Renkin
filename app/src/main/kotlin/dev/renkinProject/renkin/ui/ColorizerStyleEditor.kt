@@ -53,6 +53,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -113,7 +114,7 @@ internal fun ColorizerStyleEditor(
     var pickerIndex by remember { mutableStateOf<Int?>(null) }
     // Which stop the bar highlights and the picker edits. Kept here so tapping a row, a handle
     // or a swatch all mean the same selection.
-    var selectedStop by remember { mutableIntStateOf(0) }
+    var selectedStop by rememberSaveable { mutableIntStateOf(0) }
     var displayedAngle by remember(style.gradientAngle) {
         mutableFloatStateOf(normalizeGradientAngle(style.gradientAngle))
     }

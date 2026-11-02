@@ -31,6 +31,8 @@ class ShizukuSupportTest {
         )
     }
 
+    // PackageManager fixtures need a writable PermissionInfo for arbitrary permission owners.
+    @Suppress("DEPRECATION")
     private fun declarePermission(permission: String, owner: String) {
         shadowOf(context.packageManager).addPermissionInfo(PermissionInfo().apply {
             name = permission

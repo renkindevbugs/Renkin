@@ -19,6 +19,9 @@ Kotlin, KSP and Room compiler. Upstream resources, manifest and consumer ProGuar
 are consumed directly. A generated Kotlin source directory combines the original core
 sources with the one patched Activity. The original file's normalized SHA-256 and the
 catalog version are checked before replacement; an upstream update requires review.
+Source preparation also adds explicit Boolean return types to three private session helpers
+for Kotlin 2.3 and selects Room's explicit `dropAllTables = false` overload, preserving the
+legacy migration behavior. The pinned upstream checkout is unchanged.
 The Kotlin module name stays `ackpine-core` to preserve internal JVM member names used
 by published artifacts. Plugin references are checked against the rebuilt classes.
 
@@ -38,7 +41,9 @@ remain upstream code. Review with:
 git diff --no-index third_party/ackpine-source/ackpine-core/src/main/kotlin/ru/solrudev/ackpine/impl/installer/activity/SessionBasedInstallConfirmationActivity.kt compat/ackpine-core/patched/kotlin/ru/solrudev/ackpine/impl/installer/activity/SessionBasedInstallConfirmationActivity.kt
 ```
 
-The global dependency substitution covers transitive core references from installer plugins
-too. Verify with `:app:dependencyInsight --dependency ackpine-core --configuration debugRuntimeClasspath`.
-Remove the adapter, substitution and submodule when a reviewed upstream release includes
+The app depends directly on this adapter and excludes the published `ackpine-core` module from
+its configurations, including transitive references from installer plugins. This avoids the
+early resolution caused by global project-substitution rules. Verify with
+`:app:dependencyInsight --dependency ackpine-core --configuration debugRuntimeClasspath`.
+Remove the adapter, exclusion and submodule when a reviewed upstream release includes
 the guard. No upstream fork or pull request is published by this change.

@@ -42,7 +42,7 @@ enum class RemoveAppOutcome { REMOVED, HAS_ICON, SESSION_CHANGED, FAILED }
  */
 @HiltViewModel
 class AddAppViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val appProvider: ApplicationProvider
 ) : ViewModel() {
     var disabledApps by mutableStateOf<List<AppTarget>?>(null)

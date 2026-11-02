@@ -52,7 +52,7 @@ class GlobalModifierStateTest {
         assertEquals(9f, preview.modifiers.outline!!.width)
         assertEquals(138f, preview.modifiers.effect.colorizer.gradientAngle)
         assertEquals(138f, preview.export.background.style!!.gradientAngle)
-        assertNull(preview.modifiers.shape!!.fill)
+        assertNull(preview.modifiers.shape.fill)
     }
 
     @Test fun allFlagCombinationsHaveOneEffectiveModeAtEveryGlobalBoundary() {
