@@ -64,7 +64,7 @@ data class OnlineImageImport(val bitmap: Bitmap, val galleryPath: String?)
 @HiltViewModel
 class OnlineIconBrowserViewModel @Inject constructor(
     private val repository: OnlineIconRepository,
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) : ViewModel() {
 
     var selectedCollection: IconifyCollection? by mutableStateOf(null)
@@ -139,7 +139,7 @@ class OnlineIconBrowserViewModel @Inject constructor(
     private fun launchInSession(block: suspend CoroutineScope.(started: Long) -> Unit): Job? {
         val session = sessionJob ?: return null
         val started = generation
-        return viewModelScope.launch(session) { block(started) }
+        return CoroutineScope(viewModelScope.coroutineContext + session).launch { block(started) }
     }
 
     private fun isCurrent(started: Long) = sessionJob?.isActive == true && generation == started

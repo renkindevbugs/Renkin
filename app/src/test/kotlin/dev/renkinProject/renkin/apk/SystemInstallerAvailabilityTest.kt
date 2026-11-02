@@ -1,7 +1,9 @@
 package dev.renkinProject.renkin.apk
 
 import android.app.Application
+import android.content.ComponentName
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.pm.ResolveInfo
@@ -22,6 +24,8 @@ class SystemInstallerAvailabilityTest {
     private val apk = Uri.parse("content://example.provider/pack.apk")
 
     private fun confirmInstall() = Intent("android.content.pm.action.CONFIRM_INSTALL")
+    // The compatibility route still queries this legacy action on supported Android versions.
+    @Suppress("DEPRECATION")
     private fun installPackage() = Intent(Intent.ACTION_INSTALL_PACKAGE).setDataAndType(apk, APK_MIME_TYPE)
 
     private fun handler(
@@ -43,8 +47,18 @@ class SystemInstallerAvailabilityTest {
         }
     }
 
-    private fun register(intent: Intent, info: ResolveInfo) =
-        shadowOf(application.packageManager).addResolveInfoForIntent(intent, info)
+    private fun register(intent: Intent, info: ResolveInfo) {
+        val activity = info.activityInfo
+        shadowOf(application.packageManager).apply {
+            addOrUpdateActivity(activity)
+            addIntentFilterForActivity(ComponentName(activity.packageName, activity.name),
+                IntentFilter(intent.action).apply {
+                    addCategory(Intent.CATEGORY_DEFAULT)
+                    intent.scheme?.let(::addDataScheme)
+                    intent.type?.let(::addDataType)
+                })
+        }
+    }
 
     @Test
     fun enabledSystemConfirmationHandlerMakesTheSystemRouteAvailable() {

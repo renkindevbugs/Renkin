@@ -26,7 +26,7 @@ import javax.inject.Singleton
 
 @Singleton
 class AutoBackupManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     val intervalHours: Flow<Int> = context.dataStore.observePreferences().map {
         normalizeAutoBackupInterval(it.getIntValue(AutoBackupIntervalKey, AUTO_BACKUP_INTERVAL_OFF))

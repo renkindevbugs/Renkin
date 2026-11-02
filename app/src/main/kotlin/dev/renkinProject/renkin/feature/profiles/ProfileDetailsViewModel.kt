@@ -40,7 +40,7 @@ internal data class ProfileDetailsSubmission(
 
 @HiltViewModel
 class ProfileDetailsViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val installedIcons: InstalledIconLoader
 ) : ViewModel() {
     private val codec = ProfilePackIconCodec(context)

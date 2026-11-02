@@ -926,7 +926,7 @@ fun ApplicationList(
         }
         return
     }
-    val sourceSession = applicationState.sessionToken ?: return
+    val sourceSession = applicationState.sessionToken
     var addAppOpen by rememberSaveable { mutableStateOf(false) }
 
     // One column on a phone, more on a tablet or in landscape. The header cards describe the

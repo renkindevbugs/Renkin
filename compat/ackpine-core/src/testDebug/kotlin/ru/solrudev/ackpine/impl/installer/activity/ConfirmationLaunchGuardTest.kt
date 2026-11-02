@@ -5,10 +5,10 @@ import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInstaller
-import android.content.pm.ResolveInfo
 import android.os.Looper
 import org.junit.Assert.*
 import org.junit.Test
@@ -41,15 +41,18 @@ class ConfirmationLaunchGuardTest {
             .also { SessionIdIntents.putSessionId(it, session.id) }
 
     private fun availableTarget(): Intent = Intent("renkin.test.CONFIRM_INSTALL").also { target ->
-        shadowOf(app.packageManager).addResolveInfoForIntent(target, ResolveInfo().apply {
-            activityInfo = ActivityInfo().apply {
-                packageName = app.packageName
-                name = "${app.packageName}.TestConfirmation"
-                exported = true
-                enabled = true
-                applicationInfo = ApplicationInfo(app.applicationInfo)
-            }
-        })
+        val activity = ActivityInfo().apply {
+            packageName = app.packageName
+            name = "${app.packageName}.TestConfirmation"
+            exported = true
+            enabled = true
+            applicationInfo = ApplicationInfo(app.applicationInfo)
+        }
+        shadowOf(app.packageManager).apply {
+            addOrUpdateActivity(activity)
+            addIntentFilterForActivity(ComponentName(activity.packageName, activity.name),
+                IntentFilter(target.action).apply { addCategory(Intent.CATEGORY_DEFAULT) })
+        }
     }
 
     @Test

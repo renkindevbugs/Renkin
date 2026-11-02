@@ -58,10 +58,12 @@
         android:maxSdkVersion="32"
         tools:node="remove"
         tools:ignore="ScopedStorage" />
+    <!-- Ackpine's WRITE permission implies READ after merger validation; keep this removal guard. -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"
-        tools:node="remove" />
+        tools:node="remove"
+        tools:ignore_warning="true" />
 
     <application
         android:name=".RenkinApplication"

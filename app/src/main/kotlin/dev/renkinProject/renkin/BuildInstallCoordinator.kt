@@ -86,7 +86,7 @@ internal sealed interface BuildInstallState {
     data class Conflict(val request: PackInstallRequest, val signatureMismatch: Boolean = false) : BuildInstallState
     data class Done(val wasUpdate: Boolean, val packLabel: String, val installerLabel: String,
         val savingProfile: Boolean = false, val profileSaveFailed: Boolean = false) : BuildInstallState
-    data class Failed(@StringRes val message: Int, val summary: String, val report: String,
+    data class Failed(@get:StringRes val message: Int, val summary: String, val report: String,
         val result: ApkInstallResult? = null, val pack: BuiltIconPack? = null) : BuildInstallState
 }
 
@@ -203,17 +203,20 @@ internal class BuildInstallCoordinator(
         val choosing = state as? BuildInstallState.ChoosingInstaller ?: return
         finishingPacks += choosing.request.pack
         state = BuildInstallState.Idle
-        scope.launch(NonCancellable) {
-            try {
-                provider.finishWithoutInstallation(choosing.request.pack)
-                synchronizeAfterInstall(choosing.request.pack)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                Log.error("BuildInstallCoordinator", "Finishing without installation failed", error)
-                if (!closed) notify(R.string.iconPackBuildFailed)
-            } finally {
-                releaseFinishingBuild(choosing.request.pack, completed = false)
+        // Enter cleanup even if the owner is cancelled, while retaining its child-job ownership.
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            withContext(NonCancellable) {
+                try {
+                    provider.finishWithoutInstallation(choosing.request.pack)
+                    synchronizeAfterInstall(choosing.request.pack)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    Log.error("BuildInstallCoordinator", "Finishing without installation failed", error)
+                    if (!closed) notify(R.string.iconPackBuildFailed)
+                } finally {
+                    releaseFinishingBuild(choosing.request.pack, completed = false)
+                }
             }
         }
     }
@@ -222,11 +225,13 @@ internal class BuildInstallCoordinator(
         val conflict = state as? BuildInstallState.Conflict ?: return
         finishingPacks += conflict.request.pack
         state = BuildInstallState.Idle
-        scope.launch(NonCancellable) {
-            try {
-                synchronizeAfterInstall(conflict.request.pack)
-            } finally {
-                releaseFinishingBuild(conflict.request.pack)
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            withContext(NonCancellable) {
+                try {
+                    synchronizeAfterInstall(conflict.request.pack)
+                } finally {
+                    releaseFinishingBuild(conflict.request.pack)
+                }
             }
         }
     }
@@ -454,7 +459,7 @@ internal class BuildInstallCoordinator(
                 withContext(NonCancellable) { provider.releaseApkExport(lease) }
             }
         }
-        if (pending != null) scope.launch(NonCancellable) { releaseFinishingBuild(pending) }
+        if (pending != null) scope.launch(start = CoroutineStart.UNDISPATCHED) { releaseFinishingBuild(pending) }
     }
 }
 

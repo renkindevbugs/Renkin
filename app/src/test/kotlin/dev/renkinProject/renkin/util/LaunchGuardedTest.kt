@@ -15,6 +15,7 @@ import org.junit.Test
  * A user action that fails must reach the user through its callback instead of the uncaught
  * handler (which ends the process), while cancellation keeps propagating untouched.
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class LaunchGuardedTest {
 
     @Test

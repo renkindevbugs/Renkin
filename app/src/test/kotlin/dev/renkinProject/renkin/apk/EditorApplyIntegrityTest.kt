@@ -385,7 +385,7 @@ class EditorApplyIntegrityTest {
         assertEquals(0, Color.alpha(updated.createdIcon!!.toBitmap().getPixel(0, 0)))
         val saved = repository.getAll(provider.activeProfileId).single()
         assertEquals(reviewed.toDbString(), saved.baseDrawable)
-        assertEquals(updated.createdIcon!!.toDbString(), saved.drawable)
+        assertEquals(updated.createdIcon.toDbString(), saved.drawable)
     }
 
     @Test

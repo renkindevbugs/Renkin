@@ -19,6 +19,9 @@ Kotlin, KSP and Room compiler. Upstream resources, manifest and consumer ProGuar
 are consumed directly. A generated Kotlin source directory combines the original core
 sources with the one patched Activity. The original file's normalized SHA-256 and the
 catalog version are checked before replacement; an upstream update requires review.
+Source preparation also adds explicit Boolean return types to three private session helpers
+for Kotlin 2.3 and selects Room's explicit `dropAllTables = false` overload, preserving the
+legacy migration behavior. The pinned upstream checkout is unchanged.
 The Kotlin module name stays `ackpine-core` to preserve internal JVM member names used
 by published artifacts. Plugin references are checked against the rebuilt classes.
 

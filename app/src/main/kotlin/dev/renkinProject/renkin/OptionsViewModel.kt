@@ -81,7 +81,7 @@ import kotlinx.coroutines.channels.Channel
  */
 @HiltViewModel
 class OptionsViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val appProvider: ApplicationProvider,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {

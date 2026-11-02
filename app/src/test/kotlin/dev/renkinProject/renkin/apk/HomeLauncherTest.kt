@@ -1,10 +1,11 @@
 package dev.renkinProject.renkin.apk
 
 import android.app.Application
+import android.content.ComponentName
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.pm.ApplicationInfo
-import android.content.pm.ResolveInfo
 import dev.renkinProject.renkin.R
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -24,16 +25,24 @@ class HomeLauncherTest {
     private val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
 
     private fun registerHome(packageName: String, label: String) {
-        shadowOf(application.packageManager).addResolveInfoForIntent(home, ResolveInfo().apply {
-            activityInfo = ActivityInfo().apply {
+        val activity = ActivityInfo().apply {
+            this.packageName = packageName
+            name = "$packageName.Launcher"
+            enabled = true
+            exported = true
+            applicationInfo = ApplicationInfo().apply {
                 this.packageName = packageName
-                name = "$packageName.Launcher"
-                applicationInfo = ApplicationInfo().apply {
-                    this.packageName = packageName
-                    nonLocalizedLabel = label
-                }
+                nonLocalizedLabel = label
             }
-        })
+        }
+        shadowOf(application.packageManager).apply {
+            addOrUpdateActivity(activity)
+            addIntentFilterForActivity(ComponentName(activity.packageName, activity.name),
+                IntentFilter(home.action).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    addCategory(Intent.CATEGORY_DEFAULT)
+                })
+        }
     }
 
     @Test

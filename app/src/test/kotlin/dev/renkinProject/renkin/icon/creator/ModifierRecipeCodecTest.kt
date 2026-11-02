@@ -104,9 +104,9 @@ class ModifierRecipeCodecTest {
         assertEquals(1.5f, decoded.shape!!.scale)
         assertEquals(6f, decoded.outline!!.width)
         assertEquals(32f, decoded.shadow!!.blur)
-        assertEquals(0f, decoded.shadow!!.distance)
-        assertEquals(360f, decoded.shadow!!.angle)
-        assertEquals(1f, decoded.shadow!!.opacity)
+        assertEquals(0f, decoded.shadow.distance)
+        assertEquals(360f, decoded.shadow.angle)
+        assertEquals(1f, decoded.shadow.opacity)
         assertEquals(0.5f, decoded.materialYouPack.strokeScale)
     }
 

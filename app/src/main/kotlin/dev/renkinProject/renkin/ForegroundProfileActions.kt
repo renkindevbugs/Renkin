@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 
 data class ProfileActionProgress(
-    @StringRes val messageRes: Int,
+    @get:StringRes val messageRes: Int,
     val applicationName: String? = null
 )
 

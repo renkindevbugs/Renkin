@@ -1,5 +1,6 @@
 import java.security.MessageDigest
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.Sync
@@ -30,7 +31,20 @@ abstract class PrepareAckpineSources : Sync() {
 val prepareSources = tasks.register<PrepareAckpineSources>("prepareAckpineSources") {
     outputDirectory.set(layout.buildDirectory.dir("generated/ackpine/kotlin"))
     into(outputDirectory)
-    from(upstream.dir("src/main/kotlin")) { exclude(confirmationPath) }
+    from(upstream.dir("src/main/kotlin")) {
+        exclude(confirmationPath)
+        filesMatching("**/AbstractSession.kt") {
+            filter { line: String -> line
+                .replace("private fun canPrepare() =", "private fun canPrepare(): Boolean =")
+                .replace("private fun tryEnterCommit() =", "private fun tryEnterCommit(): Boolean =")
+                .replace("private fun canCommit() =", "private fun canCommit(): Boolean =")
+            }
+        }
+        filesMatching("**/DatabaseSingleton.kt") {
+            filter { line: String -> line.replace(".fallbackToDestructiveMigration()",
+                ".fallbackToDestructiveMigration(dropAllTables = false)") }
+        }
+    }
     from("patched/kotlin")
     inputs.file(confirmationSource).withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.property("originalSha256", originalSha256)
@@ -93,7 +107,8 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
-        freeCompilerArgs.addAll("-Xjvm-default=all", "-Xconsistent-data-class-copy-visibility")
+        jvmDefault.set(JvmDefaultMode.NO_COMPATIBILITY)
+        freeCompilerArgs.add("-Xconsistent-data-class-copy-visibility")
     }
 }
 
