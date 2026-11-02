@@ -4,5 +4,5 @@
 • Match app color and app-icon variants for the whole pack.
 • Renkin packs as sources; native Shevery support.
 • Clearer source selection, editable Pack preview and recent presets.
-• Refreshed animations and accessibility.
+• Spanish and Simplified Chinese; refreshed UI and accessibility.
 • More reliable installs, backups and Icon watch; lower memory use.

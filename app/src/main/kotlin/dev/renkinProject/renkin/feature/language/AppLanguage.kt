@@ -37,6 +37,8 @@ private fun resourceQualifier(tag: String): String {
  */
 val SupportedAppLanguages: List<AppLanguage> = listOf(
     AppLanguage("en", "🇺🇸"),
+    AppLanguage("es", "🇪🇸"),
+    AppLanguage("zh-CN", "🇨🇳"),
 )
 
 /**
