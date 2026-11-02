@@ -982,7 +982,7 @@
     <string name="whatsNewSourceSelection">**Icon sources:** Choose Primary and Secondary together and see how many missing icons a secondary pack adds.</string>
     <string name="whatsNewPreviewAndPresets">**Previews and presets:** Edit icons from Pack preview, try launcher masks in the editor preview, and reuse recent modifier presets.</string>
     <string name="whatsNewNavigationAndAccessibility">**Interface:** Refreshed startup and editor animations, sticky Global Style headings, clearer TalkBack feedback, and a screen that stays awake during builds.</string>
-    <string name="whatsNewLanguageSetting">**Language:** Added an app language selector in Settings. English is currently the only included language.</string>
+    <string name="whatsNewLanguageSetting">**Language:** Choose English, Spanish or Simplified Chinese in Settings. Missing translations fall back to English.</string>
     <string name="whatsNewPackUpdates">**Installation:** More reliable pack updates, clearer failures, and an option to save the APK when installation fails.</string>
     <string name="whatsNewAdaptiveRendering">**Icon rendering:** Corrected adaptive icon sizes, Material You colours, shape backgrounds and vector scaling.</string>
     <string name="whatsNewProfileAndBackupReliability">**Reliability:** Safer profile switching, backup restoration, and Icon watch saves and notifications.</string>
