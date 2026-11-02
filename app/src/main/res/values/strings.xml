@@ -267,7 +267,6 @@
     <string name="modifierPresetShapeSummary">%1$s · %2$d%%</string>
     <string name="modifierPresetShadowSummary">%1$d px blur · %2$d%% opacity</string>
     <string name="modifierPresetPerIconNote">Position, picked areas, color segments and brush strokes stay with this icon.</string>
-    <string name="modifierPresetsEmptyHint">Nothing saved yet. Tune the modifiers above, then save them as a preset.</string>
     <string name="modifierPresetsEmpty">No presets saved yet.</string>
     <string name="modifierPresetsPickHint">Tap a preset to load it into the preview.</string>
     <string name="modifierPresetsSearch">Search presets</string>
@@ -405,7 +404,6 @@
     <string name="advancedOptions">Advanced options</string>
     <string name="heroPackLabel">Icon pack</string>
     <string name="chooseYourPack">Choose your icon pack</string>
-    <string name="choosePackTitle">Choose an icon pack</string>
     <string name="sourceOwnIcons">Use each app\'s own icon</string>
     <string name="sourceTextIcons">Text icons</string>
     <string name="searchPacks">Search icon packs</string>

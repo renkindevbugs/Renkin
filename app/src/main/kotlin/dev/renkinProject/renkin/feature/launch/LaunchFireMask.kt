@@ -1,8 +1,8 @@
 package dev.renkinProject.renkin.feature.launch
 
 import android.content.res.Resources
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.core.graphics.scale
 import dev.renkinProject.renkin.R
 import kotlin.math.floor
 import kotlin.math.hypot
@@ -32,7 +32,7 @@ class LaunchFireMask internal constructor(
 /** Decodes the launcher foreground off the main thread; returns null if it cannot be read. */
 internal fun loadLaunchFireMask(resources: Resources, workingSize: Int): LaunchFireMask? {
     val source = BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher_foreground) ?: return null
-    val scaled = Bitmap.createScaledBitmap(source, workingSize, workingSize, true)
+    val scaled = source.scale(workingSize, workingSize, true)
     val argb = IntArray(workingSize * workingSize)
     scaled.getPixels(argb, 0, workingSize, 0, 0, workingSize, workingSize)
     if (scaled !== source) scaled.recycle()

@@ -241,7 +241,10 @@ class EditorDraftRecoveryOwnerTest {
         withContext(main) { owner.restore(offered) }
         withTimeout(30_000) { editor.recoveryAttachment.first { it != null } }
         assertEquals(offered.checkpoint, store.checkpoint())
-        assertEquals(EditorAutosaveStatus.SAVED, owner.autosaveState.value?.status)
+        val autosave = withTimeout(30_000) {
+            owner.autosaveState.first { it?.status == EditorAutosaveStatus.SAVED }
+        }
+        assertEquals(EditorAutosaveStatus.SAVED, autosave?.status)
     }
 
     @Test fun optionalPreviewExceptionDoesNotFailRecoveryOrDisableAutosave() = runBlocking {

@@ -78,6 +78,8 @@ class ModifierShortcutStore @Inject constructor(
         )
     }
 
+    // KTX edit discards commit's result; a failed durable write must reach the caller.
+    @android.annotation.SuppressLint("UseKtx")
     private fun write(state: ModifierShortcutUsage) {
         val document = JSONObject().put("recent", JSONArray(state.recentIds))
             .put("unused", state.unusedApplies).put("dismissed", state.dismissed)

@@ -3,7 +3,9 @@ package dev.renkinProject.renkin.data
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.drawable.ColorDrawable
+import android.util.Base64
 import androidx.compose.ui.graphics.Color
 import androidx.room.Room
 import dev.renkinProject.renkin.apk.RenkinPackStore
@@ -21,6 +23,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowStatFs
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
+import java.util.zip.CRC32
+import java.util.zip.DeflaterOutputStream
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
@@ -52,8 +58,45 @@ class IconModifierInputStoreTest {
         val descriptor = StoredModifierArtwork("a".repeat(64), isXml = true, isAdaptive = false, previewScale = 1f)
         val loader = IconModifierInputStore(context)
         assertNull(loader.decode(IconModifierInputStore.ReadInput.Stored(payload, descriptor)))
-        val wide = BitmapIconDrawable(Bitmap.createBitmap(8192, 2049, Bitmap.Config.ARGB_8888)).toDbString().toByteArray()
+        val png = oversizedPng(8192, 2049)
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(png, 0, png.size, bounds)
+        assertEquals(8192, bounds.outWidth)
+        assertEquals(2049, bounds.outHeight)
+        val wide = Base64.encode(png, Base64.NO_WRAP)
         assertNull(loader.decode(IconModifierInputStore.ReadInput.Stored(wide, descriptor.copy(isXml = false))))
+    }
+
+    // A valid one-bit PNG exercises the bounds limit without allocating a 64 MiB bitmap.
+    private fun oversizedPng(width: Int, height: Int): ByteArray {
+        fun DataOutputStream.chunk(type: String, bytes: ByteArray) {
+            val name = type.toByteArray(Charsets.US_ASCII)
+            writeInt(bytes.size)
+            write(name)
+            write(bytes)
+            writeInt(CRC32().apply { update(name); update(bytes) }.value.toInt())
+        }
+        val header = ByteArrayOutputStream().apply {
+            DataOutputStream(this).use {
+                it.writeInt(width)
+                it.writeInt(height)
+                it.write(byteArrayOf(1, 0, 0, 0, 0))
+            }
+        }.toByteArray()
+        val compressed = ByteArrayOutputStream().apply {
+            DeflaterOutputStream(this).use { output ->
+                val row = ByteArray(1 + (width + 7) / 8)
+                repeat(height) { output.write(row) }
+            }
+        }.toByteArray()
+        return ByteArrayOutputStream().apply {
+            DataOutputStream(this).use {
+                it.write(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 13, 10, 26, 10))
+                it.chunk("IHDR", header)
+                it.chunk("IDAT", compressed)
+                it.chunk("IEND", byteArrayOf())
+            }
+        }.toByteArray()
     }
 
     @Test fun freshAdaptiveBitmapRetainsItsPipelineAndPreviewScaleAcrossSaveAndLoad() = runBlocking {
