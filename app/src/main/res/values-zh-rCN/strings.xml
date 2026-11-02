@@ -184,7 +184,6 @@
     <string name="modifierPresetShapeSummary">%1$s · %2$d%%</string>
     <string name="modifierPresetShadowSummary">%1$d px 模糊 · %2$d%% 不透明度</string>
     <string name="modifierPresetPerIconNote">位置、选取区域、颜色片段和画笔笔触会与此图标一起保留。</string>
-    <string name="modifierPresetsEmptyHint">暂无保存。调整上方的修饰参数后，将其保存为预设。</string>
     <string name="modifierPresetsEmpty">暂无已保存的预设。</string>
     <string name="modifierPresetsPickHint">点击预设以加载到预览中。</string>
     <string name="modifierPresetsSearch">搜索预设</string>
@@ -257,7 +256,6 @@
     <string name="advancedOptions">高级选项</string>
     <string name="heroPackLabel">图标包</string>
     <string name="chooseYourPack">选择你的图标包</string>
-    <string name="choosePackTitle">选择图标包</string>
     <string name="sourceOwnIcons">使用每个应用自己的图标</string>
     <string name="sourceTextIcons">文本图标</string>
     <string name="searchPacks">搜索图标包</string>

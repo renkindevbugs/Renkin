@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.Shader
+import androidx.core.graphics.createBitmap
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -112,7 +113,7 @@ fun LaunchFireOverlay(
         currentOnFinished()
     }
 
-    val symbolBitmap = remember(mask) { mask?.let { Bitmap.createBitmap(it.width, it.height, Bitmap.Config.ARGB_8888) } }
+    val symbolBitmap = remember(mask) { mask?.let { createBitmap(it.width, it.height, Bitmap.Config.ARGB_8888) } }
     val symbolImage = remember(symbolBitmap) { symbolBitmap?.asImageBitmap() }
     val sprites = remember { FireSprites() }
     val symbolShape = rememberVectorPainter(ImageVector.vectorResource(R.drawable.launch_splash_symbol))
@@ -257,7 +258,7 @@ private fun radialSprite(rgb: Int, size: Int): ImageBitmap {
             Shader.TileMode.CLAMP
         )
     }
-    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(size, size, Bitmap.Config.ARGB_8888)
     android.graphics.Canvas(bitmap).drawRect(0f, 0f, size.toFloat(), size.toFloat(), paint)
     return bitmap.asImageBitmap()
 }

@@ -183,7 +183,6 @@
     <string name="modifierPresetShapeSummary">%1$s · %2$d%%</string>
     <string name="modifierPresetShadowSummary">%1$d px de desenfoque · %2$d%% de opacidad</string>
     <string name="modifierPresetPerIconNote">La posición, las áreas seleccionadas, los segmentos de color y los trazos de pincel se mantienen en este icono.</string>
-    <string name="modifierPresetsEmptyHint">Nada guardado todavía. Ajusta los modificadores de arriba y luego guárdalos como preestablecido.</string>
     <string name="modifierPresetsEmpty">No hay preestablecidos guardados todavía.</string>
     <string name="modifierPresetsPickHint">Toca un preestablecido para cargarlo en la vista previa.</string>
     <string name="modifierPresetsSearch">Buscar preestablecidos</string>
@@ -256,7 +255,6 @@
     <string name="advancedOptions">Opciones avanzadas</string>
     <string name="heroPackLabel">Paquete de iconos</string>
     <string name="chooseYourPack">Elige tu paquete de iconos</string>
-    <string name="choosePackTitle">Elegir un paquete de iconos</string>
     <string name="sourceOwnIcons">Usar el icono propio de cada aplicación</string>
     <string name="sourceTextIcons">Iconos de texto</string>
     <string name="searchPacks">Buscar paquetes de iconos</string>
