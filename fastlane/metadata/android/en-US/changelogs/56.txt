@@ -1,0 +1,8 @@
+• Global shadows, Apply history and undoable bake.
+• Recovery for supported edits and saved modifiers.
+• Custom pack icons and package names; add hidden or missing apps.
+• Match app color and app-icon variants for the whole pack.
+• Renkin packs as sources; native Shevery support.
+• Clearer source selection, editable Pack preview and recent presets.
+• Refreshed animations and accessibility.
+• More reliable installs, backups and Icon watch; lower memory use.

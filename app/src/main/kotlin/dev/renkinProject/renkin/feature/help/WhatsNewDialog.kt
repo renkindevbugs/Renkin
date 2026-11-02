@@ -70,6 +70,42 @@ private val releaseHistory = listOf(
         LATEST_WHATS_NEW_VERSION_NAME,
         listOf(
             WhatsNewSection(
+                R.string.whatsNewSectionNew,
+                listOf(
+                    R.string.whatsNewGlobalStyleTools,
+                    R.string.whatsNewEditRecovery,
+                    R.string.whatsNewPackIdentity,
+                    R.string.whatsNewAddedApps,
+                    R.string.whatsNewMatchAppColor,
+                    R.string.whatsNewAppIconVariants,
+                    R.string.whatsNewRenkinSources,
+                    R.string.whatsNewShevery
+                )
+            ),
+            WhatsNewSection(
+                R.string.whatsNewSectionChanged,
+                listOf(
+                    R.string.whatsNewSourceSelection,
+                    R.string.whatsNewPreviewAndPresets,
+                    R.string.whatsNewNavigationAndAccessibility,
+                    R.string.whatsNewLanguageSetting
+                )
+            ),
+            WhatsNewSection(
+                R.string.whatsNewSectionFixed,
+                listOf(
+                    R.string.whatsNewPackUpdates,
+                    R.string.whatsNewAdaptiveRendering,
+                    R.string.whatsNewProfileAndBackupReliability,
+                    R.string.whatsNewLargeCollections
+                )
+            )
+        )
+    ),
+    WhatsNewRelease(
+        "2026.09.02",
+        listOf(
+            WhatsNewSection(
                 R.string.whatsNewSectionFixed,
                 listOf(
                     R.string.whatsNewThemedIconState,
