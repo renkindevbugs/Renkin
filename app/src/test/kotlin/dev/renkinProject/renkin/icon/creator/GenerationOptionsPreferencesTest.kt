@@ -23,6 +23,7 @@ import dev.renkinProject.renkin.data.GlobalColorizerGradientColorKey
 import dev.renkinProject.renkin.data.GlobalColorizerGradientTypeKey
 import dev.renkinProject.renkin.data.GlobalColorizerModeKey
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
+import dev.renkinProject.renkin.data.GlobalShapeCornerKey
 import dev.renkinProject.renkin.data.GlobalShapeKey
 import dev.renkinProject.renkin.data.GlobalShadowAllDirectionsKey
 import dev.renkinProject.renkin.data.GlobalShadowAngleKey
@@ -185,6 +186,22 @@ class GenerationOptionsPreferencesTest {
         assertEquals(12f, reread.distance)
         assertEquals(0.65f, reread.opacity)
         assertEquals(reread, draft.toModifierOptions().modifiers.shadow)
+    }
+
+    @Test
+    fun globalShapeCorner_storesOnlyAChangedCornerAsPercent() {
+        val draft = GlobalModifierState().apply {
+            seedFrom(preferencesOf())
+            updateShape { copy(shape = IconShape.SQUIRCLE) }
+        }
+        assertFalse(GlobalShapeCornerKey in draft.overlay(preferencesOf()).asMap())
+        assertEquals(DEFAULT_SHAPE_CORNER, globalModifierOptions(preferencesOf()).modifiers.shape!!.corner)
+
+        draft.updateShape { copy(corner = 0.234f) }
+        val stored = draft.overlay(preferencesOf(GlobalShapeCornerKey to 90))
+
+        assertEquals(23, stored[GlobalShapeCornerKey])
+        assertEquals(0.23f, globalModifierOptions(stored).modifiers.shape!!.corner)
     }
 
     @Test

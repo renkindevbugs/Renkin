@@ -4,6 +4,7 @@ package dev.renkinProject.renkin.ui.modifier
 
 import dev.renkinProject.renkin.icon.creator.MODIFIER_SCALE_RANGE
 import android.graphics.Bitmap
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
@@ -38,6 +39,8 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.IconShapes
+import dev.renkinProject.renkin.icon.creator.SHAPE_CORNER_RANGE
+import dev.renkinProject.renkin.icon.creator.hasAdjustableCorner
 import dev.renkinProject.renkin.ui.AdjustmentState
 import dev.renkinProject.renkin.ui.ColorStyleCard
 import dev.renkinProject.renkin.ui.ColorStyleSheet
@@ -60,18 +63,11 @@ internal fun IconShapeSection(
         color = MaterialTheme.colorScheme.onSurface
     )
     OptionGroup {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            IconShape.entries.forEach { shape ->
-                ShapeSwatch(
-                    shape = shape,
-                    selected = adjustments.iconShape == shape,
-                    onClick = { adjustments.iconShape = shape }
-                )
-            }
-        }
+        ShapePicker(
+            selected = adjustments.iconShape,
+            corner = adjustments.shapeCorner,
+            onSelect = { adjustments.iconShape = it }
+        )
         androidx.compose.animation.AnimatedVisibility(visible = adjustments.iconShape != IconShape.NONE) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -93,6 +89,11 @@ internal fun IconShapeSection(
                     valueRange = MODIFIER_SCALE_RANGE,
                     centered = true,
                     ruler = percentRuler()
+                )
+                ShapeCornerSlider(
+                    shape = adjustments.iconShape,
+                    corner = adjustments.shapeCorner,
+                    onCornerChange = { adjustments.shapeCorner = it }
                 )
                 if (!adjustments.shapeCrop) {
                     val shapeStyle = adjustments.shapeStyle
@@ -121,12 +122,42 @@ internal fun IconShapeSection(
     }
 }
 
+@Composable
+internal fun ShapePicker(selected: IconShape, corner: Float, onSelect: (IconShape) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        IconShape.entries.forEach { shape ->
+            ShapeSwatch(
+                shape = shape,
+                selected = selected == shape,
+                corner = corner,
+                onClick = { onSelect(shape) }
+            )
+        }
+    }
+}
+
+@Composable
+internal fun ShapeCornerSlider(shape: IconShape, corner: Float, onCornerChange: (Float) -> Unit) {
+    AnimatedVisibility(visible = shape.hasAdjustableCorner) {
+        LabeledSlider(
+            label = stringResource(R.string.shapeCorner),
+            value = corner,
+            onValueChange = onCornerChange,
+            valueRange = SHAPE_CORNER_RANGE,
+            ruler = percentRuler()
+        )
+    }
+}
+
 /**
  * One selectable shape preview. The path comes from the same [IconShapes] geometry the
  * generator uses, so what's drawn here is exactly what the icon gets.
  */
 @Composable
-internal fun ShapeSwatch(shape: IconShape, selected: Boolean, onClick: () -> Unit) {
+internal fun ShapeSwatch(shape: IconShape, selected: Boolean, corner: Float, onClick: () -> Unit) {
     val label = shapeLabel(shape)
     val fill = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     RenkinTooltipBox(label) {
@@ -150,7 +181,7 @@ internal fun ShapeSwatch(shape: IconShape, selected: Boolean, onClick: () -> Uni
                 )
             } else {
                 Canvas(Modifier.size(30.dp)) {
-                    IconShapes.path(shape, size.minDimension)?.let {
+                    IconShapes.path(shape, size.minDimension, corner)?.let {
                         drawPath(it.asComposePath(), color = fill)
                     }
                 }

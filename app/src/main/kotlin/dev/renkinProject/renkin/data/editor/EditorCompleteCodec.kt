@@ -11,7 +11,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 internal object EditorCompleteCodec {
-    const val VERSION = 1
+    // v2 adds the shape corner to every generation snapshot; v1 captures still decode.
+    const val VERSION = 2
+    private const val SHAPE_CORNER_VERSION = 2
     private const val MAGIC = 0x524b4543 // RKEC
     private const val MASK_MAGIC = 0x524b454d // RKEM
     private const val MASK_VERSION = 1
@@ -195,16 +197,19 @@ internal object EditorCompleteCodec {
     private suspend fun decodeSession(bytes: ByteArray, controlsBytes: ByteArray, controls: EditorControlsSnapshot, vector: EditorVectorWorkingState): EditorCompleteSnapshot {
         val owner = currentCoroutineContext()
         return try { EditorArtworkReader(bytes) { owner.ensureActive() }.run {
-            require(input.readInt() == MAGIC && input.readInt() == VERSION) { "Unsupported complete editor capture" }
+            require(input.readInt() == MAGIC) { "Unsupported complete editor capture" }
+            val version = input.readInt()
+            require(version in 1..VERSION) { "Unsupported complete editor capture" }
+            val corners = version >= SHAPE_CORNER_VERSION
             require(text() == MessageDigest.getInstance("SHA-256").digest(controlsBytes).toLowerHex()) { "Completed frame/control digest mismatch" }
             val serial = input.readLong(); val origin = enumValueOf<EditorDraftOrigin>(text())
             val initialized = boolean(); val canRestore = boolean(); val vectorBaked = boolean(); val restoredBaked = boolean(); val failed = boolean()
-            val original = EditorOriginalSnapshot(text(), text(), optionalText(), optionalText(), optionalText(MAX_RECIPE_BYTES), inputState(),
+            val original = EditorOriginalSnapshot(text(), text(), optionalText(), optionalText(), optionalText(MAX_RECIPE_BYTES), inputState(corners),
                 EditorCalendarControls(boolean(), optionalText(), optionalText()), optionalText(), optionalText(), boolean(), boolean(), boolean(), boolean())
-            val raw = optionalText(); val rendered = optionalText(); val recipe = optionalText(MAX_RECIPE_BYTES); val requested = generation()
-            val renderedOptions = if (boolean()) generation() else null
-            val pipeline = enumValueOf<ModifierInputPipeline>(text()); val baked = boolean(); val retained = inputState(); val restored = optionalText(); val existing = inputState()
-            val replay = if (boolean()) EditorReplaySnapshot(requireNotNull(inputState()), generation(), optionalStyle()) else null
+            val raw = optionalText(); val rendered = optionalText(); val recipe = optionalText(MAX_RECIPE_BYTES); val requested = generation(corners)
+            val renderedOptions = if (boolean()) generation(corners) else null
+            val pipeline = enumValueOf<ModifierInputPipeline>(text()); val baked = boolean(); val retained = inputState(corners); val restored = optionalText(); val existing = inputState(corners)
+            val replay = if (boolean()) EditorReplaySnapshot(requireNotNull(inputState(corners)), generation(corners), optionalStyle()) else null
             val selections = List(count(1, 12)) { EditorSourceSelection(input.readInt(), text(), text()) }
             val upload = optionalText(); val online = optionalText()
             val resources = List(count(2, 16)) { EditorResourceReference(enumValueOf<EditorDraftResourceKind>(text()), text(), text(), text()) }
@@ -219,7 +224,7 @@ internal object EditorCompleteCodec {
         boolean(value != null)
         value?.let { text(it.artwork); generation(it.generation); boolean(it.baked); text(it.origin.name); text(it.pipeline.name) }
     }
-    private fun EditorArtworkReader.inputState(): EditorInputSnapshot? = if (boolean()) {
-        EditorInputSnapshot(text(), generation(), boolean(), enumValueOf<ModifierInputOrigin>(text()), enumValueOf<ModifierInputPipeline>(text()))
+    private fun EditorArtworkReader.inputState(withShapeCorner: Boolean): EditorInputSnapshot? = if (boolean()) {
+        EditorInputSnapshot(text(), generation(withShapeCorner), boolean(), enumValueOf<ModifierInputOrigin>(text()), enumValueOf<ModifierInputPipeline>(text()))
     } else null
 }

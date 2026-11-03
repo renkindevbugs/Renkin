@@ -22,6 +22,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.extension.toNullableColor
+import dev.renkinProject.renkin.icon.creator.DEFAULT_SHAPE_CORNER_PERCENT
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
@@ -167,6 +168,8 @@ const val OUTLINE_WIDTH_MAX = 16
 val GlobalShapeKey = intPreferencesKey("GLOBAL_SHAPE")
 val GlobalShapeCropKey = booleanPreferencesKey("GLOBAL_SHAPE_CROP")
 val GlobalShapeScaleKey = intPreferencesKey("GLOBAL_SHAPE_SCALE")
+// Corner of the square shapes in percent: 0 is sharp, 100 a circle.
+val GlobalShapeCornerKey = intPreferencesKey("GLOBAL_SHAPE_CORNER")
 val GlobalShapeColorKey = stringPreferencesKey("GLOBAL_SHAPE_COLOR")
 // The shape's plate is the one surface a background gradient is fully visible on, so it carries
 // its own style; GlobalShapeColorKey remains its first colour.
@@ -241,6 +244,16 @@ const val GLOBAL_SCALE_PERCENT_MAX = 150
 
 fun normalizeGlobalScalePercent(percent: Int): Int =
     percent.coerceIn(GLOBAL_SCALE_PERCENT_MIN, GLOBAL_SCALE_PERCENT_MAX)
+
+fun Preferences.globalShapeCorner(): Float =
+    getIntValue(GlobalShapeCornerKey, DEFAULT_SHAPE_CORNER_PERCENT).coerceIn(0, 100) / 100f
+
+// The default corner is stored as an absent key: profile style documents reject unknown fields,
+// so a profile that never changed the corner stays importable by builds that predate it.
+fun MutablePreferences.setGlobalShapeCornerPercent(percent: Int) {
+    if (percent == DEFAULT_SHAPE_CORNER_PERCENT) remove(GlobalShapeCornerKey)
+    else this[GlobalShapeCornerKey] = percent.coerceIn(0, 100)
+}
 val AppSortOrderKey = intPreferencesKey(APP_SORT_ORDER_NAME)
 val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
 val WatchCheckIntervalKey = intPreferencesKey(WATCH_CHECK_INTERVAL_NAME)
@@ -281,7 +294,7 @@ private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
     PrimarySourceKey, PrimaryImageEditKey, PrimaryTextTypeKey,
     SecondarySourceKey, SecondaryImageEditKey, SecondaryTextTypeKey,
     FallbackSourceKey, OutlineWidthKey, BuiltPrimarySourceKey,
-    GlobalShapeKey, GlobalShapeScaleKey, GlobalIconScaleKey,
+    GlobalShapeKey, GlobalShapeScaleKey, GlobalShapeCornerKey, GlobalIconScaleKey,
     ColorizerModeKey, ColorizerGradientAngleKey, ColorizerGradientTypeKey,
     BackgroundColorizerModeKey, BackgroundGradientTypeKey, BackgroundGradientAngleKey,
     GlobalShapeColorizerModeKey, GlobalShapeGradientTypeKey, GlobalShapeGradientAngleKey,
@@ -383,6 +396,7 @@ private fun MutablePreferences.copyGlobalModifierPrefsFrom(source: Preferences) 
     this[GlobalShapeKey] = source.getIntValue(GlobalShapeKey, 0)
     this[GlobalShapeCropKey] = source.getBooleanValue(GlobalShapeCropKey, true)
     this[GlobalShapeScaleKey] = source.getIntValue(GlobalShapeScaleKey, 100)
+    setGlobalShapeCornerPercent(source.getIntValue(GlobalShapeCornerKey, DEFAULT_SHAPE_CORNER_PERCENT))
     copyColorStyleFrom(source, GlobalShapeStyleKeys)
     this[GlobalIconScaleKey] = source.getIntValue(GlobalIconScaleKey, 100)
     this[OutlineAddKey] = source.getBooleanValue(OutlineAddKey)

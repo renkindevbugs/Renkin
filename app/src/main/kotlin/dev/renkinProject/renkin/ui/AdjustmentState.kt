@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.DEFAULT_SHAPE_CORNER
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.plateFill
@@ -62,6 +63,7 @@ internal class AdjustmentState {
     var iconShape by mutableStateOf(IconShape.NONE)
     var shapeCrop by mutableStateOf(true)
     var shapeScale by mutableFloatStateOf(1f)
+    var shapeCorner by mutableFloatStateOf(DEFAULT_SHAPE_CORNER)
     // Outline: add a contour around the silhouette, or recolor the icon's existing one.
     var outlineMode by mutableStateOf(OutlineMode.NONE)
     var outlineWidth by mutableFloatStateOf(6f)
@@ -95,7 +97,7 @@ internal fun AdjustmentState.applyToModifierStack(
         segments = colorizeLayers.takeIf { imageEdit == ImageEdit.COLORIZE_SEGMENTS } ?: emptyList()
     ),
     transform = TransformModifier(iconScale, iconOffsetX, iconOffsetY),
-    shape = ShapeModifier(iconShape, shapeCrop, shapeScale, plateFill(iconShape, shapeCrop, shapeStyle)),
+    shape = ShapeModifier(iconShape, shapeCrop, shapeScale, plateFill(iconShape, shapeCrop, shapeStyle), shapeCorner),
     outline = OutlineModifier(outlineMode, outlineWidth, ColorFill(outlineStyle.firstColor, outlineStyle), outlineEraseMask),
     shadow = shadowModifier()
 )

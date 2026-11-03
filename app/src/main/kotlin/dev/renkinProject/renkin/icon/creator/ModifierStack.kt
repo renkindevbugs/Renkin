@@ -61,7 +61,8 @@ data class ShapeModifier(
     val crop: Boolean,
     val scale: Float,
     // Null inherits the presentation background; an explicit fill belongs only to this shape.
-    val fill: ColorFill? = null
+    val fill: ColorFill? = null,
+    val corner: Float = DEFAULT_SHAPE_CORNER
 ) {
     val isEnabled: Boolean get() = shape != IconShape.NONE
 }

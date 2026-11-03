@@ -6,6 +6,7 @@ import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.BrushAction
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.DEFAULT_SHAPE_CORNER
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.SegmentLayer
@@ -86,7 +87,8 @@ internal data class EditorAdjustmentControls(
     val shadowAllDirections: Boolean,
     val shadowOpacity: Float,
     val eraseStrokes: List<EditorBrushStroke>,
-    val backgroundBrushStrokes: List<EditorBrushStroke>
+    val backgroundBrushStrokes: List<EditorBrushStroke>,
+    val shapeCorner: Float = DEFAULT_SHAPE_CORNER
 )
 
 internal data class EditorBrushPoint(val x: Float, val y: Float)

@@ -40,7 +40,8 @@ internal object ProfileStylePreferences {
                 global = ProfileGlobalStyle(
                     shape = ProfileShapeStyle(
                         shape = storedEnum(GlobalShapeKey, IconShape.entries), crop = this[GlobalShapeCropKey],
-                        scalePercent = this[GlobalShapeScaleKey], fill = color(GlobalShapeStyleKeys)
+                        scalePercent = this[GlobalShapeScaleKey], fill = color(GlobalShapeStyleKeys),
+                        cornerPercent = this[GlobalShapeCornerKey]
                     ),
                     iconScalePercent = this[GlobalIconScaleKey],
                     colorize = ProfileColorizeStyle(

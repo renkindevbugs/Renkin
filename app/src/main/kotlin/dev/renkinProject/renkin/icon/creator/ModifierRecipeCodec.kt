@@ -88,7 +88,7 @@ internal object ModifierRecipeCodec {
         }
         payload.iconScale?.let { put("iconScale", it) }
         payload.shape?.let {
-            shape(ShapeModifier(it.shape, it.crop, it.scale, ColorFill(it.style.firstColor, it.style)))
+            shape(ShapeModifier(it.shape, it.crop, it.scale, ColorFill(it.style.firstColor, it.style), it.corner))
         }
         payload.outline?.let {
             outline(OutlineModifier(it.mode, it.width, ColorFill(it.style.firstColor, it.style)))
@@ -115,7 +115,7 @@ internal object ModifierRecipeCodec {
                 } else null,
                 iconScale = values["iconScale"]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(MODIFIER_SCALE_RANGE),
                 shape = if (has("shape")) shape().let {
-                    ModifierPresetShape(it.shape, it.crop, it.scale, requireNotNull(it.fill?.style))
+                    ModifierPresetShape(it.shape, it.crop, it.scale, requireNotNull(it.fill?.style), it.corner)
                 } else null,
                 outline = if (has("outline")) outline().let {
                     ModifierPresetOutline(it.mode, it.width, requireNotNull(it.fill.style))
@@ -175,6 +175,8 @@ internal object ModifierRecipeCodec {
             put("shape.name", shape.shape.name)
             put("shape.crop", shape.crop)
             put("shape.scale", shape.scale)
+            // Omitted at the default so preset v1 documents stay byte-identical for older builds.
+            if (shape.corner != DEFAULT_SHAPE_CORNER) put("shape.corner", shape.corner)
             if (presetDocument) {
                 style("shape.style", requireNotNull(shape.fill?.style))
             } else shape.fill?.let { fill("shape", it) }
@@ -287,7 +289,8 @@ internal object ModifierRecipeCodec {
             crop = boolean("shape.crop", true),
             scale = number("shape.scale", 1f, MODIFIER_SCALE_RANGE),
             fill = if (presetDocument) style("shape.style", Color.WHITE).let { ColorFill(it.firstColor, it) }
-                else if (has("shape.fill")) fill("shape", Color.WHITE) else null
+                else if (has("shape.fill")) fill("shape", Color.WHITE) else null,
+            corner = number("shape.corner", DEFAULT_SHAPE_CORNER, SHAPE_CORNER_RANGE)
         )
 
         fun outline(): OutlineModifier = OutlineModifier(

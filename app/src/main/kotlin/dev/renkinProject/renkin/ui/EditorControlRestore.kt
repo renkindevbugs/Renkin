@@ -51,6 +51,7 @@ internal fun EditorSession.restoreDraftControls(value: EditorControlsSnapshot) {
         iconShape = saved.shape
         shapeCrop = saved.shapeCrop
         shapeScale = saved.shapeScale
+        shapeCorner = saved.shapeCorner
         outlineMode = saved.outlineMode
         outlineWidth = saved.outlineWidth
         shadowEnabled = saved.shadowEnabled

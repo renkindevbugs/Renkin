@@ -48,7 +48,8 @@ internal fun EditorSession.captureControls(): EditorControlsSnapshot {
             outlineMode = outlineMode, outlineWidth = outlineWidth, shadowEnabled = shadowEnabled,
             shadowBlur = shadowBlur, shadowDistance = shadowDistance, shadowAngle = shadowAngle,
             shadowAllDirections = shadowAllDirections, shadowOpacity = shadowOpacity,
-            eraseStrokes = eraseStrokes.copyGeometry(), backgroundBrushStrokes = backgroundBrushStrokes.copyGeometry()
+            eraseStrokes = eraseStrokes.copyGeometry(), backgroundBrushStrokes = backgroundBrushStrokes.copyGeometry(),
+            shapeCorner = shapeCorner
         ) },
         materialYouPack = with(materialYouPackAdjustments) { EditorPackControls(
             selectedScheme, customForeground.copyLists(), customBackground.copyLists(), strokeScale

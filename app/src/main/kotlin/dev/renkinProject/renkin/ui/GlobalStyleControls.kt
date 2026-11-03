@@ -61,10 +61,10 @@ import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getSourceLabels
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.OutlineMode
-import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.ui.modifier.ShadowEditorControls
 import dev.renkinProject.renkin.ui.modifier.ShadowPresetChips
-import dev.renkinProject.renkin.ui.modifier.ShapeSwatch
+import dev.renkinProject.renkin.ui.modifier.ShapeCornerSlider
+import dev.renkinProject.renkin.ui.modifier.ShapePicker
 import dev.renkinProject.renkin.ui.modifier.matchingPreset
 import dev.renkinProject.renkin.ui.modifier.shapeLabel
 import dev.renkinProject.renkin.ui.modifier.shadowUiPresets
@@ -531,18 +531,11 @@ internal fun GlobalStyleEffects(state: GlobalModifierState, onNavigate: (GlobalS
                 else GlobalStyleEffect.SHAPE.name
             }
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                IconShape.entries.forEach { selectedShape ->
-                    ShapeSwatch(
-                        shape = selectedShape,
-                        selected = state.shape.shape == selectedShape,
-                        onClick = { state.updateShape { copy(shape = selectedShape) } }
-                    )
-                }
-            }
+            ShapePicker(
+                selected = state.shape.shape,
+                corner = state.shape.corner,
+                onSelect = { selectedShape -> state.updateShape { copy(shape = selectedShape) } }
+            )
             AnimatedVisibility(visible = state.shape.isEnabled) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -564,6 +557,11 @@ internal fun GlobalStyleEffects(state: GlobalModifierState, onNavigate: (GlobalS
                         valueRange = MODIFIER_SCALE_RANGE,
                         centered = true,
                         ruler = percentRuler()
+                    )
+                    ShapeCornerSlider(
+                        shape = state.shape.shape,
+                        corner = state.shape.corner,
+                        onCornerChange = { state.updateShape { copy(corner = it) } }
                     )
                     if (!state.shape.crop) {
                         val shapeStyle = requireNotNull(state.shape.fill?.style)

@@ -35,6 +35,7 @@ internal object ProfileStyleSchema {
         add(BooleanField(GlobalShapeCropKey, "modifiers.global.shape.crop") { it.modifiers.global.shape.crop })
         add(IntField(GlobalShapeScaleKey, "modifiers.global.shape.scalePercent") { it.modifiers.global.shape.scalePercent })
         addAll(colorFields(GlobalShapeStyleKeys, "modifiers.global.shape.fill") { it.modifiers.global.shape.fill })
+        add(IntField(GlobalShapeCornerKey, "modifiers.global.shape.cornerPercent") { it.modifiers.global.shape.cornerPercent })
         add(IntField(GlobalIconScaleKey, "modifiers.global.iconScalePercent") { it.modifiers.global.iconScalePercent })
         add(BooleanField(GlobalColorizeKey, "modifiers.global.colorize.enabled") { it.modifiers.global.colorize.enabled })
         add(BooleanField(GlobalColorizeFlatKey, "modifiers.global.colorize.flat") { it.modifiers.global.colorize.flat })

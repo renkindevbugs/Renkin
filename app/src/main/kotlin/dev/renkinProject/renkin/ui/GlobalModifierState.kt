@@ -25,6 +25,7 @@ import dev.renkinProject.renkin.data.GlobalIconScaleKey
 import dev.renkinProject.renkin.data.GlobalIncludeEmptyKey
 import dev.renkinProject.renkin.data.GlobalShapeCropKey
 import dev.renkinProject.renkin.data.GlobalShapeKey
+import dev.renkinProject.renkin.data.setGlobalShapeCornerPercent
 import dev.renkinProject.renkin.data.GlobalShapeScaleKey
 import dev.renkinProject.renkin.data.GlobalShapeStyleKeys
 import dev.renkinProject.renkin.data.ImageEdit
@@ -159,7 +160,11 @@ internal class GlobalModifierState {
         modifiers = modifiers.copy(
             effect = modifiers.effect.copy(colorizer = modifiers.effect.colorizer.normalizedFlags().roundedForSnapshot()),
             transform = modifiers.transform.copy(scale = modifiers.transform.scale.roundedGlobalScale()),
-            shape = shape.copy(scale = shape.scale.roundedGlobalScale(), fill = shape.fill?.roundedForSnapshot()),
+            shape = shape.copy(
+                scale = shape.scale.roundedGlobalScale(),
+                fill = shape.fill?.roundedForSnapshot(),
+                corner = (shape.corner * 100).roundToInt() / 100f
+            ),
             outline = outline.copy(width = outline.width.roundToInt().toFloat(), fill = outline.fill.roundedForSnapshot()),
             shadow = shadow.roundedForSnapshot()
         ),
@@ -195,6 +200,7 @@ internal class GlobalModifierState {
         mutable[GlobalShapeKey] = shape.shape.ordinal
         mutable[GlobalShapeCropKey] = shape.crop
         mutable[GlobalShapeScaleKey] = (shape.scale * 100).roundToInt()
+        mutable.setGlobalShapeCornerPercent((shape.corner * 100).roundToInt())
         mutable.writeColorStyle(GlobalShapeStyleKeys, requireNotNull(shape.fill?.style))
         mutable[GlobalIconScaleKey] = (modifiers.transform.scale * 100).roundToInt()
         mutable[OutlineAddKey] = outline.isEnabled

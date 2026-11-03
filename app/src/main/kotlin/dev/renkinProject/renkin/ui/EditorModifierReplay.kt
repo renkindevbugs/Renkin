@@ -6,6 +6,7 @@ import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.icon.creator.ColorFill
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.DEFAULT_SHAPE_CORNER
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.ModifierInputPipeline
@@ -64,6 +65,7 @@ internal class EditorModifierReplay(val verified: VerifiedModifierInput) {
             iconShape = stack.shape?.shape ?: IconShape.NONE
             shapeCrop = stack.shape?.crop ?: true
             shapeScale = stack.shape?.scale ?: 1f
+            shapeCorner = stack.shape?.corner ?: DEFAULT_SHAPE_CORNER
             val plate = stack.shape?.fill ?: saved.export.background
             shapeStyle = plate.style ?: ColorizerStyle(firstColor = plate.color)
             outlineMode = stack.outline?.mode ?: OutlineMode.NONE
