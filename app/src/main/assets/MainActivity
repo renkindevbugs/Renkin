@@ -2,31 +2,862 @@
 .super Landroid/app/Activity;
 .source "MainActivity.java"
 
+# Pack preview: icon grid with a search field over the wallpaper, a round button that cycles
+# the background (wallpaper, dark, light; remembered) and, when a launcher's icon picker started
+# it for a result, a tap returns that icon. Texts, glyphs and the icon list come from the
+# renkin_preview_* resources IconPackBuilder writes.
+.implements Landroid/view/View$OnClickListener;
+.implements Landroid/widget/AdapterView$OnItemClickListener;
+.implements Landroid/text/TextWatcher;
+
+
+# instance fields
+.field private adapter:Ldev/renkinProject/renkinpack/IconAdapter;
+
+.field private backgroundButton:Landroid/widget/ImageButton;
+
+.field private backgroundMode:I
+
+.field private buttonShape:Landroid/graphics/drawable/GradientDrawable;
+
+.field private fieldShape:Landroid/graphics/drawable/GradientDrawable;
+
+.field private footer:Landroid/widget/TextView;
+
+.field private hint:Landroid/widget/TextView;
+
+.field private picking:Z
+
+.field private root:Landroid/widget/LinearLayout;
+
+.field private searchField:Landroid/widget/EditText;
+
+.field private searchIcon:Landroid/graphics/drawable/Drawable;
+
+.field private subtitle:Landroid/widget/TextView;
+
+.field private title:Landroid/widget/TextView;
+
 
 # direct methods
 .method public constructor <init>()V
     .locals 0
 
-    .line 5
     invoke-direct {p0}, Landroid/app/Activity;-><init>()V
+
+    return-void
+.end method
+
+.method private applyBackground()V
+    .locals 8
+
+    iget v0, p0, Ldev/renkinProject/renkinpack/MainActivity;->backgroundMode:I
+
+    const/4 v1, 0x1
+
+    if-eq v0, v1, :dark
+
+    const/4 v1, 0x2
+
+    if-eq v0, v1, :light
+
+    const/4 v0, 0x0
+
+    const/4 v1, -0x1
+
+    const/4 v2, -0x1
+
+    const/high16 v3, 0x40c00000    # 6.0f
+
+    const-string v4, "renkin_preview_background_wallpaper"
+
+    const/high16 v5, 0x59000000    # black 0.35
+
+    const-string v6, "renkin_preview_ic_wallpaper"
+
+    goto :apply
+
+    :dark
+    const v0, -0xe3e4e1    # 0xff1c1b1f
+
+    const/4 v1, -0x1
+
+    const v2, -0x4b4d57    # 0xffb4b2a9
+
+    const/4 v3, 0x0
+
+    const-string v4, "renkin_preview_background_dark"
+
+    const v5, -0xd3d3d6    # 0xff2c2c2a
+
+    const-string v6, "renkin_preview_ic_dark"
+
+    goto :apply
+
+    :light
+    const v0, -0x8090e    # 0xfff7f6f2
+
+    const v1, -0xd3d3d6    # 0xff2c2c2a
+
+    const v2, -0xa0a1a6    # 0xff5f5e5a
+
+    const/4 v3, 0x0
+
+    const-string v4, "renkin_preview_background_light"
+
+    const v5, -0x191b23    # 0xffe6e4dd
+
+    const-string v6, "renkin_preview_ic_light"
+
+    :apply
+    iget-object v7, p0, Ldev/renkinProject/renkinpack/MainActivity;->root:Landroid/widget/LinearLayout;
+
+    invoke-virtual {v7, v0}, Landroid/widget/LinearLayout;->setBackgroundColor(I)V
+
+    iget-object v7, p0, Ldev/renkinProject/renkinpack/MainActivity;->title:Landroid/widget/TextView;
+
+    invoke-direct {p0, v7, v1, v3}, Ldev/renkinProject/renkinpack/MainActivity;->style(Landroid/widget/TextView;IF)V
+
+    iget-object v7, p0, Ldev/renkinProject/renkinpack/MainActivity;->subtitle:Landroid/widget/TextView;
+
+    invoke-direct {p0, v7, v2, v3}, Ldev/renkinProject/renkinpack/MainActivity;->style(Landroid/widget/TextView;IF)V
+
+    iget-object v7, p0, Ldev/renkinProject/renkinpack/MainActivity;->hint:Landroid/widget/TextView;
+
+    invoke-direct {p0, v7, v1, v3}, Ldev/renkinProject/renkinpack/MainActivity;->style(Landroid/widget/TextView;IF)V
+
+    iget-object v7, p0, Ldev/renkinProject/renkinpack/MainActivity;->footer:Landroid/widget/TextView;
+
+    invoke-direct {p0, v7, v2, v3}, Ldev/renkinProject/renkinpack/MainActivity;->style(Landroid/widget/TextView;IF)V
+
+    iget-object v7, p0, Ldev/renkinProject/renkinpack/MainActivity;->adapter:Ldev/renkinProject/renkinpack/IconAdapter;
+
+    invoke-virtual {v7, v1, v3}, Ldev/renkinProject/renkinpack/IconAdapter;->setTextStyle(IF)V
+
+    iget-object v7, p0, Ldev/renkinProject/renkinpack/MainActivity;->buttonShape:Landroid/graphics/drawable/GradientDrawable;
+
+    invoke-virtual {v7, v5}, Landroid/graphics/drawable/GradientDrawable;->setColor(I)V
+
+    iget-object v7, p0, Ldev/renkinProject/renkinpack/MainActivity;->fieldShape:Landroid/graphics/drawable/GradientDrawable;
+
+    invoke-virtual {v7, v5}, Landroid/graphics/drawable/GradientDrawable;->setColor(I)V
+
+    iget-object v7, p0, Ldev/renkinProject/renkinpack/MainActivity;->backgroundButton:Landroid/widget/ImageButton;
+
+    invoke-direct {p0, v6}, Ldev/renkinProject/renkinpack/MainActivity;->drawable(Ljava/lang/String;)Landroid/graphics/drawable/Drawable;
+
+    move-result-object v6
+
+    invoke-virtual {v7, v6}, Landroid/widget/ImageButton;->setImageDrawable(Landroid/graphics/drawable/Drawable;)V
+
+    invoke-virtual {v7, v1}, Landroid/widget/ImageButton;->setColorFilter(I)V
+
+    invoke-direct {p0, v4}, Ldev/renkinProject/renkinpack/MainActivity;->string(Ljava/lang/String;)Ljava/lang/String;
+
+    move-result-object v4
+
+    invoke-virtual {v7, v4}, Landroid/widget/ImageButton;->setContentDescription(Ljava/lang/CharSequence;)V
+
+    iget-object v7, p0, Ldev/renkinProject/renkinpack/MainActivity;->searchField:Landroid/widget/EditText;
+
+    invoke-virtual {v7, v1}, Landroid/widget/EditText;->setTextColor(I)V
+
+    invoke-virtual {v7, v2}, Landroid/widget/EditText;->setHintTextColor(I)V
+
+    iget-object v7, p0, Ldev/renkinProject/renkinpack/MainActivity;->searchIcon:Landroid/graphics/drawable/Drawable;
+
+    if-eqz v7, :done
+
+    sget-object v6, Landroid/graphics/PorterDuff$Mode;->SRC_IN:Landroid/graphics/PorterDuff$Mode;
+
+    invoke-virtual {v7, v1, v6}, Landroid/graphics/drawable/Drawable;->setColorFilter(ILandroid/graphics/PorterDuff$Mode;)V
+
+    :done
+    return-void
+.end method
+
+.method private array(Ljava/lang/String;)[Ljava/lang/String;
+    .locals 3
+
+    invoke-virtual {p0}, Ldev/renkinProject/renkinpack/MainActivity;->getResources()Landroid/content/res/Resources;
+
+    move-result-object v0
+
+    const-string v1, "array"
+
+    invoke-virtual {p0}, Ldev/renkinProject/renkinpack/MainActivity;->getPackageName()Ljava/lang/String;
+
+    move-result-object v2
+
+    invoke-virtual {v0, p1, v1, v2}, Landroid/content/res/Resources;->getIdentifier(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
+
+    move-result v1
+
+    if-nez v1, :found
+
+    new-array v0, v1, [Ljava/lang/String;
+
+    return-object v0
+
+    :found
+    invoke-virtual {v0, v1}, Landroid/content/res/Resources;->getStringArray(I)[Ljava/lang/String;
+
+    move-result-object v0
+
+    return-object v0
+.end method
+
+.method private dp(I)I
+    .locals 2
+
+    invoke-virtual {p0}, Ldev/renkinProject/renkinpack/MainActivity;->getResources()Landroid/content/res/Resources;
+
+    move-result-object v0
+
+    invoke-virtual {v0}, Landroid/content/res/Resources;->getDisplayMetrics()Landroid/util/DisplayMetrics;
+
+    move-result-object v0
+
+    iget v0, v0, Landroid/util/DisplayMetrics;->density:F
+
+    int-to-float v1, p1
+
+    mul-float/2addr v1, v0
+
+    float-to-int v1, v1
+
+    return v1
+.end method
+
+.method private drawable(Ljava/lang/String;)Landroid/graphics/drawable/Drawable;
+    .locals 3
+
+    invoke-virtual {p0}, Ldev/renkinProject/renkinpack/MainActivity;->getResources()Landroid/content/res/Resources;
+
+    move-result-object v0
+
+    const-string v1, "drawable"
+
+    invoke-virtual {p0}, Ldev/renkinProject/renkinpack/MainActivity;->getPackageName()Ljava/lang/String;
+
+    move-result-object v2
+
+    invoke-virtual {v0, p1, v1, v2}, Landroid/content/res/Resources;->getIdentifier(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
+
+    move-result v1
+
+    if-nez v1, :found
+
+    const/4 v0, 0x0
+
+    return-object v0
+
+    :found
+    invoke-virtual {v0, v1}, Landroid/content/res/Resources;->getDrawable(I)Landroid/graphics/drawable/Drawable;
+
+    move-result-object v0
+
+    invoke-virtual {v0}, Landroid/graphics/drawable/Drawable;->mutate()Landroid/graphics/drawable/Drawable;
+
+    move-result-object v0
+
+    return-object v0
+.end method
+
+.method private newText(F)Landroid/widget/TextView;
+    .locals 2
+
+    new-instance v0, Landroid/widget/TextView;
+
+    invoke-direct {v0, p0}, Landroid/widget/TextView;-><init>(Landroid/content/Context;)V
+
+    const/4 v1, 0x2    # TypedValue.COMPLEX_UNIT_SP
+
+    invoke-virtual {v0, v1, p1}, Landroid/widget/TextView;->setTextSize(IF)V
+
+    return-object v0
+.end method
+
+.method private string(Ljava/lang/String;)Ljava/lang/String;
+    .locals 3
+
+    invoke-virtual {p0}, Ldev/renkinProject/renkinpack/MainActivity;->getResources()Landroid/content/res/Resources;
+
+    move-result-object v0
+
+    const-string v1, "string"
+
+    invoke-virtual {p0}, Ldev/renkinProject/renkinpack/MainActivity;->getPackageName()Ljava/lang/String;
+
+    move-result-object v2
+
+    invoke-virtual {v0, p1, v1, v2}, Landroid/content/res/Resources;->getIdentifier(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
+
+    move-result v1
+
+    if-nez v1, :found
+
+    const-string v0, ""
+
+    return-object v0
+
+    :found
+    invoke-virtual {v0, v1}, Landroid/content/res/Resources;->getString(I)Ljava/lang/String;
+
+    move-result-object v0
+
+    return-object v0
+.end method
+
+.method private style(Landroid/widget/TextView;IF)V
+    .locals 2
+
+    invoke-virtual {p1, p2}, Landroid/widget/TextView;->setTextColor(I)V
+
+    const/4 v0, 0x0
+
+    const v1, -0x27000000    # 0xd9000000, black 0.85
+
+    invoke-virtual {p1, p3, v0, v0, v1}, Landroid/widget/TextView;->setShadowLayer(FFFI)V
 
     return-void
 .end method
 
 
 # virtual methods
+.method public afterTextChanged(Landroid/text/Editable;)V
+    .locals 2
+
+    iget-object v0, p0, Ldev/renkinProject/renkinpack/MainActivity;->adapter:Ldev/renkinProject/renkinpack/IconAdapter;
+
+    invoke-virtual {p1}, Ljava/lang/Object;->toString()Ljava/lang/String;
+
+    move-result-object v1
+
+    invoke-virtual {v0, v1}, Ldev/renkinProject/renkinpack/IconAdapter;->filter(Ljava/lang/String;)V
+
+    return-void
+.end method
+
+.method public beforeTextChanged(Ljava/lang/CharSequence;III)V
+    .locals 0
+
+    return-void
+.end method
+
+.method public onClick(Landroid/view/View;)V
+    .locals 3
+
+    iget v0, p0, Ldev/renkinProject/renkinpack/MainActivity;->backgroundMode:I
+
+    add-int/lit8 v0, v0, 0x1
+
+    rem-int/lit8 v0, v0, 0x3
+
+    iput v0, p0, Ldev/renkinProject/renkinpack/MainActivity;->backgroundMode:I
+
+    const-string v1, "preview"
+
+    const/4 v2, 0x0
+
+    invoke-virtual {p0, v1, v2}, Ldev/renkinProject/renkinpack/MainActivity;->getSharedPreferences(Ljava/lang/String;I)Landroid/content/SharedPreferences;
+
+    move-result-object v1
+
+    invoke-interface {v1}, Landroid/content/SharedPreferences;->edit()Landroid/content/SharedPreferences$Editor;
+
+    move-result-object v1
+
+    const-string v2, "background"
+
+    invoke-interface {v1, v2, v0}, Landroid/content/SharedPreferences$Editor;->putInt(Ljava/lang/String;I)Landroid/content/SharedPreferences$Editor;
+
+    move-result-object v1
+
+    invoke-interface {v1}, Landroid/content/SharedPreferences$Editor;->apply()V
+
+    invoke-direct {p0}, Ldev/renkinProject/renkinpack/MainActivity;->applyBackground()V
+
+    return-void
+.end method
+
 .method protected onCreate(Landroid/os/Bundle;)V
-    .locals 1
+    .locals 9
     .param p1, "savedInstanceState"    # Landroid/os/Bundle;
 
-    .line 9
     invoke-super {p0, p1}, Landroid/app/Activity;->onCreate(Landroid/os/Bundle;)V
 
-    .line 10
-    const/high16 v0, 0x7f010000    # @layout/main_activity 'res/layout/main_activity.xml'
+    # Launcher icon pickers start the pack for a result; opening it from the drawer does not.
+    invoke-virtual {p0}, Ldev/renkinProject/renkinpack/MainActivity;->getCallingActivity()Landroid/content/ComponentName;
 
-    invoke-virtual {p0, v0}, Ldev/renkinProject/renkinpack/MainActivity;->setContentView(I)V
+    move-result-object v0
 
-    .line 11
+    if-eqz v0, :not_picking
+
+    const/4 v0, 0x1
+
+    goto :picking_known
+
+    :not_picking
+    const/4 v0, 0x0
+
+    :picking_known
+    iput-boolean v0, p0, Ldev/renkinProject/renkinpack/MainActivity;->picking:Z
+
+    const-string v0, "preview"
+
+    const/4 v1, 0x0
+
+    invoke-virtual {p0, v0, v1}, Ldev/renkinProject/renkinpack/MainActivity;->getSharedPreferences(Ljava/lang/String;I)Landroid/content/SharedPreferences;
+
+    move-result-object v0
+
+    const-string v2, "background"
+
+    invoke-interface {v0, v2, v1}, Landroid/content/SharedPreferences;->getInt(Ljava/lang/String;I)I
+
+    move-result v0
+
+    iput v0, p0, Ldev/renkinProject/renkinpack/MainActivity;->backgroundMode:I
+
+    new-instance v0, Landroid/graphics/drawable/GradientDrawable;
+
+    invoke-direct {v0}, Landroid/graphics/drawable/GradientDrawable;-><init>()V
+
+    const/4 v1, 0x1    # GradientDrawable.OVAL
+
+    invoke-virtual {v0, v1}, Landroid/graphics/drawable/GradientDrawable;->setShape(I)V
+
+    iput-object v0, p0, Ldev/renkinProject/renkinpack/MainActivity;->buttonShape:Landroid/graphics/drawable/GradientDrawable;
+
+    new-instance v0, Landroid/graphics/drawable/GradientDrawable;
+
+    invoke-direct {v0}, Landroid/graphics/drawable/GradientDrawable;-><init>()V
+
+    const/16 v1, 0x18
+
+    invoke-direct {p0, v1}, Ldev/renkinProject/renkinpack/MainActivity;->dp(I)I
+
+    move-result v1
+
+    int-to-float v1, v1
+
+    invoke-virtual {v0, v1}, Landroid/graphics/drawable/GradientDrawable;->setCornerRadius(F)V
+
+    iput-object v0, p0, Ldev/renkinProject/renkinpack/MainActivity;->fieldShape:Landroid/graphics/drawable/GradientDrawable;
+
+    const/16 v8, 0x10
+
+    invoke-direct {p0, v8}, Ldev/renkinProject/renkinpack/MainActivity;->dp(I)I
+
+    move-result v8
+
+    new-instance v0, Landroid/widget/LinearLayout;
+
+    invoke-direct {v0, p0}, Landroid/widget/LinearLayout;-><init>(Landroid/content/Context;)V
+
+    const/4 v1, 0x1
+
+    invoke-virtual {v0, v1}, Landroid/widget/LinearLayout;->setOrientation(I)V
+
+    # Takes the initial focus so the search field does not open the keyboard on launch.
+    invoke-virtual {v0, v1}, Landroid/widget/LinearLayout;->setFocusableInTouchMode(Z)V
+
+    iput-object v0, p0, Ldev/renkinProject/renkinpack/MainActivity;->root:Landroid/widget/LinearLayout;
+
+    new-instance v1, Landroid/widget/LinearLayout;
+
+    invoke-direct {v1, p0}, Landroid/widget/LinearLayout;-><init>(Landroid/content/Context;)V
+
+    const/16 v2, 0x10    # Gravity.CENTER_VERTICAL
+
+    invoke-virtual {v1, v2}, Landroid/widget/LinearLayout;->setGravity(I)V
+
+    div-int/lit8 v2, v8, 0x2
+
+    invoke-virtual {v1, v8, v8, v8, v2}, Landroid/widget/LinearLayout;->setPadding(IIII)V
+
+    new-instance v2, Landroid/widget/LinearLayout;
+
+    invoke-direct {v2, p0}, Landroid/widget/LinearLayout;-><init>(Landroid/content/Context;)V
+
+    const/4 v3, 0x1
+
+    invoke-virtual {v2, v3}, Landroid/widget/LinearLayout;->setOrientation(I)V
+
+    const/high16 v3, 0x41a00000    # 20.0f
+
+    invoke-direct {p0, v3}, Ldev/renkinProject/renkinpack/MainActivity;->newText(F)Landroid/widget/TextView;
+
+    move-result-object v3
+
+    const-string v4, "renkin_preview_title"
+
+    invoke-direct {p0, v4}, Ldev/renkinProject/renkinpack/MainActivity;->string(Ljava/lang/String;)Ljava/lang/String;
+
+    move-result-object v4
+
+    invoke-virtual {v3, v4}, Landroid/widget/TextView;->setText(Ljava/lang/CharSequence;)V
+
+    iput-object v3, p0, Ldev/renkinProject/renkinpack/MainActivity;->title:Landroid/widget/TextView;
+
+    invoke-virtual {v2, v3}, Landroid/widget/LinearLayout;->addView(Landroid/view/View;)V
+
+    const/high16 v3, 0x41400000    # 12.0f
+
+    invoke-direct {p0, v3}, Ldev/renkinProject/renkinpack/MainActivity;->newText(F)Landroid/widget/TextView;
+
+    move-result-object v3
+
+    const-string v4, "renkin_preview_subtitle"
+
+    invoke-direct {p0, v4}, Ldev/renkinProject/renkinpack/MainActivity;->string(Ljava/lang/String;)Ljava/lang/String;
+
+    move-result-object v4
+
+    invoke-virtual {v3, v4}, Landroid/widget/TextView;->setText(Ljava/lang/CharSequence;)V
+
+    iput-object v3, p0, Ldev/renkinProject/renkinpack/MainActivity;->subtitle:Landroid/widget/TextView;
+
+    invoke-virtual {v2, v3}, Landroid/widget/LinearLayout;->addView(Landroid/view/View;)V
+
+    new-instance v3, Landroid/widget/LinearLayout$LayoutParams;
+
+    const/4 v4, 0x0
+
+    const/4 v5, -0x2
+
+    const/high16 v6, 0x3f800000    # 1.0f
+
+    invoke-direct {v3, v4, v5, v6}, Landroid/widget/LinearLayout$LayoutParams;-><init>(IIF)V
+
+    invoke-virtual {v1, v2, v3}, Landroid/widget/LinearLayout;->addView(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V
+
+    new-instance v2, Landroid/widget/ImageButton;
+
+    invoke-direct {v2, p0}, Landroid/widget/ImageButton;-><init>(Landroid/content/Context;)V
+
+    iget-object v3, p0, Ldev/renkinProject/renkinpack/MainActivity;->buttonShape:Landroid/graphics/drawable/GradientDrawable;
+
+    invoke-virtual {v2, v3}, Landroid/widget/ImageButton;->setBackground(Landroid/graphics/drawable/Drawable;)V
+
+    sget-object v3, Landroid/widget/ImageView$ScaleType;->CENTER:Landroid/widget/ImageView$ScaleType;
+
+    invoke-virtual {v2, v3}, Landroid/widget/ImageButton;->setScaleType(Landroid/widget/ImageView$ScaleType;)V
+
+    invoke-virtual {v2, p0}, Landroid/widget/ImageButton;->setOnClickListener(Landroid/view/View$OnClickListener;)V
+
+    iput-object v2, p0, Ldev/renkinProject/renkinpack/MainActivity;->backgroundButton:Landroid/widget/ImageButton;
+
+    const/16 v3, 0x2c
+
+    invoke-direct {p0, v3}, Ldev/renkinProject/renkinpack/MainActivity;->dp(I)I
+
+    move-result v3
+
+    new-instance v4, Landroid/widget/LinearLayout$LayoutParams;
+
+    invoke-direct {v4, v3, v3}, Landroid/widget/LinearLayout$LayoutParams;-><init>(II)V
+
+    invoke-virtual {v1, v2, v4}, Landroid/widget/LinearLayout;->addView(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V
+
+    invoke-virtual {v0, v1}, Landroid/widget/LinearLayout;->addView(Landroid/view/View;)V
+
+    new-instance v1, Landroid/widget/EditText;
+
+    invoke-direct {v1, p0}, Landroid/widget/EditText;-><init>(Landroid/content/Context;)V
+
+    const/4 v2, 0x1
+
+    # A view without an id saves no state: the query would be lost on rotation.
+    invoke-virtual {v1, v2}, Landroid/widget/EditText;->setId(I)V
+
+    invoke-virtual {v1, v2}, Landroid/widget/EditText;->setSingleLine(Z)V
+
+    const/4 v2, 0x3    # EditorInfo.IME_ACTION_SEARCH
+
+    invoke-virtual {v1, v2}, Landroid/widget/EditText;->setImeOptions(I)V
+
+    const/4 v2, 0x2    # TypedValue.COMPLEX_UNIT_SP
+
+    const/high16 v3, 0x41800000    # 16.0f
+
+    invoke-virtual {v1, v2, v3}, Landroid/widget/EditText;->setTextSize(IF)V
+
+    const-string v2, "renkin_preview_search_hint"
+
+    invoke-direct {p0, v2}, Ldev/renkinProject/renkinpack/MainActivity;->string(Ljava/lang/String;)Ljava/lang/String;
+
+    move-result-object v2
+
+    invoke-virtual {v1, v2}, Landroid/widget/EditText;->setHint(Ljava/lang/CharSequence;)V
+
+    iget-object v2, p0, Ldev/renkinProject/renkinpack/MainActivity;->fieldShape:Landroid/graphics/drawable/GradientDrawable;
+
+    invoke-virtual {v1, v2}, Landroid/widget/EditText;->setBackground(Landroid/graphics/drawable/Drawable;)V
+
+    const/16 v2, 0xa
+
+    invoke-direct {p0, v2}, Ldev/renkinProject/renkinpack/MainActivity;->dp(I)I
+
+    move-result v2
+
+    invoke-virtual {v1, v8, v2, v8, v2}, Landroid/widget/EditText;->setPadding(IIII)V
+
+    const/16 v2, 0xc
+
+    invoke-direct {p0, v2}, Ldev/renkinProject/renkinpack/MainActivity;->dp(I)I
+
+    move-result v2
+
+    invoke-virtual {v1, v2}, Landroid/widget/EditText;->setCompoundDrawablePadding(I)V
+
+    const-string v2, "renkin_preview_ic_search"
+
+    invoke-direct {p0, v2}, Ldev/renkinProject/renkinpack/MainActivity;->drawable(Ljava/lang/String;)Landroid/graphics/drawable/Drawable;
+
+    move-result-object v2
+
+    iput-object v2, p0, Ldev/renkinProject/renkinpack/MainActivity;->searchIcon:Landroid/graphics/drawable/Drawable;
+
+    if-eqz v2, :no_search_icon
+
+    const/16 v3, 0x14
+
+    invoke-direct {p0, v3}, Ldev/renkinProject/renkinpack/MainActivity;->dp(I)I
+
+    move-result v3
+
+    const/4 v4, 0x0
+
+    invoke-virtual {v2, v4, v4, v3, v3}, Landroid/graphics/drawable/Drawable;->setBounds(IIII)V
+
+    const/4 v3, 0x0
+
+    invoke-virtual {v1, v2, v3, v3, v3}, Landroid/widget/EditText;->setCompoundDrawablesRelative(Landroid/graphics/drawable/Drawable;Landroid/graphics/drawable/Drawable;Landroid/graphics/drawable/Drawable;Landroid/graphics/drawable/Drawable;)V
+
+    :no_search_icon
+    invoke-virtual {v1, p0}, Landroid/widget/EditText;->addTextChangedListener(Landroid/text/TextWatcher;)V
+
+    iput-object v1, p0, Ldev/renkinProject/renkinpack/MainActivity;->searchField:Landroid/widget/EditText;
+
+    new-instance v2, Landroid/widget/LinearLayout$LayoutParams;
+
+    const/4 v3, -0x1
+
+    const/4 v4, -0x2
+
+    invoke-direct {v2, v3, v4}, Landroid/widget/LinearLayout$LayoutParams;-><init>(II)V
+
+    div-int/lit8 v3, v8, 0x2
+
+    const/4 v4, 0x0
+
+    invoke-virtual {v2, v8, v4, v8, v3}, Landroid/widget/LinearLayout$LayoutParams;->setMargins(IIII)V
+
+    invoke-virtual {v0, v1, v2}, Landroid/widget/LinearLayout;->addView(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V
+
+    const/high16 v1, 0x41600000    # 14.0f
+
+    invoke-direct {p0, v1}, Ldev/renkinProject/renkinpack/MainActivity;->newText(F)Landroid/widget/TextView;
+
+    move-result-object v1
+
+    const-string v2, "renkin_preview_picker_hint"
+
+    invoke-direct {p0, v2}, Ldev/renkinProject/renkinpack/MainActivity;->string(Ljava/lang/String;)Ljava/lang/String;
+
+    move-result-object v2
+
+    invoke-virtual {v1, v2}, Landroid/widget/TextView;->setText(Ljava/lang/CharSequence;)V
+
+    div-int/lit8 v2, v8, 0x2
+
+    const/4 v3, 0x0
+
+    invoke-virtual {v1, v8, v3, v8, v2}, Landroid/widget/TextView;->setPadding(IIII)V
+
+    iget-boolean v2, p0, Ldev/renkinProject/renkinpack/MainActivity;->picking:Z
+
+    if-nez v2, :hint_visible
+
+    const/16 v2, 0x8    # View.GONE
+
+    invoke-virtual {v1, v2}, Landroid/widget/TextView;->setVisibility(I)V
+
+    :hint_visible
+    iput-object v1, p0, Ldev/renkinProject/renkinpack/MainActivity;->hint:Landroid/widget/TextView;
+
+    invoke-virtual {v0, v1}, Landroid/widget/LinearLayout;->addView(Landroid/view/View;)V
+
+    new-instance v1, Landroid/widget/GridView;
+
+    invoke-direct {v1, p0}, Landroid/widget/GridView;-><init>(Landroid/content/Context;)V
+
+    const/4 v2, -0x1    # GridView.AUTO_FIT
+
+    invoke-virtual {v1, v2}, Landroid/widget/GridView;->setNumColumns(I)V
+
+    const/16 v2, 0x58
+
+    invoke-direct {p0, v2}, Ldev/renkinProject/renkinpack/MainActivity;->dp(I)I
+
+    move-result v2
+
+    invoke-virtual {v1, v2}, Landroid/widget/GridView;->setColumnWidth(I)V
+
+    const/4 v2, 0x2    # GridView.STRETCH_COLUMN_WIDTH
+
+    invoke-virtual {v1, v2}, Landroid/widget/GridView;->setStretchMode(I)V
+
+    const/16 v2, 0xc
+
+    invoke-direct {p0, v2}, Ldev/renkinProject/renkinpack/MainActivity;->dp(I)I
+
+    move-result v2
+
+    invoke-virtual {v1, v2}, Landroid/widget/GridView;->setVerticalSpacing(I)V
+
+    div-int/lit8 v2, v8, 0x2
+
+    const/4 v3, 0x0
+
+    invoke-virtual {v1, v2, v3, v2, v8}, Landroid/widget/GridView;->setPadding(IIII)V
+
+    invoke-virtual {v1, v3}, Landroid/widget/GridView;->setClipToPadding(Z)V
+
+    new-instance v2, Ldev/renkinProject/renkinpack/IconAdapter;
+
+    const-string v3, "renkin_preview_icons"
+
+    invoke-direct {p0, v3}, Ldev/renkinProject/renkinpack/MainActivity;->array(Ljava/lang/String;)[Ljava/lang/String;
+
+    move-result-object v3
+
+    const-string v4, "renkin_preview_labels"
+
+    invoke-direct {p0, v4}, Ldev/renkinProject/renkinpack/MainActivity;->array(Ljava/lang/String;)[Ljava/lang/String;
+
+    move-result-object v4
+
+    invoke-direct {v2, p0, v3, v4}, Ldev/renkinProject/renkinpack/IconAdapter;-><init>(Landroid/content/Context;[Ljava/lang/String;[Ljava/lang/String;)V
+
+    iput-object v2, p0, Ldev/renkinProject/renkinpack/MainActivity;->adapter:Ldev/renkinProject/renkinpack/IconAdapter;
+
+    invoke-virtual {v1, v2}, Landroid/widget/GridView;->setAdapter(Landroid/widget/ListAdapter;)V
+
+    invoke-virtual {v1, p0}, Landroid/widget/GridView;->setOnItemClickListener(Landroid/widget/AdapterView$OnItemClickListener;)V
+
+    new-instance v2, Landroid/widget/LinearLayout$LayoutParams;
+
+    const/4 v3, -0x1
+
+    const/4 v4, 0x0
+
+    const/high16 v5, 0x3f800000    # 1.0f
+
+    invoke-direct {v2, v3, v4, v5}, Landroid/widget/LinearLayout$LayoutParams;-><init>(IIF)V
+
+    invoke-virtual {v0, v1, v2}, Landroid/widget/LinearLayout;->addView(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V
+
+    const/high16 v1, 0x41300000    # 11.0f
+
+    invoke-direct {p0, v1}, Ldev/renkinProject/renkinpack/MainActivity;->newText(F)Landroid/widget/TextView;
+
+    move-result-object v1
+
+    const-string v2, "renkin_preview_footer"
+
+    invoke-direct {p0, v2}, Ldev/renkinProject/renkinpack/MainActivity;->string(Ljava/lang/String;)Ljava/lang/String;
+
+    move-result-object v2
+
+    invoke-virtual {v1, v2}, Landroid/widget/TextView;->setText(Ljava/lang/CharSequence;)V
+
+    const/16 v2, 0x11    # Gravity.CENTER
+
+    invoke-virtual {v1, v2}, Landroid/widget/TextView;->setGravity(I)V
+
+    div-int/lit8 v2, v8, 0x2
+
+    const/4 v3, 0x0
+
+    invoke-virtual {v1, v3, v2, v3, v8}, Landroid/widget/TextView;->setPadding(IIII)V
+
+    iput-object v1, p0, Ldev/renkinProject/renkinpack/MainActivity;->footer:Landroid/widget/TextView;
+
+    new-instance v2, Landroid/widget/LinearLayout$LayoutParams;
+
+    const/4 v3, -0x1
+
+    const/4 v4, -0x2
+
+    invoke-direct {v2, v3, v4}, Landroid/widget/LinearLayout$LayoutParams;-><init>(II)V
+
+    invoke-virtual {v0, v1, v2}, Landroid/widget/LinearLayout;->addView(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V
+
+    invoke-virtual {p0, v0}, Ldev/renkinProject/renkinpack/MainActivity;->setContentView(Landroid/view/View;)V
+
+    invoke-direct {p0}, Ldev/renkinProject/renkinpack/MainActivity;->applyBackground()V
+
+    return-void
+.end method
+
+.method public onItemClick(Landroid/widget/AdapterView;Landroid/view/View;IJ)V
+    .locals 5
+
+    iget-boolean v0, p0, Ldev/renkinProject/renkinpack/MainActivity;->picking:Z
+
+    if-nez v0, :pick
+
+    return-void
+
+    :pick
+    iget-object v0, p0, Ldev/renkinProject/renkinpack/MainActivity;->adapter:Ldev/renkinProject/renkinpack/IconAdapter;
+
+    invoke-virtual {v0, p3}, Ldev/renkinProject/renkinpack/IconAdapter;->resourceId(I)I
+
+    move-result v1
+
+    if-nez v1, :found
+
+    return-void
+
+    :found
+    new-instance v2, Landroid/content/Intent;
+
+    invoke-direct {v2}, Landroid/content/Intent;-><init>()V
+
+    const-string v3, "android.intent.extra.shortcut.ICON_RESOURCE"
+
+    invoke-static {p0, v1}, Landroid/content/Intent$ShortcutIconResource;->fromContext(Landroid/content/Context;I)Landroid/content/Intent$ShortcutIconResource;
+
+    move-result-object v4
+
+    invoke-virtual {v2, v3, v4}, Landroid/content/Intent;->putExtra(Ljava/lang/String;Landroid/os/Parcelable;)Landroid/content/Intent;
+
+    invoke-virtual {v0, p3}, Ldev/renkinProject/renkinpack/IconAdapter;->bitmap(I)Landroid/graphics/Bitmap;
+
+    move-result-object v3
+
+    if-eqz v3, :no_bitmap
+
+    const-string v4, "icon"
+
+    invoke-virtual {v2, v4, v3}, Landroid/content/Intent;->putExtra(Ljava/lang/String;Landroid/os/Parcelable;)Landroid/content/Intent;
+
+    :no_bitmap
+    const/4 v3, -0x1    # RESULT_OK
+
+    invoke-virtual {p0, v3, v2}, Ldev/renkinProject/renkinpack/MainActivity;->setResult(ILandroid/content/Intent;)V
+
+    invoke-virtual {p0}, Ldev/renkinProject/renkinpack/MainActivity;->finish()V
+
+    return-void
+.end method
+
+.method public onTextChanged(Ljava/lang/CharSequence;III)V
+    .locals 0
+
     return-void
 .end method

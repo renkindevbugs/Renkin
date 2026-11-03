@@ -2203,9 +2203,14 @@ hold the gate. The built result carries its session token: completing an old ins
 another session's undo or lock newer live refresh output.
 
 `IconPackBuilder` assembles the APK with reandroid (no external build tools). The generated
-pack's dex classes come from prebuilt smali assets (`app/src/main/assets/{R,RLayout,
-MainActivity,BuildConfig}`); the pack's applicationId is parameterized per profile, but the
-smali class package must match IconPackBuilder's activity FQN string. Signing uses
+pack's dex classes come from prebuilt smali assets (`app/src/main/assets/{MainActivity,IconAdapter,
+BuildConfig}`, all in one classes.dex); the pack's applicationId is parameterized per profile, but the
+smali class package must match IconPackBuilder's activity FQN string. The pack's MainActivity is
+an icon preview grid (issue #28): wallpaper theme, search by app name, a remembered
+wallpaper/dark/light background switch, and the tapped icon returned when a launcher's icon picker
+started it for a result. It reads the `renkin_preview_*` string-arrays, strings and glyph vectors
+(`PreviewIconPaths`) by name, so no resource id is patched into
+the smali; those texts are resolved in Renkin's locale at build time. Signing uses
 `renkinpack.keystore` in filesDir. Each launcher activity of a package gets its own drawable
 file name (a package with several activities must not overwrite one icon with the other).
 Packs identify apps by `ComponentInfo` in appfilter.xml — never by name.
