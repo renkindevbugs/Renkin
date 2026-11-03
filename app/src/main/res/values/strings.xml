@@ -150,6 +150,16 @@
     <string name="buildInstalling">Installing …</string>
     <string name="buildUpdating">Updating …</string>
     <string name="buildReplacing">Replacing existing pack …</string>
+    <plurals name="packPreviewSubtitle">
+        <item quantity="one">Profile %1$s · %2$d icon · %3$s</item>
+        <item quantity="other">Profile %1$s · %2$d icons · %3$s</item>
+    </plurals>
+    <string name="packPreviewPickerHint">Tap an icon to use it</string>
+    <string name="packPreviewSearchHint">Search icons</string>
+    <string name="packPreviewFooter">Made with Renkin</string>
+    <string name="packPreviewBackgroundWallpaper">Background: wallpaper</string>
+    <string name="packPreviewBackgroundDark">Background: dark</string>
+    <string name="packPreviewBackgroundLight">Background: light</string>
     <string name="buildOpeningInstaller">Opening %1$s …</string>
     <string name="buildInstallingVia">Installing via %1$s …</string>
     <string name="buildUpdatingVia">Updating via %1$s …</string>

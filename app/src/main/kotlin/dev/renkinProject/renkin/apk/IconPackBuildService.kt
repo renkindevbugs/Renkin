@@ -98,7 +98,8 @@ class IconPackBuildService internal constructor(
         val packageName: String,
         val label: String,
         val packIcon: IconPackDrawable? = null,
-        val packIconSource: String? = null
+        val packIconSource: String? = null,
+        val profileName: String = ""
     )
 
     private val buildOperations = Mutex()
@@ -134,7 +135,7 @@ class IconPackBuildService internal constructor(
             preservedRows, globalSelections + perAppSelections,
             profileManager.packPackageNameFor(profileId),
             profile?.packLabel?.ifEmpty { profile.name } ?: "Renkin Pack",
-            packIcon?.icon, iconSource
+            packIcon?.icon, iconSource, profile?.name.orEmpty()
         )
     }
 
@@ -155,7 +156,7 @@ class IconPackBuildService internal constructor(
                         context, prepared.buildApps, calendarData.mappings, calendarData.drawables,
                         packPackageName = prepared.packageName, packLabel = prepared.label,
                         iconPackCatalog = iconPackCatalog, apkDir = directory, packIcon = prepared.packIcon,
-                        packIconSource = prepared.packIconSource
+                        packIconSource = prepared.packIconSource, profileName = prepared.profileName
                     )
                     val buildContext = currentCoroutineContext()
                     val canBeInstalled = StorageOperationGate.run { builder.canBeInstalled() }

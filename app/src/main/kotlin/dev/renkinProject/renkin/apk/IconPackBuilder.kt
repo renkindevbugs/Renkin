@@ -37,7 +37,7 @@ import dev.renkinProject.renkin.xml.file.AppMapXml
 import dev.renkinProject.renkin.xml.file.ThemeResourcesXml
 import dev.renkinProject.renkin.xml.file.DrawableXml
 import dev.renkinProject.renkin.xml.file.LayerListXml
-import dev.renkinProject.renkin.xml.file.LayoutXml
+import dev.renkinProject.renkin.xml.file.VectorXml
 import dev.renkinProject.renkin.xml.file.XmlMemoryFile
 import com.reandroid.apk.ApkModule
 import com.reandroid.archive.ByteInputSource
@@ -54,7 +54,6 @@ import com.reandroid.dex.smali.SmaliReader
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
-import dev.renkinProject.renkin.extension.toString
 import dev.renkinProject.renkin.packages.PackageVersion
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.scaleAtCenter
 import dev.renkinProject.renkin.xml.file.BaseInsetXml
@@ -88,7 +87,8 @@ class IconPackBuilder(
     private val iconPackCatalog: IconPackCatalog = IconPackCatalog(ctx),
     private val apkDir: File = ctx.cacheDir.resolve("apk").resolve(UUID.randomUUID().toString()),
     private val packIcon: IconPackDrawable? = null,
-    private val packIconSource: String? = null
+    private val packIconSource: String? = null,
+    private val profileName: String = ""
 ) {
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
@@ -100,6 +100,10 @@ class IconPackBuilder(
         /** Base package id of the generated Renkin icon pack (profiles append ".p<id>"). */
         const val PACKAGE_NAME = "dev.renkinProject.renkinpack"
         private const val MAIN_ACTIVITY = "dev.renkinProject.renkinpack.MainActivity"
+
+        // Smali class assets compiled into the pack's classes.dex; their class package must stay
+        // MAIN_ACTIVITY's. The preview screen reads the renkin_preview_* resources by name.
+        private val PACK_SMALI_ASSETS = listOf("MainActivity", "IconAdapter", "BuildConfig")
 
         /**
          * The pack-signing keystore in filesDir. Backups carry it (with its password file,
@@ -399,11 +403,10 @@ class IconPackBuilder(
             calendarIconsDrawable.keys
         createStringArrayResource(packageBlock, "icon_pack", allDrawables)
         createStringArrayResource(packageBlock, "all", allDrawables)
-
-        val layout = createXmlLayoutResource(apkModule, packageBlock, createLayout(), "main_activity")
+        createPreviewResources(apkModule, packageBlock, appFileNames)
 
         textMethod(ctx.resources.getString(R.string.buildingApk))
-        buildDex(apkModule, layout.resourceId)
+        buildDex(apkModule)
         apkModule.uncompressedFiles.addCommonExtensions()
         checkActive()
         apkModule.writeApk(unsignedApk)
@@ -468,6 +471,9 @@ class IconPackBuilder(
     private fun createMainActivity(manifest: AndroidManifestBlock, changesWithMaterialYouColors: Boolean) {
         val application = manifest.orCreateApplicationElement
         val activity = application.createChildElement(AndroidManifestBlock.TAG_activity)
+        // The preview grid sits on the user's wallpaper by default.
+        activity.getOrCreateAndroidAttribute("theme", android.R.attr.theme)
+            .setTypeAndData(ValueType.REFERENCE, android.R.style.Theme_Material_Wallpaper_NoTitleBar)
 
         val nodes = ctx.resources.getXml(R.xml.manifest).toXmlNode()
         val intents = nodes.findFirstTag("manifest")!!.children
@@ -526,18 +532,6 @@ class IconPackBuilder(
             )
             attribute.valueAsString = categoryValue
         }
-    }
-
-    @Suppress(SuppressSameParameterValue)
-    private fun createXmlLayoutResource(apkModule: ApkModule, packageBlock: PackageBlock, xmlFile: XmlMemoryFile, name: String): Entry {
-        val resPath = "res/${name}.xml"
-        val xmlEncoder = XmlEncoder(packageBlock)
-
-        val res = packageBlock.getOrCreate("", "layout", name)
-        res.setValueAsString(resPath)
-
-        apkModule.add(xmlEncoder.encodeToSource(xmlFile, resPath))
-        return res
     }
 
     private fun createXmlResource(apkModule: ApkModule, packageBlock: PackageBlock, xmlFile: XmlMemoryFile, name: String) {
@@ -651,45 +645,12 @@ class IconPackBuilder(
         res.setValueAsRaw(coder.valueType, coder.value)
     }
 
-    private fun buildDex(apkModule: ApkModule, resourceId: Int) {
-        buildClasses(apkModule, resourceId)
-        buildClasses2(apkModule, resourceId)
-    }
-
-    private fun buildClasses(apkModule: ApkModule, resourceId: Int) {
-        apkModule.add(ByteInputSource(buildClasses(resourceId), "classes.dex"))
-    }
-
-    @OptIn(ExperimentalStdlibApi::class)
-    private fun buildClasses(resourceId: Int): ByteArray {
+    private fun buildDex(apkModule: ApkModule) {
         val dex = DexFile.createDefault()
-
-        val r = ctx.assets.toByteArray("R")
-        dex.fromSmali(SmaliReader(r))
-
-        val layout = ctx.assets.toString("RLayout")
-            .replace("0x7f010000", "0x" + resourceId.toHexString())
-        dex.fromSmali(SmaliReader(layout.encodeToByteArray()))
-
-        return getBytesFromDex(dex)
-    }
-
-    private fun buildClasses2(apkModule: ApkModule, resourceId: Int) {
-        apkModule.add(ByteInputSource(buildClasses2(resourceId), "classes2.dex"))
-    }
-
-    @OptIn(ExperimentalStdlibApi::class)
-    private fun buildClasses2(resourceId: Int): ByteArray {
-        val dex = DexFile.createDefault()
-
-        val mainActivity = ctx.assets.toString("MainActivity")
-            .replace("0x7f010000", "0x" + resourceId.toHexString())
-        dex.fromSmali(SmaliReader(mainActivity.encodeToByteArray()))
-
-        val config = ctx.assets.toByteArray("BuildConfig")
-        dex.fromSmali(SmaliReader(config))
-
-        return getBytesFromDex(dex)
+        for (asset in PACK_SMALI_ASSETS) {
+            dex.fromSmali(SmaliReader(ctx.assets.toByteArray(asset)))
+        }
+        apkModule.add(ByteInputSource(getBytesFromDex(dex), "classes.dex"))
     }
 
     private fun getBytesFromDex(dex: DexFile): ByteArray {
@@ -718,14 +679,45 @@ class IconPackBuilder(
         }
     }
 
-    private fun createLayout(): LayoutXml {
-        val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-        val currentDateTime = LocalDateTime.now().format(dateFormatter)
+    /**
+     * Texts and the icon list for the pack's own preview screen (assets/MainActivity). Resolved in
+     * Renkin's locale at build time; the pack has no strings of its own. Calendar day drawables
+     * stay out of the grid, so it lists one icon per app.
+     */
+    private fun createPreviewResources(apkModule: ApkModule, packageBlock: PackageBlock, appFileNames: Map<String, String>) {
+        val previewApps = apps.filter { it.createdIcon != null }
+        val icons = previewApps.map { appFileNames.getValue(it.key) }
+        val labels = previewApps.mapIndexed { index, app -> app.appName.ifBlank { icons[index] } }
+        createStringArrayResource(packageBlock, "renkin_preview_icons", icons)
+        createStringArrayResource(packageBlock, "renkin_preview_labels", labels)
 
-        val xml = LayoutXml()
-        xml.textView("Icon pack created: $currentDateTime")
-        xml.readAndClose()
-        return xml
+        val builtAt = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+        val subtitle = ctx.resources.getQuantityString(
+            R.plurals.packPreviewSubtitle, icons.size, profileName.ifBlank { packLabel }, icons.size, builtAt
+        )
+        createStringResource(packageBlock, "renkin_preview_title", packLabel)
+        createStringResource(packageBlock, "renkin_preview_subtitle", subtitle)
+        createStringResource(packageBlock, "renkin_preview_picker_hint", ctx.getString(R.string.packPreviewPickerHint))
+        createStringResource(packageBlock, "renkin_preview_footer", ctx.getString(R.string.packPreviewFooter))
+        createStringResource(packageBlock, "renkin_preview_background_wallpaper", ctx.getString(R.string.packPreviewBackgroundWallpaper))
+        createStringResource(packageBlock, "renkin_preview_background_dark", ctx.getString(R.string.packPreviewBackgroundDark))
+        createStringResource(packageBlock, "renkin_preview_background_light", ctx.getString(R.string.packPreviewBackgroundLight))
+        createStringResource(packageBlock, "renkin_preview_search_hint", ctx.getString(R.string.packPreviewSearchHint))
+        for ((name, pathData) in PreviewIconPaths.ALL) {
+            createPreviewIcon(apkModule, packageBlock, name, pathData)
+        }
+    }
+
+    /** A white 24dp glyph; the preview tints it to the current background's text colour. */
+    private fun createPreviewIcon(apkModule: ApkModule, packageBlock: PackageBlock, name: String, pathData: String) {
+        val vector = VectorXml()
+        vector.vectorSize("24dp", "24dp", 24f, 24f)
+        vector.path(pathData, "miter", 0f, "#FFFFFFFF", "#00000000", "nonZero", "butt", 1f, 1f)
+        createXmlDrawableResource(apkModule, packageBlock, vector, name)
+    }
+
+    private fun createStringResource(packageBlock: PackageBlock, name: String, value: String) {
+        packageBlock.getOrCreate("", "string", name).setValueAsString(value)
     }
 
     private fun insertIconPackAppIcons(apkModule: ApkModule, packageBlock: PackageBlock, manifest: AndroidManifestBlock) {
