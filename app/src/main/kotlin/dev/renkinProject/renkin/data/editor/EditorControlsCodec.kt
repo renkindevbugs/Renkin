@@ -19,7 +19,10 @@ import java.io.IOException
 
 /** Fixed versioned fields preserve inactive controls and exact finite float/packed-color bits. */
 internal object EditorControlsCodec {
-    const val VERSION = 1
+    // v2 appends the shape corner; v1 drafts from the previous build decode with the default corner.
+    const val VERSION = 2
+    private const val SHAPE_CORNER_VERSION = 2
+    private const val PACK_VERSION = 1
     private const val MAGIC = 0x524B4544 // RKED
     const val MAX_TEXT_BYTES = 64 * 1024
     const val MAX_STYLE_VALUES = 256
@@ -30,7 +33,7 @@ internal object EditorControlsCodec {
     internal fun encodePack(value: EditorPackControls): ByteArray {
         val bytes = CappedByteArrayOutputStream(EditorDraftCodec.MAX_CONTROLS_BYTES, "Editor controls are too large")
         with(Writer(DataOutputStream(bytes))) {
-            output.writeInt(0x524b4550); output.writeInt(VERSION) // RKEP
+            output.writeInt(0x524b4550); output.writeInt(PACK_VERSION) // RKEP
             output.writeInt(value.selectedScheme); style(value.customForeground); style(value.customBackground); number(value.strokeScale)
         }
         return bytes.toByteArray()
@@ -40,7 +43,7 @@ internal object EditorControlsCodec {
         require(encoded.size.toLong() in 1..EditorDraftCodec.MAX_CONTROLS_BYTES)
         try {
             return DataInputStream(ByteArrayInputStream(encoded)).use { input ->
-                require(input.readInt() == 0x524b4550 && input.readInt() == VERSION) { "Unsupported editor pack controls" }
+                require(input.readInt() == 0x524b4550 && input.readInt() == PACK_VERSION) { "Unsupported editor pack controls" }
                 val reader = Reader(input)
                 EditorPackControls(input.readInt(), reader.style(), reader.style(), reader.number()).also {
                     require(input.read() == -1) { "Trailing editor pack controls" }
@@ -70,6 +73,7 @@ internal object EditorControlsCodec {
             optionalText(snapshot.calendar.prefix)
             optionalText(snapshot.calendar.packName)
             optionalText(snapshot.onlineImageUrl)
+            number(snapshot.adjustments.shapeCorner)
         }
         return bytes.toByteArray()
     }
@@ -78,10 +82,12 @@ internal object EditorControlsCodec {
         require(encoded.size.toLong() in 1..EditorDraftCodec.MAX_CONTROLS_BYTES) { "Invalid editor controls size" }
         try {
             return DataInputStream(ByteArrayInputStream(encoded)).use { input ->
-                require(input.readInt() == MAGIC && input.readInt() == VERSION) { "Unsupported editor controls format" }
+                require(input.readInt() == MAGIC) { "Unsupported editor controls format" }
+                val version = input.readInt()
+                require(version in 1..VERSION) { "Unsupported editor controls format" }
                 val reader = Reader(input)
                 val tab = input.readInt().also { require(it in 0..3) { "Invalid editor tab" } }
-                val snapshot = with(reader) {
+                val decoded = with(reader) {
                     EditorControlsSnapshot(
                         selectedTab = tab,
                         create = create(),
@@ -93,6 +99,9 @@ internal object EditorControlsCodec {
                         onlineImageUrl = optionalText()
                     )
                 }
+                val snapshot = if (version >= SHAPE_CORNER_VERSION) {
+                    decoded.copy(adjustments = decoded.adjustments.copy(shapeCorner = reader.number()))
+                } else decoded
                 require(input.read() == -1) { "Trailing editor controls content" }
                 snapshot
             }

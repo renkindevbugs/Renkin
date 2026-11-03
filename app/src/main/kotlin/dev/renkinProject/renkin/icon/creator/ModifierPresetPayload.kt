@@ -49,7 +49,8 @@ data class ModifierPresetShape(
     val shape: IconShape,
     val crop: Boolean,
     val scale: Float,
-    val style: ColorizerStyle
+    val style: ColorizerStyle,
+    val corner: Float = DEFAULT_SHAPE_CORNER
 )
 
 /** The outline: add or recolor, how thick, and the colour or gradient it is drawn with. */
@@ -118,7 +119,7 @@ internal fun ModifierStack.withModifierPreset(payload: ModifierPresetPayload): M
     return copy(
         effect = newEffect,
         transform = payload.iconScale?.let { transform.copy(scale = it) } ?: transform,
-        shape = payload.shape?.let { ShapeModifier(it.shape, it.crop, it.scale, plateFill(it.shape, it.crop, it.style)) } ?: shape,
+        shape = payload.shape?.let { ShapeModifier(it.shape, it.crop, it.scale, plateFill(it.shape, it.crop, it.style), it.corner) } ?: shape,
         outline = payload.outline?.let {
             OutlineModifier(it.mode, it.width, ColorFill(it.style.firstColor, it.style), outline?.eraseMask)
         } ?: outline,

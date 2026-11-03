@@ -60,7 +60,8 @@ internal data class ProfileShapeStyle(
     val shape: ProfileEnumValue<IconShape>? = null,
     val crop: Boolean? = null,
     val scalePercent: Int? = null,
-    val fill: ProfileColorStyle = ProfileColorStyle()
+    val fill: ProfileColorStyle = ProfileColorStyle(),
+    val cornerPercent: Int? = null
 )
 
 internal data class ProfileColorizeStyle(

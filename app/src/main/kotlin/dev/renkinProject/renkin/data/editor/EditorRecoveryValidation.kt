@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.data.editor
 
 import dev.renkinProject.renkin.icon.creator.MATERIAL_YOU_STROKE_SCALE_RANGE
 import dev.renkinProject.renkin.icon.creator.MODIFIER_SCALE_RANGE
+import dev.renkinProject.renkin.icon.creator.SHAPE_CORNER_RANGE
 import androidx.compose.ui.graphics.Color
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_MAX
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_MIN
@@ -33,6 +34,7 @@ internal object EditorRecoveryValidation {
             range(edgeThreshold, 0.5f..5f); range(edgeSmoothing, 0.5f..4f)
             range(iconScale, MODIFIER_SCALE_RANGE); range(offsetX, -0.5f..0.5f); range(offsetY, -0.5f..0.5f)
             range(backgroundTolerance, 0f..0.5f); range(shapeScale, MODIFIER_SCALE_RANGE)
+            range(shapeCorner, SHAPE_CORNER_RANGE)
             range(outlineWidth, OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat())
             validateShadow(shadowBlur, shadowDistance, shadowAngle, shadowOpacity)
             colorizeLayers.forEach { range(it.tolerance, 0f..1f); style(it.style) }

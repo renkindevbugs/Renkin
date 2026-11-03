@@ -40,6 +40,23 @@ class ModifierRecipeCodecTest {
         assertTrue(encoded.contains("effect.style.gradientType=RADIAL\n"))
     }
 
+    @Test fun shapeCornerRoundTripsAndOlderRecipesKeepTheDefaultSquircle() {
+        val original = recipe().copy(shape = recipe().shape!!.copy(shape = IconShape.SQUIRCLE, corner = 0.25f))
+        val encoded = ModifierRecipeCodec.encode(original)
+        assertEquals(original, ModifierRecipeCodec.decode(encoded))
+
+        val withoutCorner = encoded.lines().filterNot { it.startsWith("shape.corner=") }.joinToString("\n")
+        assertEquals(DEFAULT_SHAPE_CORNER, ModifierRecipeCodec.decode(withoutCorner)!!.shape!!.corner)
+
+        val outOfRange = encoded.replace("shape.corner=0.25", "shape.corner=7")
+        assertEquals(1f, ModifierRecipeCodec.decode(outOfRange)!!.shape!!.corner)
+    }
+
+    @Test fun presetCarriesTheShapeCorner() {
+        val payload = ModifierPresetPayload(shape = ModifierPresetShape(IconShape.SQUIRCLE, false, 1f, gradient, 0.3f))
+        assertEquals(0.3f, decodeModifierPreset(encodeModifierPreset(payload))!!.shape!!.corner)
+    }
+
     @Test fun missingGroupsRemainDistinctFromConfiguredDisabledGroups() {
         val absent = recipe().copy(shape = null, outline = null, shadow = null)
         val disabled = recipe().copy(

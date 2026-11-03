@@ -61,7 +61,8 @@ internal fun captureModifierPreset(
             shape = adjustments.iconShape,
             crop = adjustments.shapeCrop,
             scale = adjustments.shapeScale,
-            style = adjustments.shapeStyle
+            style = adjustments.shapeStyle,
+            corner = adjustments.shapeCorner
         )
     } else null,
     outline = if (ModifierPresetGroup.OUTLINE in groups) {
@@ -101,6 +102,7 @@ internal fun applyModifierPreset(
         adjustments.shapeCrop = shape.crop
         adjustments.shapeScale = shape.scale
         adjustments.shapeStyle = shape.style
+        adjustments.shapeCorner = shape.corner
     }
     payload.outline?.let { outline ->
         adjustments.outlineMode = outline.mode

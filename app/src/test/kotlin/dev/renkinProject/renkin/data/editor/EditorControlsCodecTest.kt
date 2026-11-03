@@ -44,6 +44,17 @@ class EditorControlsCodecTest {
         assertEquals(STORED_FORMAT_SHA256, hash)
     }
 
+    @Test fun shapeCornerRoundTripsAndVersionOneDraftsUseTheDefault() {
+        val cornered = fixture().let { it.copy(adjustments = it.adjustments.copy(shapeCorner = 0.2f)) }
+        val bytes = EditorControlsCodec.encode(cornered)
+        assertEquals(0.2f, roundTrip(cornered).adjustments.shapeCorner)
+
+        val versionOne = bytes.copyOf(bytes.size - Float.SIZE_BYTES).intAt(Int.SIZE_BYTES, 1)
+        val restored = EditorControlsCodec.decode(versionOne)
+        assertEquals(DEFAULT_SHAPE_CORNER, restored.adjustments.shapeCorner)
+        assertEquals(cornered.copy(adjustments = cornered.adjustments.copy(shapeCorner = DEFAULT_SHAPE_CORNER)), restored)
+    }
+
     @Test fun allControlsCaptureAndRoundTripWithDistinctValues() {
         val editor = session().apply {
             selectedTab = 3; source = Source.entries.last(); browsingIconPacks = true
@@ -146,7 +157,8 @@ class EditorControlsCodecTest {
         val bytes = EditorControlsCodec.encode(fixture())
         assertEquals(0x524B4544, ByteBuffer.wrap(bytes).int)
         rejected { EditorControlsCodec.decode(bytes.intAt(0, 0)) }
-        rejected { EditorControlsCodec.decode(bytes.intAt(4, 2)) }
+        rejected { EditorControlsCodec.decode(bytes.intAt(4, 0)) }
+        rejected { EditorControlsCodec.decode(bytes.intAt(4, EditorControlsCodec.VERSION + 1)) }
         rejected { EditorControlsCodec.decode(bytes.intAt(8, 4)) }
         rejected { EditorControlsCodec.decode(bytes + 0) }
         bytes.indices.forEach { size -> rejected { EditorControlsCodec.decode(bytes.copyOf(size)) } }
@@ -230,4 +242,4 @@ class EditorControlsCodecTest {
     }
 }
 
-private const val STORED_FORMAT_SHA256 = "acd2e102b213dacaf2e1c9f279d9f5019c222d29a434dcef5eb8d0ab1cdba7ea"
+private const val STORED_FORMAT_SHA256 = "acf85539be489e06519421ac027fa47861a2fe5dd5842ea110ad6ab658b114ac"

@@ -145,7 +145,7 @@ internal class IconAdjustmentPipeline(
     private fun applyShape(source: Bitmap, shape: ShapeModifier): Bitmap {
         val size = maxOf(source.width, source.height, 256)
         val sizeF = size.toFloat()
-        val path = IconShapes.path(shape.shape, sizeF * shape.scale)
+        val path = IconShapes.path(shape.shape, sizeF * shape.scale, shape.corner)
             ?: return source
         path.offset(
             sizeF * (1f - shape.scale) / 2f,

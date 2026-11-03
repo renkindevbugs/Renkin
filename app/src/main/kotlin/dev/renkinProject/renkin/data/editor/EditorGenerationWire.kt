@@ -47,7 +47,9 @@ internal fun EditorArtworkWriter.generation(value: EditorGenerationSnapshot) {
     }
     with(stack.transform) { number(scale); number(offsetX); number(offsetY) }
     boolean(stack.shape != null)
-    stack.shape?.let { text(it.shape.name); boolean(it.crop); number(it.scale); boolean(it.fill != null); it.fill?.let(::fill) }
+    stack.shape?.let {
+        text(it.shape.name); boolean(it.crop); number(it.scale); boolean(it.fill != null); it.fill?.let(::fill); number(it.corner)
+    }
     boolean(stack.outline != null)
     stack.outline?.let { text(it.mode.name); number(it.width); fill(it.fill) }
     boolean(stack.shadow != null)
@@ -65,7 +67,8 @@ internal fun EditorArtworkWriter.generation(value: EditorGenerationSnapshot) {
     value.backgroundMasks.forEach { ensureActive(); text(it.action.name); text(it.artwork) }
 }
 
-internal fun EditorArtworkReader.generation(): EditorGenerationSnapshot {
+// Captures written before the shape corner existed lack it; they decode with the default corner.
+internal fun EditorArtworkReader.generation(withShapeCorner: Boolean): EditorGenerationSnapshot {
     val source = IconSourceOptions(
         primarySource = enumValueOf<Source>(text()), primaryTextType = enumValueOf<TextType>(text()), primaryIconPack = text(),
         secondarySource = enumValueOf<Source>(text()), secondaryImageEdit = enumValueOf<ImageEdit>(text()),
@@ -86,7 +89,10 @@ internal fun EditorArtworkReader.generation(): EditorGenerationSnapshot {
     }
     val effect = EffectModifier(imageEdit, colorizer, edges, removal, segments)
     val transform = TransformModifier(number(), number(), number())
-    val shape = if (boolean()) ShapeModifier(enumValueOf<IconShape>(text()), boolean(), number(), if (boolean()) fill() else null) else null
+    val shape = if (boolean()) {
+        ShapeModifier(enumValueOf<IconShape>(text()), boolean(), number(), if (boolean()) fill() else null,
+            if (withShapeCorner) number() else DEFAULT_SHAPE_CORNER)
+    } else null
     val outline = if (boolean()) OutlineModifier(enumValueOf<OutlineMode>(text()), number(), fill()) else null
     val shadow = if (boolean()) ShadowModifier(number(), number(), number(), boolean(), style(), number(), boolean()) else null
     val pack = MaterialYouPackModifier(optionalInt(), optionalInt(), input.readInt(), optionalStyle(), optionalStyle(), number())

@@ -62,6 +62,7 @@ import dev.renkinProject.renkin.data.GlobalIconScaleKey
 import dev.renkinProject.renkin.data.GlobalShapeCropKey
 import dev.renkinProject.renkin.data.GlobalShapeKey
 import dev.renkinProject.renkin.data.GlobalShapeScaleKey
+import dev.renkinProject.renkin.data.globalShapeCorner
 import dev.renkinProject.renkin.data.normalizeGlobalScalePercent
 
 /** Whether the persisted vector/Material You path options are relevant to this source chain. */
@@ -200,7 +201,7 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
             ) / 100f),
             shape = ShapeModifier(shape, shapeCrop, normalizeGlobalScalePercent(
                 preferences.getIntValue(GlobalShapeScaleKey, 100)
-            ) / 100f),
+            ) / 100f, corner = preferences.globalShapeCorner()),
             outline = OutlineModifier(
                 if (preferences.getBooleanValue(OutlineAddKey)) OutlineMode.ADD else OutlineMode.NONE,
                 normalizeOutlineWidth(preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)).toFloat(),

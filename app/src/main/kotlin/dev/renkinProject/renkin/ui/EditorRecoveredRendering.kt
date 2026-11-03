@@ -69,7 +69,7 @@ internal class EditorRecoveredRendering(
                 saved.source.useFullApplicationIcon, ui.source.useFullApplicationIcon)
         )
         val shapeChanged = old.shape != now.shape || old.shapeCrop != now.shapeCrop ||
-            old.shapeScale != now.shapeScale || plateChanged
+            old.shapeScale != now.shapeScale || old.shapeCorner != now.shapeCorner || plateChanged
         val shape = if (!shapeChanged) stack.shape else proposed.shape?.let { candidate ->
             stack.shape?.let { original ->
                 val fill = if (original.fill != null && plateChanged) {
@@ -79,7 +79,8 @@ internal class EditorRecoveredRendering(
                     shape = edited(old.shape != now.shape, original.shape, candidate.shape),
                     crop = edited(old.shapeCrop != now.shapeCrop, original.crop, candidate.crop),
                     scale = edited(old.shapeScale != now.shapeScale, original.scale, candidate.scale),
-                    fill = fill
+                    fill = fill,
+                    corner = edited(old.shapeCorner != now.shapeCorner, original.corner, candidate.corner)
                 )
             } ?: candidate
         }

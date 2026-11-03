@@ -2160,8 +2160,13 @@ identically and none of them re-implements the maths.
   `ModifierDialogHost` presents the colour, position and brush dialogs through the same host callbacks.
   Each section retains its own transient sheet state; values stay in `AdjustmentState`, and preview
   callbacks still come from `ModifierPreviews`. Shadow's encoded Cancel snapshot remains local to
-  its section. `IconShapeSection.kt` also supplies the shared geometry-based `ShapeSwatch` and
-  `shapeLabel` used by Global Options and preset summaries.
+  its section. `IconShapeSection.kt` also supplies the shared geometry-based `ShapePicker`,
+  `ShapeCornerSlider`, `ShapeSwatch` and `shapeLabel` used by Global Options and preset summaries.
+  `ShapeModifier.corner` (0 = sharp, 1 = circle) applies only to the squircle; its default 0.6
+  reproduces `MaterialShapes.Square`. The default is omitted from recipes/presets and stored as an
+  absent `GLOBAL_SHAPE_CORNER` key, so documents of users who never change it stay readable by
+  older builds. Editor controls and complete captures carry it from version 2 and still decode
+  version 1 with the default.
   `ui/MaterialYouPackAdjustmentState.kt` owns the pack-specific draft, compatible Saver and centred
   line-weight slider mapping; its package and saved format are unchanged.
 - **Segments** (`icon/creator/ColorSegments.kt`) cluster an icon into colour regions (k-means over
