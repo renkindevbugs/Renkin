@@ -25,12 +25,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ImageNotSupported
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -146,53 +140,8 @@ fun ProvideModifierPresets(
     CompositionLocalProvider(LocalModifierPresets provides store, content = content)
 }
 
-@Composable
-internal fun RecentModifierPresetsSection(
-    adjustments: AdjustmentState,
-    previews: ModifierPreviews?,
-    onPresetLoaded: (ModifierPresetApplication) -> Unit
-) {
-    val store = LocalModifierPresets.current
-    val recent = store.shortcutUsage.recentIds.mapNotNull { id -> store.presets.find { it.id == id } }
-    var manageOpen by rememberSaveable(previews?.presetSourceKey) { mutableStateOf(false) }
-    val load: (ModifierPreset) -> Unit = { preset ->
-        decodeModifierPreset(preset.payload)?.let { payload ->
-            onPresetLoaded(applyModifierPreset(payload, adjustments))
-            adjustments.loadedPresetId = preset.id
-        }
-    }
-    AnimatedVisibility(
-        visible = store.shortcutUsage.visible && recent.isNotEmpty(),
-        enter = fadeIn(MaterialTheme.motionScheme.fastEffectsSpec()) +
-            expandVertically(MaterialTheme.motionScheme.fastSpatialSpec()),
-        exit = fadeOut(MaterialTheme.motionScheme.fastEffectsSpec()) +
-            shrinkVertically(MaterialTheme.motionScheme.fastSpatialSpec())
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(R.string.recentModifierPresets),
-                    style = MaterialTheme.typography.titleSmallEmphasized, modifier = Modifier.weight(1f))
-                TextButton(onClick = { manageOpen = true }) { Text(stringResource(R.string.modifierPresetsManage)) }
-                IconButton(onClick = store::dismissShortcuts) {
-                    Icon(Icons.Filled.Close, stringResource(R.string.dismissRecentModifierPresets))
-                }
-            }
-            recent.forEach { preset ->
-                key(preset.id) {
-                    ModifierPresetRow(preset, preset.id == adjustments.loadedPresetId, previews,
-                        onClick = { load(preset) }, onUpdate = null)
-                }
-            }
-        }
-    }
-    if (manageOpen) ModifierPresetsDialog(
-        presets = store.presets,
-        selectedPresetId = adjustments.loadedPresetId,
-        previews = previews,
-        onPick = { load(it); manageOpen = false },
-        onDismiss = { manageOpen = false }
-    )
-}
+/** How many presets the inline strip offers before the user has to open Manage. */
+private const val RECENT_PRESET_COUNT = 3
 
 /**
  * The Modifier tab's preset section: the most recent presets as one-tap tiles, the save entry
@@ -240,10 +189,12 @@ internal fun ModifierPresetsSection(
     val load: (ModifierPreset) -> Unit = { preset ->
         decodeModifierPreset(preset.payload)?.let { payload ->
             onPresetLoaded(applyModifierPreset(payload, adjustments))
+            store.markUsed(preset.id)
             adjustments.loadedPresetId = preset.id
             selectedPresetId = preset.id
         }
     }
+    val recent = remember(store.presets) { store.presets.take(RECENT_PRESET_COUNT) }
 
     Column(
         modifier = modifier,
@@ -261,13 +212,31 @@ internal fun ModifierPresetsSection(
             }
         }
 
-        store.presets.firstOrNull { it.id == adjustments.loadedPresetId }?.let { selected ->
-            TextButton(onClick = {
-                decodeModifierPreset(selected.payload)?.let { existing ->
-                    store.update(selected.id, captureModifierPreset(adjustments, imageEdit, iconColor,
-                        existing.includedGroups()))
+        if (recent.isEmpty()) {
+            Text(
+                text = stringResource(R.string.modifierPresetsEmptyHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            recent.forEach { preset ->
+                key(preset.id) {
+                    ModifierPresetRow(
+                        preset = preset,
+                        selected = preset.id == selectedPresetId,
+                        previews = previews,
+                        onClick = { load(preset) },
+                        onUpdate = if (preset.id == selectedPresetId) {
+                            {
+                                decodeModifierPreset(preset.payload)?.let { existing ->
+                                    store.update(preset.id, captureModifierPreset(adjustments, imageEdit,
+                                        iconColor, existing.includedGroups()))
+                                }
+                            }
+                        } else null
+                    )
                 }
-            }) { Text(stringResource(R.string.modifierPresetUpdate)) }
+            }
         }
 
         OutlinedButton(

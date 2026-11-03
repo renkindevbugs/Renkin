@@ -2004,11 +2004,10 @@ follow-ups; CRC verifies transport integrity only.
   coverage. Done writes both sources in one preference transaction under the opening profile
   session, then refreshes once. Source
   selectors moved out of Advanced; its modifiers remain there.
-- **Editor shortcuts**: two recently confirmed presets per profile appear above the Modifier
-  controls. `ModifierShortcutStore` keeps device-local hints in separate shared preferences,
-  outside profile recipes and portable backups. A committed modifier Apply reopens dismissed
-  shortcuts; four committed per-icon Applies without modifiers hide them. Loading/canceling does
-  not record usage. Manage and Save remain at the bottom even when the shortcuts are hidden.
+- **Modifier presets**: the preset section at the bottom of the Modifier tab lists the three most
+  recently loaded presets (`lastUsedAt`); the selected row offers Update, and Manage/Save stay
+  below it. The former shortcut strip above the Modifier controls was removed on request;
+  `ModifierShortcutStore` still records confirmed applies but nothing displays them.
 - **New enlargement**: a square canvas frame/grid and four preview-only launcher masks. Adaptive
   previews compose their original layers in the same 72dp viewport before masking; applying a
   different preview mask never changes the exported icon. The editor remembers the chosen mask.
