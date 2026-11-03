@@ -1059,8 +1059,7 @@
     </plurals>
     <string name="previewMaskSquare">Square</string>
     <string name="previewMaskRounded">Rounded square</string>
-    <string name="recentModifierPresets">Recent presets</string>
-    <string name="dismissRecentModifierPresets">Hide recent presets until modifiers are used again</string>
+    <string name="modifierPresetsEmptyHint">Nothing saved yet. Tune the modifiers above, then save them as a preset.</string>
     <string name="sourceNoAdditionalIcons">No additional icons</string>
     <string name="sortAppsWithFilters">Sort and filter apps. Active filters: %1$d</string>
     <string name="sourceSecondaryOptional">Optional</string>
