@@ -59,6 +59,7 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Settings
@@ -1455,7 +1456,7 @@ fun OpenAppOptions(
     val editorViewModel: EditorSessionViewModel = hiltViewModel()
     val draftOwner: EditorDraftRecoveryViewModel = hiltViewModel()
     LaunchedEffect(draftOwner, editorViewModel) { draftOwner.connect(editorViewModel) }
-    val autosaveState by draftOwner.autosaveState.collectAsStateWithLifecycle()
+    val autosaveState by draftOwner.autosaveNoticeState.collectAsStateWithLifecycle(initialValue = null)
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val activity = LocalContext.current
     val toaster = LocalToaster.current
@@ -1604,6 +1605,8 @@ fun TitleBar(
     val watchViewModel: WatchViewModel = hiltViewModel()
     val completedCount by watchViewModel.completedCount.collectAsStateWithLifecycle()
     val mainViewModel: MainViewModel = hiltViewModel()
+    val draftOwner: EditorDraftRecoveryViewModel = hiltViewModel()
+    val hasSavedEdit by draftOwner.hasSavedEdit.collectAsStateWithLifecycle()
 
     TitleBarContent(
         scrollBehavior = scrollBehavior,
@@ -1615,7 +1618,20 @@ fun TitleBar(
         onWatch = { openWatch = true },
         onInfo = { openInfo = true },
         onSettings = { openSettings = true },
-        title = { Box(Modifier.introTarget(IntroTarget.PROFILE)) { ProfileSwitcherTitle() } }
+        title = {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f).introTarget(IntroTarget.PROFILE)) { ProfileSwitcherTitle() }
+                if (hasSavedEdit) {
+                    val label = stringResource(R.string.editorAutosaveReview)
+                    RenkinTooltipBox(label) {
+                        IconButton(onClick = { draftOwner.reviewSavedEdit() }) {
+                            Icon(Icons.Filled.Restore, contentDescription = label,
+                                tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+            }
+        }
     )
 
     if (openSettings) {
