@@ -28,13 +28,17 @@ class AppFilterXml: XmlMemoryFile() {
                      , defaultHour: String
                      , defaultMinute: String
                      , hourLayerIndex: String
-                     , minuteLayerIndex: String) {
+                     , minuteLayerIndex: String
+                     , defaultSecond: String = "0"
+                     , secondLayerIndex: String = "-1") {
         startTag("dynamic-clock")
         attribute("drawable", drawableName)
         attribute("defaultHour", defaultHour)
         attribute("defaultMinute", defaultMinute)
         attribute("hourLayerIndex", hourLayerIndex)
         attribute("minuteLayerIndex", minuteLayerIndex)
+        attribute("defaultSecond", defaultSecond)
+        attribute("secondLayerIndex", secondLayerIndex)
         endTag("dynamic-clock")
     }
 

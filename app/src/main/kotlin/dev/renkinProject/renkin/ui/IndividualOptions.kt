@@ -97,6 +97,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.animation.AnimatedContent
@@ -496,6 +497,8 @@ internal fun OptionsDialog(
     val externalEditorError = stringResource(R.string.noImageEditorAvailable)
     val context = LocalContext.current
     val externalEditorScope = rememberCoroutineScope()
+    val calendarSelectionScope = rememberCoroutineScope()
+    var calendarSelectionJob by remember(session) { mutableStateOf<Job?>(null) }
 
     LaunchedEffect(selectedTab) {
         // Leaving the icon-pack list re-expands the app bar (other tabs barely scroll).
@@ -643,6 +646,7 @@ internal fun OptionsDialog(
                                     app.toInstalledApplication()
                                 } else null,
                                 onIconSelect = { res, pack, drawableName ->
+                                    calendarSelectionJob?.cancel()
                                     source = Source.ICON_PACK
                                     if (customIconList.firstOrNull()?.resourceId != res.resourceId ||
                                         iconPack != pack.packageName
@@ -655,12 +659,21 @@ internal fun OptionsDialog(
                                     val newPrefix = drawableName.calendarPrefixOrNull().takeIf {
                                         session.purpose == EditorPurpose.APPLICATION
                                     }
-                                    calendarPrefix = newPrefix
-                                    calendarPackName = if (newPrefix != null) pack.packageName else null
-                                    // If calendar was enabled but the new icon can't rotate, disable it
-                                    // (locally — like the toggle, this commits on Apply).
-                                    if (newPrefix == null && calendarEnabled) {
-                                        calendarEnabled = false
+                                    val keepCalendarEnabled = calendarEnabled
+                                    calendarPrefix = null
+                                    calendarPackName = null
+                                    calendarEnabled = false
+                                    if (newPrefix != null) {
+                                        calendarSelectionJob = calendarSelectionScope.launch {
+                                            val validPrefixes = viewModel.calendarPrefixesAmong(pack.packageName, listOf(newPrefix))
+                                            if (source == Source.ICON_PACK && iconPack == pack.packageName &&
+                                                customIconList.singleOrNull()?.resourceId == res.resourceId &&
+                                                newPrefix in validPrefixes) {
+                                                calendarPrefix = newPrefix
+                                                calendarPackName = pack.packageName
+                                                calendarEnabled = keepCalendarEnabled
+                                            }
+                                        }
                                     }
                                 },
                                 onTextTypeChange = { textType = it; activateCreate() },

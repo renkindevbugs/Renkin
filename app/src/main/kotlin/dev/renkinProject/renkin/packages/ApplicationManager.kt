@@ -280,20 +280,23 @@ internal class ApplicationManager(
 
                 if (xmlParser.name == "dynamic-clock") {
                     val xmlDrawable = xmlParser.getAttributeValue(null, "drawable")
-                    val xmlDefaultHour = xmlParser.getAttributeValue(null, "defaultHour")
-                    val xmlDefaultMinute = xmlParser.getAttributeValue(null, "defaultMinute")
-                    val xmlHourLayerIndex = xmlParser.getAttributeValue(null, "hourLayerIndex")
-                    val xmlMinuteLayerIndex = xmlParser.getAttributeValue(null, "minuteLayerIndex")
+                    val xmlDefaultHour = xmlParser.getAttributeValue(null, "defaultHour") ?: "0"
+                    val xmlDefaultMinute = xmlParser.getAttributeValue(null, "defaultMinute") ?: "0"
+                    val xmlHourLayerIndex = xmlParser.getAttributeValue(null, "hourLayerIndex") ?: "-1"
+                    val xmlMinuteLayerIndex = xmlParser.getAttributeValue(null, "minuteLayerIndex") ?: "-1"
+                    val xmlDefaultSecond = xmlParser.getAttributeValue(null, "defaultSecond") ?: "0"
+                    val xmlSecondLayerIndex = xmlParser.getAttributeValue(null, "secondLayerIndex") ?: "-1"
 
-                    if (xmlDrawable != null && xmlDefaultHour != null && xmlDefaultMinute != null
-                        && xmlHourLayerIndex != null && xmlMinuteLayerIndex != null) {
+                    if (xmlDrawable != null) {
                         list.add(
                             RawDynamicClock(
                                 xmlDrawable,
                                 xmlDefaultHour,
                                 xmlDefaultMinute,
                                 xmlHourLayerIndex,
-                                xmlMinuteLayerIndex
+                                xmlMinuteLayerIndex,
+                                xmlDefaultSecond,
+                                xmlSecondLayerIndex
                             )
                         )
                     }

@@ -17,7 +17,9 @@ data class RawDynamicClock(
     val defaultHour: String,
     val defaultMinute: String,
     val hourLayerIndex: String,
-    val minuteLayerIndex: String
+    val minuteLayerIndex: String,
+    val defaultSecond: String = "0",
+    val secondLayerIndex: String = "-1"
 ): RawElement()
 
 /**

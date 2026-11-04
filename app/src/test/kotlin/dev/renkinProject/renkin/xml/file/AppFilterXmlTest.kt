@@ -1,6 +1,9 @@
 package dev.renkinProject.renkin.xml.file
 
 import android.app.Application
+import android.util.Xml
+import dev.renkinProject.renkin.data.RawDynamicClock
+import dev.renkinProject.renkin.packages.ApplicationManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -8,6 +11,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.RuntimeEnvironment
+import org.xmlpull.v1.XmlPullParser
 
 /**
  * Verifies the appfilter.xml a built pack ships. The core invariant: apps are matched by their
@@ -58,6 +63,27 @@ class AppFilterXmlTest {
         assertTrue(xml.contains("<calendar"))
         assertTrue(xml.contains("component=\"ComponentInfo{com.cal/com.cal.Main}\""))
         assertTrue(xml.contains("prefix=\"day_\""))
+    }
+
+    @Test
+    fun dynamicClockRoundTripsAllThreeHandsAndAuthoredTime() {
+        val xml = render { dynamicClock("clock", "10", "10", "0", "1", "30", "2") }
+        assertEquals(RawDynamicClock("clock", "10", "10", "0", "1", "30", "2"), parseClock(xml))
+    }
+
+    @Test
+    fun dynamicClockAcceptsOmittedHandsAndDefaultTime() {
+        val xml = """<resources><dynamic-clock drawable="clock" minuteLayerIndex="0" /></resources>"""
+        assertEquals(RawDynamicClock("clock", "0", "0", "-1", "0", "0", "-1"), parseClock(xml))
+    }
+
+    private fun parseClock(xml: String): RawDynamicClock {
+        val parser = Xml.newPullParser().apply { setInput(xml.reader()) }
+        val manager = ApplicationManager(RuntimeEnvironment.getApplication())
+        val method = ApplicationManager::class.java.getDeclaredMethod(
+            "getAppFilterRawElements", XmlPullParser::class.java, List::class.java
+        ).apply { isAccessible = true }
+        return (method.invoke(manager, parser, null) as List<*>).filterIsInstance<RawDynamicClock>().single()
     }
 
     @Test
