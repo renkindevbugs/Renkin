@@ -56,8 +56,8 @@ class LauncherFormatTest {
         val text = xml.getBytes().toString(Charsets.UTF_8)
 
         assertTrue(text.contains("xmlns:android=\"http://schemas.android.com/apk/res/android\""))
-        val first = text.indexOf("<item android:drawable=\"@drawable/clock_layer0\" />")
-        val second = text.indexOf("<item android:drawable=\"@drawable/clock_layer1\" />")
+        val first = text.indexOf("<bitmap android:src=\"@drawable/clock_layer0\"")
+        val second = text.indexOf("<bitmap android:src=\"@drawable/clock_layer1\"")
         assertTrue(first in 1 until second)
         assertTrue(text.contains("</layer-list>"))
     }

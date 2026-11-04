@@ -2199,6 +2199,15 @@ each successful build and after "Clear icons". `updatedKeys` tracks this session
 
 ## Icon pack build
 
+Dynamic clocks are copied from an installed source pack only while the built artwork still
+matches its appfilter-mapped clock. `DynamicClockExporter` captures static artwork in a common
+layer canvas and retains each declared hand's `RotateDrawable` angles and pivot for XML export.
+Adaptive clocks keep their background, foreground layer stack, monochrome and legacy fallback;
+hour/minute/second metadata travels in `appfilter.xml`. Missing hands use index -1. Unsupported
+hand drawables, edited artwork and themed builds retain the static export. Default application
+icons do not acquire dynamic-clock support. The editor validates calendar candidates through
+the same repository check as browser badges before offering the calendar-day switch.
+
 `IconPackBuildService` receives an immutable active-profile snapshot from `ApplicationProvider`,
 then resolves calendar/lock data and delegates assembly to `IconPackBuilder`. The provider holds
 the profile-operation gate throughout the build and persists that same snapshot after the install

@@ -255,33 +255,38 @@ class IconPackBuilder(
                 val layeredIcon = (app.createdIcon as? AdaptiveIconPackDrawable)?.takeUnless { themed }
                 val legacyName = if (layeredIcon != null) "${appFileName}_legacy" else appFileName
 
-                // Live clock: copied from the source pack when this app's icon is that pack's
-                // untouched dynamic-clock drawable. Skipped in themed mode — the copied hand
-                // layers wouldn't follow the tinting. Adaptive snapshots own their layers and must
-                // not be replaced with the clock exporter's foreground-only layer list.
-                val clock = if (themed || layeredIcon != null) null else app.sourcePackName
+                // Themed builds keep the user's static tint; plain clocks retain their source rotation.
+                val clock = if (themed) null else app.sourcePackName
                     ?.takeIf { it.isNotEmpty() }
                     ?.let { clockExporter.clockIconFor(app, it, app.createdIcon) }
 
                 val exportAsAdaptive = themed || app.createdIcon.isAdaptiveIcon()
-                if (layeredIcon != null) {
-                    exportAdaptiveLayers(apkModule, packageBlock, layeredIcon, appFileName, legacyName)
-                }
-                else if (clock != null) {
+                if (clock != null) {
                     val layerList = LayerListXml()
                     clock.layers.forEachIndexed { index, layer ->
                         val layerName = "${appFileName}_layer$index"
-                        createBitmapResource(apkModule, packageBlock, layer, layerName)
-                        layerList.item(layerName)
+                        createBitmapResource(apkModule, packageBlock, layer.bitmap, layerName, "nodpi")
+                        val rotation = layer.rotation
+                        if (rotation == null) layerList.item(layerName)
+                        else layerList.rotatingItem(layerName, rotation.fromDegrees, rotation.toDegrees, rotation.pivotX, rotation.pivotY)
                     }
-                    createXmlDrawableResource(apkModule, packageBlock, layerList, appFileName)
+                    if (layeredIcon != null) {
+                        exportAdaptiveLayers(apkModule, packageBlock, layeredIcon, appFileName, legacyName, clockLayers = layerList)
+                    } else {
+                        createXmlDrawableResource(apkModule, packageBlock, layerList, appFileName)
+                    }
                     appfilterXml.dynamicClock(
                         appFileName,
                         clock.meta.defaultHour,
                         clock.meta.defaultMinute,
                         clock.meta.hourLayerIndex,
-                        clock.meta.minuteLayerIndex
+                        clock.meta.minuteLayerIndex,
+                        clock.meta.defaultSecond,
+                        clock.meta.secondLayerIndex
                     )
+                }
+                else if (layeredIcon != null) {
+                    exportAdaptiveLayers(apkModule, packageBlock, layeredIcon, appFileName, legacyName)
                 }
                 else if (exportAsAdaptive && PackageVersion.is26OrMore()) {
                     val adaptive = AdaptiveIconXml()
@@ -550,13 +555,18 @@ class IconPackBuilder(
         icon: AdaptiveIconPackDrawable,
         name: String,
         legacyName: String,
-        type: String = "drawable"
+        type: String = "drawable",
+        clockLayers: LayerListXml? = null
     ) {
         val fallback = createBitmapResource(apkModule, packageBlock, icon.toBitmap(), name, type = type)
         if (legacyName != name) {
             packageBlock.getOrCreate("", type, legacyName).setValueAsString(fallback.valueAsString)
         }
-        createBitmapResource(apkModule, packageBlock, icon.foreground, "${name}_foreground", "nodpi")
+        if (clockLayers == null) {
+            createBitmapResource(apkModule, packageBlock, icon.foreground, "${name}_foreground", "nodpi")
+        } else {
+            createXmlDrawableResource(apkModule, packageBlock, clockLayers, "${name}_foreground")
+        }
         createBitmapResource(apkModule, packageBlock, icon.background, "${name}_background", "nodpi")
         icon.monochrome?.let {
             createBitmapResource(apkModule, packageBlock, it, "${name}_monochrome", "nodpi")
