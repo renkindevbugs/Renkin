@@ -879,9 +879,11 @@ Metadata failures produce a visible Retry/confirmed-discard offer; there is no e
 An unavailable reset lease disables Discard. Retry never resets unreadable metadata. An owner
 from another existing profile gets a named-profile message without switching; a deleted profile
 or obsolete baseline gets an informational discard option. Not now retains the files and
-suppresses that checkpoint in the current profile for this run; switching profiles checks again.
+suppresses that checkpoint for the rest of this process, including profile switches and Activity recreation.
 The valid Restore offer also has Not now; Back/outside dismissal postpones it without deleting
-files. Postponement is memory-only and intentionally expires after process restart.
+files. `EditorDraftRecoverySession` owns this memory-only choice, which expires after process restart.
+The home title shows a Restore action to the right of the profile while a saved draft is available;
+it explicitly reopens recovery, including the owning-profile prompt when necessary.
 The prompt waits behind onboarding, release notes, pending watch suggestions and the main
 backup/profile progress dialogs. It uses the shared alert/confirmation components and English
 strings. No artwork preview consumes the prepared native resources.
@@ -987,7 +989,10 @@ belonged to the closing editor, an existing postponed draft is preserved. Unexpe
 loss and onCleared preserve files. Failed cleanup retains the visible Retry/confirmed-discard
 route. Waiting/Saving/Saved remain internal bookkeeping and add no visible status row.
 Only Blocked and Failed expose text, Retry and confirmed Discard; Blocked uses a neutral color,
-while Failed uses the error color. The previous coherent disk snapshot remains during rendering.
+while Failed uses the error color. After Not now, the matching Blocked notice is hidden for the
+rest of the process; the existing draft still blocks replacement saves and remains available
+through the home Restore action. New checkpoints and actual autosave failures are not hidden.
+The previous coherent disk snapshot remains during rendering.
 Apply and profile Save retain their existing behavior.
 
 Debug captures log `EditorDraftCapture`: cumulative Main artwork-copy milliseconds, elapsed

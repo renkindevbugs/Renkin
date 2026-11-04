@@ -101,6 +101,7 @@ class EditorDraftRecoveryOwnerTest {
     private lateinit var store: EditorDraftStore
     private lateinit var app: PackageInfoStruct
     private lateinit var owner: EditorDraftRecoveryViewModel
+    private val recoverySession = EditorDraftRecoverySession()
     private val editor = EditorSessionViewModel()
 
     @Before fun setup() = runBlocking {
@@ -143,7 +144,7 @@ class EditorDraftRecoveryOwnerTest {
         StorageOperationGate.resetForTests()
     }
 
-    private fun newOwner() = EditorDraftRecoveryViewModel(context, provider, store).also {
+    private fun newOwner(session: EditorDraftRecoverySession = recoverySession) = EditorDraftRecoveryViewModel(context, provider, store, session).also {
         models.put("owner", it)
     }
     private fun stage(vararg applications: PackageInfoStruct) {
@@ -269,13 +270,36 @@ class EditorDraftRecoveryOwnerTest {
         assertEquals(offered.checkpoint, store.checkpoint())
     }
 
-    @Test fun freshOwnerOffersMemoryOnlyPostponedDraftAgain() = runBlocking {
+    @Test fun freshProcessOffersMemoryOnlyPostponedDraftAgain() = runBlocking {
+        val offered = offer()
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        withContext(main) { owner = newOwner(EditorDraftRecoverySession()) }
+        connect()
+        assertEquals(offered.checkpoint, shown<EditorDraftRecoveryState.Offer>().checkpoint)
+    }
+
+    @Test fun newOwnerInSameProcessKeepsPostponedDraftQuietUntilHomeReview() = runBlocking {
         val offered = offer()
         withContext(main) { owner.postpone(offered) }
         shown<EditorDraftRecoveryState.Hidden>()
         withContext(main) { owner = newOwner() }
-        connect()
+        connect(); idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        assertTrue(owner.hasSavedEdit.value)
+        withContext(main) { owner.reviewSavedEdit() }
         assertEquals(offered.checkpoint, shown<EditorDraftRecoveryState.Offer>().checkpoint)
+    }
+
+    @Test fun homeDiscardRemovesRecoveryActionWithoutChangingIcons() = runBlocking {
+        val offered = offer()
+        val original = provider.applicationList.single().createdIcon
+        assertTrue(owner.hasSavedEdit.value)
+        withContext(main) { owner.discard(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        assertFalse(owner.hasSavedEdit.value)
+        assertNull(store.candidate())
+        assertSame(original, provider.applicationList.single().createdIcon)
     }
 
     @Test fun sameEditorReconnectDoesNotDecodeOrRecycleOffer() = runBlocking {
@@ -424,7 +448,7 @@ class EditorDraftRecoveryOwnerTest {
         assertEquals(other, provider.runtimeState.value.activeProfileId)
     }
 
-    @Test fun returningToOwningProfileReoffersPostponedDraftButOtherProfilesStayQuiet() = runBlocking {
+    @Test fun returningToOwningProfileKeepsPostponedDraftQuietUntilHomeReview() = runBlocking {
         val offered = offer()
         val owningProfileId = provider.sessionToken.profileId
         withContext(main) { owner.postpone(offered) }
@@ -436,6 +460,10 @@ class EditorDraftRecoveryOwnerTest {
         provider.switchProfile(third); idle()
         assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
         provider.switchProfile(owningProfileId)
+        idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        assertTrue(owner.hasSavedEdit.value)
+        withContext(main) { owner.reviewSavedEdit() }
         assertEquals(offered.checkpoint, shown<EditorDraftRecoveryState.Offer>().checkpoint)
     }
 
@@ -622,8 +650,12 @@ class EditorDraftRecoveryOwnerTest {
         quiet()
         assertEquals(offered.checkpoint, store.checkpoint())
         assertEquals(app.originalName, owner.autosaveState.value?.draftApplicationName)
+        assertNull(owner.autosaveNoticeState.first())
         withContext(main) { owner.closeLive("live") }
         quiet(); assertEquals(offered.checkpoint, store.checkpoint())
+        openLive()
+        withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED } }
+        assertNull(owner.autosaveNoticeState.first())
     }
 
     @Test fun confirmedForeignDraftDiscardAdmitsCurrentEdit() = runBlocking {
@@ -635,6 +667,21 @@ class EditorDraftRecoveryOwnerTest {
         val blocked = withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED }!! }
         withContext(main) { owner.discardForAutosave(blocked) }
         assertEquals(0.7f, savedScale(saved(offered.checkpoint)), 0f)
+    }
+
+    @Test fun postponementDoesNotHideAnotherCheckpointBlockingTheEditor() = runBlocking {
+        val offered = offer()
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        val session = openLive()
+        publish(session) { adjustments.iconScale = 0.7f }
+        withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED } }
+        assertNull(owner.autosaveNoticeState.first())
+        val replacement = save()
+        withContext(main) { owner.setBackgrounded(true) }
+        withTimeout(30_000) { owner.autosaveState.first { it?.checkpoint == replacement.checkpoint } }
+        assertEquals(replacement.checkpoint, owner.autosaveNoticeState.first()?.checkpoint)
+        assertEquals(replacement.checkpoint, store.checkpoint())
     }
 
     @Test fun blockedReviewClosesCurrentEditorAndReoffersPreservedDraft() = runBlocking {
@@ -701,6 +748,7 @@ class EditorDraftRecoveryOwnerTest {
         publish(session) { customText = "x".repeat(EditorControlsCodec.MAX_TEXT_BYTES + 1) }
         val failed = withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.FAILED }!! }
         assertEquals(first.checkpoint, store.checkpoint())
+        assertSame(failed, owner.autosaveNoticeState.first())
         publish(session) { adjustments.iconScale = 0.6f }
         quiet(); assertSame(failed, owner.autosaveState.value)
         publish(session) { customText = "" }
