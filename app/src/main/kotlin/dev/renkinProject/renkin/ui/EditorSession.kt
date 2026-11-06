@@ -180,9 +180,19 @@ internal class EditorSession(
     private fun clearCreateSelection() {
         customIconList = emptyList()
         materialYouPackAdjustments.reset()
+        clearCalendar()
+    }
+
+    private fun clearCalendar() {
         calendarEnabled = false
         calendarPrefix = null
         calendarPackName = null
+    }
+
+    // Pack day icons only belong to a pack pick; any other create source would export them
+    // as the rotating icon even though the user chose different artwork.
+    private fun syncCalendarWithSource() {
+        if (source != Source.ICON_PACK) clearCalendar()
     }
 
     fun selectCreateSource(newSource: Source) {
@@ -200,6 +210,7 @@ internal class EditorSession(
         if (modifierReplay != null && source == Source.ICON_PACK && customIconList.isEmpty()) return
         browsingIconPacks = false
         selectNewSource()
+        syncCalendarWithSource()
         vectorEditState.reset(restoredSourceContainsBakedModifierEdits)
         if (draft.origin != IconOrigin.CREATE) {
             draft.selectCreate()

@@ -143,7 +143,10 @@ internal class CalendarDayStyler(
         days: Map<Int, ResourceDrawable>,
         options: GenerationOptions
     ): Map<Int, IconPackDrawable>? {
+        // Every styled app already has a created icon, so without override the generator skips it
+        // and only the retained candidate could ever verify.
         val packOptions = options.withSource { copy(primarySource = Source.ICON_PACK, primaryIconPack = pack) }
+            .copy(override = true)
         val rendered = linkedMapOf<Int, IconPackDrawable>()
         for ((day, drawable) in days) {
             rendered[day] = iconGenService.getIcon(app, packOptions, drawable) ?: return null
