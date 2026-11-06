@@ -12,7 +12,9 @@ internal data class CalendarSelection(
 
 internal data class CalendarBuildData<T : Any>(
     val mappings: Map<InstalledApplication, String>,
-    val drawables: Map<String, T>
+    val drawables: Map<String, T>,
+    // Exported prefix -> the source pack its days were loaded from.
+    val sourcePacks: Map<String, String> = emptyMap()
 )
 
 private data class CalendarSourceKey(val pack: String, val prefix: String)
@@ -75,5 +77,41 @@ internal fun <T : Any> buildCalendarData(
         days.forEach { (day, drawable) -> drawables[exportedPrefix + day] = drawable }
     }
 
-    return CalendarBuildData(mappings, drawables)
+    val sourcePacks = exportedPrefixes.entries.associate { (key, prefix) -> prefix to key.pack }
+    return CalendarBuildData(mappings, drawables, sourcePacks)
+}
+
+internal inline fun <T : Any, R : Any> CalendarBuildData<T>.mapDrawables(transform: (T) -> R): CalendarBuildData<R> =
+    CalendarBuildData(mappings, drawables.mapValues { transform(it.value) }, sourcePacks)
+
+/**
+ * Gives each app in [styledDays] its own day set, rendered with that app's modifiers, instead of
+ * the shared source days. Shared sets that no app maps to any more are dropped from the export.
+ */
+internal fun <T : Any> CalendarBuildData<T>.withStyledDays(
+    styledDays: Map<InstalledApplication, Map<Int, T>>
+): CalendarBuildData<T> {
+    val styled = styledDays.filterKeys { it in mappings }
+    if (styled.isEmpty()) return this
+
+    val styledMappings = LinkedHashMap(mappings)
+    val styledDrawables = linkedMapOf<String, T>()
+    val styledSources = linkedMapOf<String, String>()
+    val styledPrefixes = mutableSetOf<String>()
+    styled.keys.sortedBy { it.toComponentInfo() }.forEachIndexed { index, app ->
+        val prefix = "renkin_calendar_styled_${index + 1}_"
+        styledPrefixes += prefix
+        sourcePacks[mappings.getValue(app)]?.let { styledSources[prefix] = it }
+        styledMappings[app] = prefix
+        styled.getValue(app).forEach { (day, drawable) -> styledDrawables[prefix + day] = drawable }
+    }
+
+    val keptShared = styledMappings.values.toSet() - styledPrefixes
+    val keptDrawables = linkedMapOf<String, T>()
+    keptShared.forEach { prefix ->
+        (1..31).forEach { day -> drawables[prefix + day]?.let { keptDrawables[prefix + day] = it } }
+    }
+    keptDrawables.putAll(styledDrawables)
+    val keptSources = sourcePacks.filterKeys { it in keptShared } + styledSources
+    return CalendarBuildData(styledMappings, keptDrawables, keptSources)
 }

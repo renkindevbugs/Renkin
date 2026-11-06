@@ -3,7 +3,6 @@ package dev.renkinProject.renkin.apk
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.Drawable
@@ -21,7 +20,6 @@ import dev.renkinProject.renkin.packages.appFilterDrawableName
 import dev.renkinProject.renkin.packages.PackageResourceResolver
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.PackageVersion
-import kotlin.math.abs
 
 /**
  * Copies a source pack's live-clock icon (Nova/Lawnchair `<dynamic-clock>`) into the built
@@ -81,10 +79,10 @@ class DynamicClockExporter(
         // otherwise the user's edited static icon wins and no clock is copied.
         if (adaptive != null) {
             val bakedAdaptive = bakedIcon as? AdaptiveIconPackDrawable ?: return null
-            if (!looksAlike(render(layered), bakedAdaptive.foreground) ||
-                !looksAlike(render(adaptive.background), bakedAdaptive.background)) return null
+            if (!render(layered).looksAlike(bakedAdaptive.foreground) ||
+                !render(adaptive.background).looksAlike(bakedAdaptive.background)) return null
         } else {
-            if (bakedIcon is AdaptiveIconPackDrawable || !looksAlike(render(layered), bakedIcon.toBitmap())) return null
+            if (bakedIcon is AdaptiveIconPackDrawable || !render(layered).looksAlike(bakedIcon.toBitmap())) return null
         }
 
         // Resolve the source stack's insets/gravity once. Each captured bitmap keeps that placement
@@ -128,28 +126,5 @@ class DynamicClockExporter(
         bitmap.density = Bitmap.DENSITY_NONE
         drawable.draw(Canvas(bitmap))
         return bitmap
-    }
-
-    /**
-     * Downscaled per-channel comparison with a small tolerance — the generation pipeline
-     * may rescale/re-encode, so exact equality would reject untouched icons too.
-     */
-    private fun looksAlike(a: Bitmap, b: Bitmap): Boolean {
-        val n = 32
-        val sa = Bitmap.createScaledBitmap(a, n, n, true)
-        val sb = Bitmap.createScaledBitmap(b, n, n, true)
-        var diff = 0L
-        for (y in 0 until n) {
-            for (x in 0 until n) {
-                val pa = sa.getPixel(x, y)
-                val pb = sb.getPixel(x, y)
-                diff += abs(Color.alpha(pa) - Color.alpha(pb)) +
-                    abs(Color.red(pa) - Color.red(pb)) +
-                    abs(Color.green(pa) - Color.green(pb)) +
-                    abs(Color.blue(pa) - Color.blue(pb))
-            }
-        }
-        // Average difference per pixel across the four channels.
-        return diff / (n * n * 4) < 8
     }
 }

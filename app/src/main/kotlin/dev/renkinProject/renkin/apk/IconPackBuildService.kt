@@ -104,6 +104,9 @@ class IconPackBuildService internal constructor(
 
     private val buildOperations = Mutex()
     private val artifacts = ApkBuildArtifacts(context.cacheDir)
+    private val calendarDayStyler by lazy {
+        CalendarDayStyler(context, IconGenerationService(context, iconPackRepository, iconPackCatalog))
+    }
 
     internal suspend fun prepareBuild(
         profileId: Long,
@@ -149,7 +152,10 @@ class IconPackBuildService internal constructor(
             return withContext(Dispatchers.Default) {
                 buildOperations.withLock {
                     val preferences = prepared.preferences
-                    val calendarData = iconPackRepository.calendarBuildData(prepared.calendarSelections)
+                    val calendarData = calendarDayStyler.style(
+                        iconPackRepository.calendarBuildData(prepared.calendarSelections),
+                        prepared.buildApps, preferences
+                    )
                     val directory = artifacts.create()
                     builtDirectory = directory
                     val builder = IconPackBuilder(

@@ -374,7 +374,8 @@ class IconPackBuilder(
 
         for (drawable in calendarIconsDrawable) {
             checkActive()
-            val bitmap = drawable.value.toSafeBitmapOrNull()
+            val day = drawable.value
+            val bitmap = if (day is IconPackDrawable) day.toBitmap() else day.toSafeBitmapOrNull()
             if (bitmap != null) {
                 createBitmapResource(apkModule, packageBlock, bitmap, drawable.key)
                 drawableXml.item(drawable.key)
