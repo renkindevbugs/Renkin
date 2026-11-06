@@ -128,6 +128,24 @@ class ModifierInputBackupTest {
         assertEquals(1, IconModifierInputStore.directory(context).listFiles()!!.size)
     }
 
+    @Test fun fullBackupRestoresTheSelectedAppAliasWithItsRetainedArtwork() = runBlocking {
+        val incoming = seed("Alias")
+        val state = checkNotNull(StoredIconModifierInput.readState(incoming.modifierInput))
+        val options = state.options.copy(source = state.options.source.copy(
+            primarySource = Source.APPLICATION_ICON, applicationIconComponent = "app.one.ClassicAlias"))
+        val document = checkNotNull(StoredIconModifierInput.encode(
+            IconModifierInput(options, state.containsBakedModifierEdits, state.origin, pipeline = state.pipeline),
+            checkNotNull(state.storedInput)))
+        pack.replaceAll(1, listOf(incoming.copy(modifierInput = document)))
+        val bytes = export()
+        seed("Changed")
+        manager.importBackup { ByteArrayInputStream(bytes) }
+        val restored = pack.getAll(1).single()
+        assertEquals("app.one.ClassicAlias",
+            checkNotNull(StoredIconModifierInput.readState(restored.modifierInput)).options.source.applicationIconComponent)
+        assertEquals("source-Alias", inputFile(restored).readText())
+    }
+
     @Test fun sharedProfileExcludesHiddenSourceAndImportsOnlyReviewedArtwork() = runBlocking {
         val original = seed("Shared")
         val output = ByteArrayOutputStream()

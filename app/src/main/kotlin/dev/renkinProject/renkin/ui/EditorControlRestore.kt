@@ -22,6 +22,7 @@ internal fun EditorSession.restoreDraftControls(value: EditorControlsSnapshot) {
         this@restoreDraftControls.applicationIconVariant = applicationIconVariant
         this@restoreDraftControls.useFullApplicationIcon = useFullApplicationIcon
         this@restoreDraftControls.invertMonochrome = invertMonochrome
+        this@restoreDraftControls.applicationIconComponent = applicationIconComponent
         this@restoreDraftControls.materialYouScheme = materialYouScheme
         iconColor = Color(iconColorBits.toULong())
         customBgColor = Color(backgroundColorBits.toULong())

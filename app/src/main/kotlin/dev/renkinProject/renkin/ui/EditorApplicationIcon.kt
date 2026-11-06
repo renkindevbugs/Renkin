@@ -9,6 +9,7 @@ import dev.renkinProject.renkin.drawable.isAdaptiveIconDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.AppBackgroundColor
 import dev.renkinProject.renkin.icon.creator.appBackgroundColor
+import dev.renkinProject.renkin.packages.AlternateApplicationIcon
 import dev.renkinProject.renkin.packages.InstalledIconLoader
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 
@@ -19,6 +20,19 @@ internal data class EditorApplicationIcon(
     val adaptive: Boolean,
     val monochrome: Boolean
 )
+
+/** A launcher alias's own icon, loaded once so slider-rate previews never query PackageManager. */
+internal data class PreparedAlternateIcon(val component: String, val icon: EditorApplicationIcon)
+
+@WorkerThread
+internal fun prepareAlternateIcon(
+    app: PackageInfoStruct,
+    alternate: AlternateApplicationIcon,
+    loader: InstalledIconLoader
+): PreparedAlternateIcon? {
+    val aliasApp = app.withApplicationIconSource(alternate.source)
+    return prepareEditorApplicationIcon(aliasApp, loader)?.let { PreparedAlternateIcon(alternate.component, it) }
+}
 
 @WorkerThread
 internal fun prepareEditorApplicationIcon(app: PackageInfoStruct, loader: InstalledIconLoader): EditorApplicationIcon? {

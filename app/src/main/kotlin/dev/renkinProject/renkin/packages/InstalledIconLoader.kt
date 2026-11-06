@@ -174,6 +174,10 @@ class InstalledIconLoader @Inject constructor(@param:ApplicationContext private 
         return LoadedApplicationIcon(safe, id, ApplicationInfo(info), source.configuration())
     }
 
+    @WorkerThread
+    internal fun alternateIcons(app: PackageInfoStruct): List<AlternateApplicationIcon> =
+        context.alternateApplicationIcons(app)
+
     fun cachedPreview(source: ApplicationIconSource, size: Int): Bitmap? =
         cache.get(key(source, size))
 

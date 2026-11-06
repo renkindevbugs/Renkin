@@ -34,7 +34,8 @@ internal class EditorRecoveredRendering(
         val current = currentWitness.controls
         val sourceReplaced = currentWitness.origin != witness.origin || when (witness.origin) {
             IconOrigin.CREATE -> currentWitness.selections != witness.selections ||
-                currentWitness.replay !== witness.replay || current.create.source != controls.create.source
+                currentWitness.replay !== witness.replay || current.create.source != controls.create.source ||
+                current.create.applicationIconComponent != controls.create.applicationIconComponent
             IconOrigin.UPLOAD -> currentWitness.upload.path != witness.upload.path
             IconOrigin.VECTOR -> false
         }

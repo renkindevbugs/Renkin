@@ -23,6 +23,7 @@ import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.TextCase
 import dev.renkinProject.renkin.icon.creator.VerifiedModifierInput
+import dev.renkinProject.renkin.packages.AlternateApplicationIcon
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 
 private const val MODIFIER_TAB_INDEX = 2
@@ -62,6 +63,22 @@ internal class EditorSession(
     var textFontPath by mutableStateOf(initialFont)
     var useVector by mutableStateOf(false)
     var applicationIconVariant by mutableStateOf(ApplicationIconVariant.DEFAULT)
+    // Empty = the row's own icon. Seeded from the applied icon so App Icon reopens on the same pick.
+    var applicationIconComponent by mutableStateOf(
+        application.modifierInput?.options?.source
+            ?.takeIf { it.primarySource == Source.APPLICATION_ICON }?.applicationIconComponent.orEmpty()
+    )
+    var alternateIcons by mutableStateOf<List<AlternateApplicationIcon>>(emptyList())
+        private set
+    internal var alternateIconsLoaded = false
+        private set
+    var alternateApplicationIcon by mutableStateOf<PreparedAlternateIcon?>(null)
+        internal set
+    internal val alternateIconPending: Boolean
+        get() = draft.origin == IconOrigin.CREATE && source == Source.APPLICATION_ICON &&
+            applicationIconComponent.isNotEmpty() && alternateApplicationIcon?.component != applicationIconComponent
+    var alternateIconMissing by mutableStateOf(false)
+        private set
     var useFullApplicationIcon by mutableStateOf(false)
     var invertMonochrome by mutableStateOf(false)
     var materialYouScheme by mutableIntStateOf(0)
@@ -193,6 +210,35 @@ internal class EditorSession(
     // as the rotating icon even though the user chose different artwork.
     private fun syncCalendarWithSource() {
         if (source != Source.ICON_PACK) clearCalendar()
+    }
+
+    fun applyAlternateIcons(icons: List<AlternateApplicationIcon>) {
+        alternateIcons = icons
+        alternateIconsLoaded = true
+        if (applicationIconComponent.isNotEmpty() && icons.none { it.component == applicationIconComponent }) {
+            // The app dropped or renamed the alias since the icon was applied.
+            alternateIconMissing = true
+            applicationIconComponent = ""
+            alternateApplicationIcon = null
+        }
+    }
+
+    fun applyAlternateIcon(component: String, prepared: PreparedAlternateIcon?) {
+        if (applicationIconComponent != component) return
+        alternateApplicationIcon = prepared
+        if (prepared == null) {
+            applicationIconComponent = ""
+            alternateIconMissing = true
+        }
+    }
+
+    fun selectAlternateIcon(component: String) {
+        alternateIconMissing = false
+        if (component != applicationIconComponent) {
+            applicationIconComponent = component
+            alternateApplicationIcon = null
+        }
+        activateCreate()
     }
 
     fun selectCreateSource(newSource: Source) {

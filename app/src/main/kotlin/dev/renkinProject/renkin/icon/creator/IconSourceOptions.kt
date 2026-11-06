@@ -20,7 +20,9 @@ data class IconSourceOptions(
     val fallbackSource: FallbackSource = FallbackSource.NONE,
     val applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT,
     val invertMonochrome: Boolean = false,
-    val useFullApplicationIcon: Boolean = false
+    val useFullApplicationIcon: Boolean = false,
+    // Launcher alias (activity class) whose own icon is the artwork; empty means the row's own icon.
+    val applicationIconComponent: String = ""
 )
 
 /** Letter-case transform for text icons (per-app option; not persisted globally). */

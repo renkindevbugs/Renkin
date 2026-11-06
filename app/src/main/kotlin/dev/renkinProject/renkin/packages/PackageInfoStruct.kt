@@ -108,6 +108,9 @@ class PackageInfoStruct(
     internal fun withLoadedApplicationIcon(icon: LoadedApplicationIcon): PackageInfoStruct =
         copyWith(iconSource = ApplicationIconSource.Prepared(icon), internalVersion = internalVersion)
 
+    internal fun withApplicationIconSource(source: ApplicationIconSource): PackageInfoStruct =
+        copyWith(iconSource = source, internalVersion = internalVersion)
+
     // Clearing the icon (createdIcon == null) also drops the recorded source pack and the
     // refresh-made flag, so a removed icon never lingers in the usage counts.
     fun changeExport(

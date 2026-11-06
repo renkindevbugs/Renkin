@@ -87,6 +87,27 @@ class StoredIconModifierInputTest {
     private fun state(options: GenerationOptions = modifierInputTestOptions()) =
         IconModifierInput(options, false, ModifierInputOrigin.UPLOAD, liveInput = ModifierInputTestIcon())
 
+    @Test fun alternateAppIconSurvivesStoredInputNormalizationWithoutChangingDocumentVersion() {
+        val options = modifierInputTestOptions().withSource {
+            copy(primarySource = Source.APPLICATION_ICON, applicationIconComponent = "app.test.ClassicAlias")
+        }
+        assertTrue(StoredIconModifierInput.supportsOptions(options))
+        val encoded = checkNotNull(StoredIconModifierInput.encode(state(options), artwork))
+        assertEquals(3, JSONObject(encoded).getInt("version"))
+        assertEquals(options, checkNotNull(StoredIconModifierInput.readState(encoded)).options)
+        val normalized = checkNotNull(StoredIconModifierInput.normalize(encoded))
+        assertEquals(options, checkNotNull(StoredIconModifierInput.readState(normalized)).options)
+    }
+
+    @Test fun olderStoredInputsWithoutAnAliasDefaultToTheCurrentAppIcon() {
+        val encoded = checkNotNull(StoredIconModifierInput.encode(state(), artwork))
+        val json = JSONObject(encoded)
+        json.getJSONObject("options").getJSONObject("source").remove("component")
+        assertEquals("", checkNotNull(StoredIconModifierInput.readState(json.toString())).options.source.applicationIconComponent)
+        json.getJSONObject("options").getJSONObject("source").put("component", "x".repeat(8193))
+        assertNull(StoredIconModifierInput.readState(json.toString()))
+    }
+
     @Test fun roundTripRetainsEverySourceAndExportFieldWithoutEmbeddingArtwork() {
         val gradient = ColorizerStyle(firstColor = 0xff123456.toInt(), mode = ColorizerMode.GRADIENT,
             gradientStops = listOf(0xffabcdef.toInt()), gradientAngle = 45f, gradientPositions = listOf(0f, 1f))

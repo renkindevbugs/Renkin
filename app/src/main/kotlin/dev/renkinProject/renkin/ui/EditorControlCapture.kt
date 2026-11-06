@@ -29,7 +29,8 @@ internal fun EditorSession.captureControls(): EditorControlsSnapshot {
             backgroundColorBits = customBgColor.value.toLong(),
             materialYouForegroundStyle = materialYouForegroundStyle.copyLists(),
             materialYouBackgroundStyle = materialYouBackgroundStyle.copyLists(),
-            iconPack = iconPack, replayMaterialYou = replayMaterialYou
+            iconPack = iconPack, replayMaterialYou = replayMaterialYou,
+            applicationIconComponent = applicationIconComponent
         ),
         upload = EditorUploadControls(upload.asAdaptiveIcon, upload.zoomLevel),
         vector = with(vectorEditState) { EditorVectorControls(
