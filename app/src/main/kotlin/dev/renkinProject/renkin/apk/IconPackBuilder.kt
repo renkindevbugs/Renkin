@@ -54,6 +54,7 @@ import com.reandroid.dex.smali.SmaliReader
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
+import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.packages.PackageVersion
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.scaleAtCenter
 import dev.renkinProject.renkin.xml.file.BaseInsetXml
@@ -88,7 +89,9 @@ class IconPackBuilder(
     private val apkDir: File = ctx.cacheDir.resolve("apk").resolve(UUID.randomUUID().toString()),
     private val packIcon: IconPackDrawable? = null,
     private val packIconSource: String? = null,
-    private val profileName: String = ""
+    private val profileName: String = "",
+    // Candidate stages for a modified live clock; see storedStageChains.
+    private val clockStageChains: (PackageInfoStruct) -> List<List<GenerationOptions>> = { emptyList() }
 ) {
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
@@ -243,7 +246,7 @@ class IconPackBuilder(
 
         val totalIcons = apps.count { it.createdIcon != null }
         val appFileNames = uniqueDrawableFileNames(apps)
-        val clockExporter = DynamicClockExporter(ctx, apps.map { it.toInstalledApplication() })
+        val clockExporter = DynamicClockExporter(ctx, apps.map { it.toInstalledApplication() }, clockStageChains)
         var doneIcons = 0
         for (app in apps) {
             checkActive()

@@ -23,6 +23,7 @@ import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ApplicationRuntimeState
 import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.DynamicClockSource
+import dev.renkinProject.renkin.apk.PreviewClock
 import dev.renkinProject.renkin.apk.PackChangeBaselines
 import dev.renkinProject.renkin.apk.observePackChanges
 import dev.renkinProject.renkin.apk.unsavedApplicationKeys
@@ -1775,8 +1776,11 @@ class MainViewModel @Inject constructor(
     suspend fun dynamicClockSource(app: PackageInfoStruct, packPackageName: String, resourceId: Int) =
         appProvider.dynamicClockSource(app, packPackageName, resourceId)
 
-    suspend fun renderDynamicClock(source: DynamicClockSource, hour: Int, minute: Int): IconPackDrawable? =
-        appProvider.renderDynamicClock(source, hour, minute)
+    suspend fun styleDynamicClock(source: DynamicClockSource, chain: List<GenerationOptions>, frame: IconPackDrawable?) =
+        appProvider.styleDynamicClock(source, chain, frame)
+
+    suspend fun dynamicClockFrame(clock: PreviewClock, hour: Int, minute: Int): IconPackDrawable =
+        appProvider.dynamicClockFrame(clock, hour, minute)
 
     suspend fun storedDynamicClockSource(app: PackageInfoStruct) = appProvider.storedDynamicClockSource(app)
 

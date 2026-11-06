@@ -210,6 +210,10 @@ class AdaptiveIconPackDrawable internal constructor(
                 originalBackgroundPng
             )
 
+        /** Layers already captured at [LAYER_SIZE], e.g. one clock hand on a transparent background. */
+        internal fun ofLayers(foreground: Bitmap, background: Bitmap): AdaptiveIconPackDrawable =
+            AdaptiveIconPackDrawable(foreground, background)
+
         // Capture the whole 108dp layer, including its own inset, before Android applies 72dp masking.
         fun captureLayer(layer: Drawable): Bitmap {
             val oldBounds = Rect(layer.bounds)

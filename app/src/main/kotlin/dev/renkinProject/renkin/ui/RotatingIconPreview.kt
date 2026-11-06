@@ -10,6 +10,8 @@ import androidx.compose.ui.res.stringResource
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.DynamicClockSource
+import dev.renkinProject.renkin.apk.PreviewClock
+import dev.renkinProject.renkin.apk.keepsClockLayers
 import dev.renkinProject.renkin.apk.StoredCalendarStage
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -38,7 +40,8 @@ private val CLOCK_PREVIEW_TIMES = listOf(10 to 10, 12 to 0, 3 to 0, 6 to 30, 9 t
 /**
  * Calendar days and live-clock times for a pack icon picked in the editor. Days are rendered
  * through the same pipeline as the draft (and the kept Global style), like the build does.
- * Clocks only rotate when unmodified, so a modified clock gets an explanation instead of times.
+ * Clocks rotate only with modifiers that keep their layers apart (see keepsClockLayers); the
+ * others get an explanation instead of times.
  */
 @Composable
 internal fun rememberRotatingPreview(
@@ -101,6 +104,14 @@ internal fun rememberRotatingPreview(
         }
         else -> null
     }
+    // Only effects reach the clock layers; an untouched clock is the pack's own drawable.
+    val clockChain = listOfNotNull(options, keptGlobalOptions).filter { it.hasVisibleModifierEffect() }
+    val clockKeepsLayers = clockChain.all { it.keepsClockLayers() }
+    val styledClock by produceState<PreviewClock?>(null, clock, clockChain, clockKeepsLayers, draftIcon) {
+        value = if (clock != null && clockKeepsLayers) {
+            runCatchingCancellable { viewModel.styleDynamicClock(clock, clockChain, draftIcon) }.getOrNull()
+        } else null
+    }
     val draftDay = if (pickedPackIcon != null) {
         days.entries.firstOrNull { it.value.resourceId == pickedPackIcon.resourceId }?.key
     } else stage?.draftDay
@@ -115,9 +126,9 @@ internal fun rememberRotatingPreview(
             render = { index -> renderDay(index + 1)?.let { withKeptGlobal(it) } }
         )
         clock == null -> null
-        options.hasVisibleModifierEffect() || keptGlobalOptions?.hasVisibleModifierEffect() == true ->
+        !clockKeepsLayers ->
             PreviewVariants(RotatingIconKind.CLOCK, emptyList(), null, null, Unit, onSelect = {}, render = { null }, note = clockStillNote)
-        else -> {
+        else -> styledClock?.let { styled ->
             val labels = CLOCK_PREVIEW_TIMES.map { (hour, minute) ->
                 String.format(Locale.getDefault(), "%d:%02d", hour, minute)
             } + nowLabel
@@ -126,12 +137,12 @@ internal fun rememberRotatingPreview(
                 labels = labels,
                 selected = selected,
                 draftIndex = null,
-                renderKey = clock,
+                renderKey = styled,
                 onSelect = { selected = it },
                 render = { index ->
                     val (hour, minute) = CLOCK_PREVIEW_TIMES.getOrNull(index)
                         ?: LocalTime.now().let { it.hour to it.minute }
-                    viewModel.renderDynamicClock(clock, hour, minute)
+                    viewModel.dynamicClockFrame(styled, hour, minute)
                 }
             )
         }
