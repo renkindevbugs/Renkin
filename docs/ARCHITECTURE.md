@@ -1459,7 +1459,9 @@ be assumed to open the upgraded database.
   opened editor requires its live draft to exist: an Activity destroyed without configuration
   retention cannot silently create a default replacement. A missing draft closes with a notice;
   a changed profile/provider token closes with the existing session-expired notice before
-  displaying controls. Activity-only destruction and process death have no draft persistence in
+  displaying controls. A null restored attachment marker is treated as already attached, so it
+  cannot crash Boolean unboxing or permit a missing edit to be replaced with defaults. A matching
+  live draft still reattaches. Activity-only destruction and process death have no draft persistence in
   this phase. Keeping the draft across composition disposal does not extend the Activity's
   ViewModel lifetime after non-configuration destruction.
   `getOrCreate` is deliberately called from composition (`OpenAppOptions` in `ui/MainScreen.kt`):

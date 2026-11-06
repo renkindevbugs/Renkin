@@ -1461,7 +1461,8 @@ fun OpenAppOptions(
     val activity = LocalContext.current
     val toaster = LocalToaster.current
     val sessionId = recoveredSessionId ?: rememberSaveable(app.key) { UUID.randomUUID().toString() }
-    var sessionAttached by rememberSaveable(app.key) { mutableStateOf(false) }
+    // Only an explicit false may create a draft; an invalid restored marker must not replace lost edits.
+    var sessionAttached by rememberSaveable(app.key) { mutableStateOf<Boolean?>(false) }
     val expected = if (recoveredSessionId != null) {
         // Accepted recovery owns a fresh token; a previous process's Bundle cannot replace it.
         sourceSession
@@ -1493,7 +1494,7 @@ fun OpenAppOptions(
     val initialFont = savedFont ?: return
     val session = editorViewModel.getOrCreate(
         sessionId, expected, app, iconPacks.firstOrNull()?.packageName ?: "", initialFont,
-        allowCreate = !sessionAttached
+        allowCreate = sessionAttached == false
     )
     if (session == null) {
         LaunchedEffect(sessionId) {
