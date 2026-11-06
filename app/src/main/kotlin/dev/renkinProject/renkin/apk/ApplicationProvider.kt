@@ -2227,6 +2227,38 @@ class ApplicationProvider internal constructor(
                 .toSet()
         }
 
+    suspend fun calendarDayResources(packPackageName: String, prefix: String): Map<Int, ResourceDrawable> =
+        withContext(Dispatchers.Default) { iconPackRepo.calendarDayResources(packPackageName, prefix) }
+
+    private val dynamicClockPreview by lazy { DynamicClockPreview(context) }
+
+    suspend fun dynamicClockSource(app: PackageInfoStruct, packPackageName: String, resourceId: Int): DynamicClockSource? =
+        withContext(Dispatchers.Default) {
+            runCatching { dynamicClockPreview.sourceFor(app.toInstalledApplication(), packPackageName, resourceId) }
+                .getOrNull()
+        }
+
+    suspend fun storedDynamicClockSource(app: PackageInfoStruct): DynamicClockSource? =
+        withContext(Dispatchers.Default) {
+            runCatching { dynamicClockPreview.storedSourceFor(app) }.getOrNull()
+        }
+
+    private val calendarDayStyler by lazy { CalendarDayStyler(context, iconGenService) }
+
+    /** How [app]'s applied icon was rendered from its calendar days, so the editor can preview the others. */
+    suspend fun storedCalendarStage(app: PackageInfoStruct, packPackageName: String, prefix: String): StoredCalendarStage? =
+        withContext(Dispatchers.Default) {
+            val days = iconPackRepo.calendarDayResources(packPackageName, prefix)
+            calendarDayStyler.storedStage(app, packPackageName, days, context.dataStore.getPreferencesAfterPendingWrites())
+        }
+
+    suspend fun renderDynamicClock(source: DynamicClockSource, hour: Int, minute: Int): IconPackDrawable? =
+        withContext(Dispatchers.Default) {
+            runCatching { dynamicClockPreview.render(source, hour, minute) }
+                .onFailure { Log.error("ApplicationProvider", "Clock preview failed", it) }
+                .getOrNull()
+        }
+
     /** A calendar-enabled app whose source pack is missing some of the 1..31 day drawables. */
     data class CalendarWarning(val appName: String, val missingDays: Int)
 

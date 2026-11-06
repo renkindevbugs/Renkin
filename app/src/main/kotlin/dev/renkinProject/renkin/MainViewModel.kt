@@ -22,6 +22,7 @@ import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ApplicationRuntimeState
 import dev.renkinProject.renkin.apk.BuiltIconPack
+import dev.renkinProject.renkin.apk.DynamicClockSource
 import dev.renkinProject.renkin.apk.PackChangeBaselines
 import dev.renkinProject.renkin.apk.observePackChanges
 import dev.renkinProject.renkin.apk.unsavedApplicationKeys
@@ -1767,6 +1768,20 @@ class MainViewModel @Inject constructor(
     /** Drawable names [packPackageName] declares as live-clock icons (see ApplicationProvider). */
     suspend fun dynamicClockDrawables(packPackageName: String): Set<String> =
         appProvider.dynamicClockDrawables(packPackageName)
+
+    suspend fun calendarDayResources(packPackageName: String, prefix: String): Map<Int, ResourceDrawable> =
+        appProvider.calendarDayResources(packPackageName, prefix)
+
+    suspend fun dynamicClockSource(app: PackageInfoStruct, packPackageName: String, resourceId: Int) =
+        appProvider.dynamicClockSource(app, packPackageName, resourceId)
+
+    suspend fun renderDynamicClock(source: DynamicClockSource, hour: Int, minute: Int): IconPackDrawable? =
+        appProvider.renderDynamicClock(source, hour, minute)
+
+    suspend fun storedDynamicClockSource(app: PackageInfoStruct) = appProvider.storedDynamicClockSource(app)
+
+    suspend fun storedCalendarStage(app: PackageInfoStruct, packPackageName: String, prefix: String) =
+        appProvider.storedCalendarStage(app, packPackageName, prefix)
 
 }
 

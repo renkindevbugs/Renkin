@@ -344,13 +344,16 @@ class IconPackRepository(
 
     /** Builds one collision-free export from both global and per-app calendar selections. */
     internal fun calendarBuildData(selections: List<CalendarSelection>): CalendarBuildData<ResourceDrawable> =
-        buildCalendarData(selections) { pack, prefix ->
-            val res = resourceResolver.getResources(pack) ?: return@buildCalendarData emptyMap()
-            loadCalendarDays(prefix) { name ->
-                val id = res.getIdentifierByName(name, "drawable", pack)
-                resourceResolver.getDrawable(res, id)?.let { ResourceDrawable(id, it) }
-            }
+        buildCalendarData(selections, ::calendarDayResources)
+
+    /** Day 1..31 drawables of [prefix] in [pack], with missing days repeating the first one. */
+    fun calendarDayResources(pack: String, prefix: String): Map<Int, ResourceDrawable> {
+        val res = resourceResolver.getResources(pack) ?: return emptyMap()
+        return loadCalendarDays(prefix) { name ->
+            val id = res.getIdentifierByName(name, "drawable", pack)
+            resourceResolver.getDrawable(res, id)?.let { ResourceDrawable(id, it) }
         }
+    }
 
     /**
      * Day numbers (1..31) the source pack is missing for [prefix], checking both the plain
