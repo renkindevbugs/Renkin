@@ -1,7 +1,6 @@
 package dev.renkinProject.renkin.apk
 
 import android.content.Context
-import android.graphics.drawable.Drawable
 import androidx.compose.runtime.Immutable
 import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.IconPack
@@ -12,6 +11,7 @@ import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.ResourceDrawable
+import dev.renkinProject.renkin.extension.getIdentifierByName
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.packages.PackageResourceResolver
@@ -343,10 +343,13 @@ class IconPackRepository(
     }
 
     /** Builds one collision-free export from both global and per-app calendar selections. */
-    internal fun calendarBuildData(selections: List<CalendarSelection>): CalendarBuildData<Drawable> =
+    internal fun calendarBuildData(selections: List<CalendarSelection>): CalendarBuildData<ResourceDrawable> =
         buildCalendarData(selections) { pack, prefix ->
-            val res = resourceResolver.getResources(pack)
-            loadCalendarDays(prefix) { name -> res?.let { resourceResolver.getDrawableByName(it, pack, name) } }
+            val res = resourceResolver.getResources(pack) ?: return@buildCalendarData emptyMap()
+            loadCalendarDays(prefix) { name ->
+                val id = res.getIdentifierByName(name, "drawable", pack)
+                resourceResolver.getDrawable(res, id)?.let { ResourceDrawable(id, it) }
+            }
         }
 
     /**

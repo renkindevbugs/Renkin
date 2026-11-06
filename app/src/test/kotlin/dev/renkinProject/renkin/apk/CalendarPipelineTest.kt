@@ -100,4 +100,65 @@ class CalendarPipelineTest {
         assertTrue(result.mappings.isEmpty())
         assertTrue(result.drawables.isEmpty())
     }
+
+    @Test
+    fun buildCalendarData_recordsTheSourcePackOfEveryExportedPrefix() {
+        val calendar = app("com.calendar")
+
+        val result = buildCalendarData(listOf(CalendarSelection(calendar, "pack.alpha", "cal_"))) { pack, _ ->
+            (1..31).associateWith { "$pack-$it" }
+        }
+
+        assertEquals("pack.alpha", result.sourcePacks[result.mappings.getValue(calendar)])
+    }
+
+    @Test
+    fun styledApp_getsItsOwnDaysAndTheUnusedSharedSetIsDropped() {
+        val calendar = app("com.calendar")
+        val raw = buildCalendarData(listOf(CalendarSelection(calendar, "pack.alpha", "cal_"))) { _, _ ->
+            (1..31).associateWith { "raw-$it" }
+        }
+        val rawPrefix = raw.mappings.getValue(calendar)
+
+        val result = raw.withStyledDays(mapOf(calendar to (1..31).associateWith { "styled-$it" }))
+
+        val styledPrefix = result.mappings.getValue(calendar)
+        assertNotEquals(rawPrefix, styledPrefix)
+        assertEquals("styled-6", result.drawables[styledPrefix + "6"])
+        assertEquals(31, result.drawables.size)
+        assertFalse(result.drawables.keys.any { it.startsWith(rawPrefix) })
+        assertEquals(mapOf(styledPrefix to "pack.alpha"), result.sourcePacks)
+    }
+
+    @Test
+    fun sharedSet_staysForAnUnstyledAppOfTheSamePack() {
+        val styled = app("com.styled")
+        val plain = app("com.plain")
+        val raw = buildCalendarData(
+            listOf(
+                CalendarSelection(styled, "pack.alpha", "cal_"),
+                CalendarSelection(plain, "pack.alpha", "cal_")
+            )
+        ) { _, _ -> (1..31).associateWith { "raw-$it" } }
+        val sharedPrefix = raw.mappings.getValue(plain)
+
+        val result = raw.withStyledDays(mapOf(styled to (1..31).associateWith { "styled-$it" }))
+
+        assertEquals(sharedPrefix, result.mappings.getValue(plain))
+        assertEquals("raw-1", result.drawables[sharedPrefix + "1"])
+        assertEquals("styled-1", result.drawables[result.mappings.getValue(styled) + "1"])
+        assertEquals(62, result.drawables.size)
+    }
+
+    @Test
+    fun styledDaysForAnAppWithoutCalendarMapping_areIgnored() {
+        val calendar = app("com.calendar")
+        val raw = buildCalendarData(listOf(CalendarSelection(calendar, "pack.alpha", "cal_"))) { _, _ ->
+            mapOf(1 to "raw")
+        }
+
+        val result = raw.withStyledDays(mapOf(app("com.unmapped") to mapOf(1 to "styled")))
+
+        assertEquals(raw, result)
+    }
 }
