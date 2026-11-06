@@ -627,6 +627,12 @@
     <string name="notificationsDisabledText">Icon watch can still check for new icons, but it cannot tell you about them. Turn notifications on for Renkin in the system settings.</string>
     <string name="calendarMissingDaysTitle">Some calendar icons are incomplete</string>
     <string name="calendarMissingDaysApp">%1$s: missing %2$d of 31 days</string>
+    <string name="alternateIconsTitle">App icons</string>
+    <string name="alternateIconsHint">This app ships %1$d icons. Pick one as the base.</string>
+    <string name="alternateIconShowAll">Show all %1$d</string>
+    <string name="alternateIconShowLess">Show less</string>
+    <string name="alternateIconDescription">Icon %1$d of %2$d</string>
+    <string name="alternateIconMissing">The selected icon is unavailable, so this app\'s current icon is used.</string>
     <string name="iconVariant">Icon variant</string>
     <string name="variantDefault">Default</string>
     <string name="variantMaterialYou">Material You</string>

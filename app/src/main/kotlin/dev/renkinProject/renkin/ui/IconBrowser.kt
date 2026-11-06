@@ -11,6 +11,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import dev.renkinProject.renkin.packages.AlternateApplicationIcon
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -128,7 +130,7 @@ internal fun IconSortMenuButton(
 }
 
 @Composable
-fun CreateTab(
+internal fun CreateTab(
     source: Source,
     // Top inset of the overlaid header (Mihon-style scroll-under chrome): lazy lists apply it as
     // contentPadding so they can scroll beneath the header; static content pads normally.
@@ -181,6 +183,12 @@ fun CreateTab(
     // available but is explicitly described as an unofficial Renkin-generated approximation.
     appHasMaterialYouIcon: Boolean = false,
     appHasAdaptiveIcon: Boolean = false,
+    // The app's own launcher icons (activity-aliases); empty hides the picker.
+    alternateIcons: List<AlternateApplicationIcon> = emptyList(),
+    selectedAlternateIcon: String = "",
+    alternateIconMissing: Boolean = false,
+    onAlternateIconSelect: (String) -> Unit = {},
+    loadAlternateIconPreview: suspend (AlternateApplicationIcon, Int) -> ImageBitmap? = { _, _ -> null },
     applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT,
     onApplicationIconVariantChange: (ApplicationIconVariant) -> Unit = {},
     useFullApplicationIcon: Boolean = false,
@@ -346,6 +354,11 @@ fun CreateTab(
                 }
             }
             Source.APPLICATION_ICON -> Box(Modifier.fillMaxSize().padding(contentPadding)) { ApplicationIconVariantSelector(
+                alternateIcons = alternateIcons,
+                selectedAlternateIcon = selectedAlternateIcon,
+                alternateIconMissing = alternateIconMissing,
+                onAlternateIconSelect = onAlternateIconSelect,
+                loadAlternateIconPreview = loadAlternateIconPreview,
                 variant = applicationIconVariant,
                 appHasMaterialYouIcon = appHasMaterialYouIcon,
                 appHasAdaptiveIcon = appHasAdaptiveIcon,
@@ -423,6 +436,11 @@ fun CreateTab(
  */
 @Composable
 private fun ApplicationIconVariantSelector(
+    alternateIcons: List<AlternateApplicationIcon>,
+    selectedAlternateIcon: String,
+    alternateIconMissing: Boolean,
+    onAlternateIconSelect: (String) -> Unit,
+    loadAlternateIconPreview: suspend (AlternateApplicationIcon, Int) -> ImageBitmap?,
     variant: ApplicationIconVariant,
     appHasMaterialYouIcon: Boolean,
     appHasAdaptiveIcon: Boolean,
@@ -447,6 +465,23 @@ private fun ApplicationIconVariantSelector(
             .verticalScroll(rememberScrollState())
             .padding(16.dp)
     ) {
+        if (alternateIcons.isNotEmpty()) {
+            AlternateIconsGrid(
+                icons = alternateIcons,
+                selectedComponent = selectedAlternateIcon,
+                missingSelection = alternateIconMissing,
+                onSelect = onAlternateIconSelect,
+                loadPreview = loadAlternateIconPreview,
+                modifier = Modifier.padding(bottom = 20.dp)
+            )
+        } else if (alternateIconMissing) {
+            Text(
+                text = stringResource(R.string.alternateIconMissing),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 20.dp)
+            )
+        }
         ApplicationIconVariantControls(
             variant, appHasMaterialYouIcon, appHasAdaptiveIcon, onVariantChange,
             useFullApplicationIcon, onUseFullApplicationIconChange, invertMonochrome, onInvertMonochromeChange,

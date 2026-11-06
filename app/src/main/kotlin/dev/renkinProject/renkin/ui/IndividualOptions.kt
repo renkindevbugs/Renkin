@@ -284,12 +284,30 @@ internal fun OptionsDialog(
         derivedStateOf { dialogTransition.isIdle && dialogTransition.currentState }
     }
 
+    val applicationIconComponent = session.applicationIconComponent
+    val pickedAlternate = session.alternateIcons.firstOrNull {
+        it.component.isNotEmpty() && it.component == applicationIconComponent
+    }
+    LaunchedEffect(session, pickedAlternate) {
+        if (pickedAlternate != null && session.alternateApplicationIcon?.component != pickedAlternate.component) {
+            val prepared = runCatchingCancellable { viewModel.prepareAlternateIcon(app, pickedAlternate) }
+                .onFailure { Log.error("OptionsDialog", "Alternate application icon could not be prepared", it) }
+                .getOrNull()
+            session.applyAlternateIcon(pickedAlternate.component, prepared)
+        }
+    }
+    val alternateIconPending = session.alternateIconPending
+    // The alias only counts once its artwork is loaded, so options and artwork never disagree.
+    val alternateIcon = session.alternateApplicationIcon?.takeIf {
+        source == Source.APPLICATION_ICON && it.component == applicationIconComponent
+    }
     val applicationIcon = session.applicationIcon
+    val artworkIcon = alternateIcon?.icon ?: applicationIcon
     val heroBitmap = applicationIcon?.hero
-    val appBackground = applicationIcon?.background
-    val appHasAdaptiveIcon = applicationIcon?.adaptive == true
-    val appHasMaterialYouIcon = applicationIcon?.monochrome == true
-    val generationApplication = applicationIcon?.application ?: app
+    val appBackground = artworkIcon?.background
+    val appHasAdaptiveIcon = artworkIcon?.adaptive == true
+    val appHasMaterialYouIcon = artworkIcon?.monochrome == true
+    val generationApplication = artworkIcon?.application ?: app
 
     val isMaterialYouVariant = source == Source.APPLICATION_ICON &&
         applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU
@@ -357,7 +375,8 @@ internal fun OptionsDialog(
             textFontPath = textFontPath,
             applicationIconVariant = applicationIconVariant,
             useFullApplicationIcon = useFullApplicationIcon,
-            invertMonochrome = invertMonochrome
+            invertMonochrome = invertMonochrome,
+            applicationIconComponent = alternateIcon?.component.orEmpty()
         ),
         export = IconExportOptions(
             vector = useVector,
@@ -440,7 +459,7 @@ internal fun OptionsDialog(
             IconOrigin.VECTOR -> draft.vectorIcon
             IconOrigin.CREATE -> draft.recoveredCreateStage?.input ?: customIconList.firstOrNull()?.let {
                 iconPack to it.resourceId
-            } ?: (session.restoredIconSource ?: app.baseIcon ?: app.createdIcon ?: app.iconSource)
+            } ?: alternateIcon?.component ?: (session.restoredIconSource ?: app.baseIcon ?: app.createdIcon ?: app.iconSource)
         },
         render = renderPreviewWith
     )
@@ -457,7 +476,10 @@ internal fun OptionsDialog(
             draft.replay === composedReplay && session.renderSource() === composedSource &&
             (composedOrigin != IconOrigin.CREATE || session.customIconList == composedSelections)
     }
-    LaunchedEffect(draft.origin, draft.replay, generatingOptions, customIconList, composedSourceRevision) {
+    LaunchedEffect(
+        draft.origin, draft.replay, generatingOptions, customIconList, composedSourceRevision, alternateIconPending
+    ) {
+        if (alternateIconPending) return@LaunchedEffect
         draft.regenerateCreate(viewModel, app, generatingOptions, composedSelections,
             composedRenderWitness, renderStillCurrent, renderSource = renderCreateSource,
             renderReplay = viewModel::renderModifierReplay)
@@ -708,6 +730,11 @@ internal fun OptionsDialog(
                                 selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },
                                 appHasMaterialYouIcon = appHasMaterialYouIcon,
                                 appHasAdaptiveIcon = appHasAdaptiveIcon,
+                                alternateIcons = if (session.purpose == EditorPurpose.APPLICATION) session.alternateIcons else emptyList(),
+                                selectedAlternateIcon = applicationIconComponent,
+                                alternateIconMissing = session.alternateIconMissing,
+                                onAlternateIconSelect = session::selectAlternateIcon,
+                                loadAlternateIconPreview = viewModel::alternateIconPreview,
                                 applicationIconVariant = applicationIconVariant,
                                 onApplicationIconVariantChange = {
                                     applicationIconVariant = it
@@ -870,7 +897,7 @@ internal fun OptionsDialog(
                     heroBitmap = heroBitmap,
                     appName = app.appName,
                     icon = rotatingPreview.icon,
-                    loading = draft.generating || globalPreviewPending || rotatingPreview.pending,
+                    loading = alternateIconPending || draft.generating || globalPreviewPending || rotatingPreview.pending,
                     canConfirm = interactionAllowed && session.canConfirmDraft(composedRenderWitness),
                     variants = rotatingPreview.variants
                 )

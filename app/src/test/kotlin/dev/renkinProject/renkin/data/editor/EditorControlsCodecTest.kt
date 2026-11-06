@@ -49,10 +49,25 @@ class EditorControlsCodecTest {
         val bytes = EditorControlsCodec.encode(cornered)
         assertEquals(0.2f, roundTrip(cornered).adjustments.shapeCorner)
 
-        val versionOne = bytes.copyOf(bytes.size - Float.SIZE_BYTES).intAt(Int.SIZE_BYTES, 1)
+        val versionOne = bytes.copyOf(bytes.size - Float.SIZE_BYTES - 1).intAt(Int.SIZE_BYTES, 1)
         val restored = EditorControlsCodec.decode(versionOne)
         assertEquals(DEFAULT_SHAPE_CORNER, restored.adjustments.shapeCorner)
         assertEquals(cornered.copy(adjustments = cornered.adjustments.copy(shapeCorner = DEFAULT_SHAPE_CORNER)), restored)
+    }
+
+    @Test fun versionTwoDraftsKeepTheirCornerAndDefaultToTheCurrentAppIcon() {
+        val value = fixture().let { it.copy(adjustments = it.adjustments.copy(shapeCorner = 0.2f)) }
+        val bytes = EditorControlsCodec.encode(value)
+        val versionTwo = bytes.copyOf(bytes.size - 1).intAt(Int.SIZE_BYTES, 2)
+        assertEquals(value, EditorControlsCodec.decode(versionTwo))
+    }
+
+    @Test fun alternateIconSelectionSurvivesControlCaptureEncodingAndRestore() {
+        val editor = session().apply { applicationIconComponent = "app.test.ClassicAlias" }
+        val decoded = roundTrip(editor.captureControls())
+        assertEquals("app.test.ClassicAlias", decoded.create.applicationIconComponent)
+        val restored = session().apply { restoreDraftControls(decoded) }
+        assertEquals(decoded, restored.captureControls())
     }
 
     @Test fun allControlsCaptureAndRoundTripWithDistinctValues() {
@@ -242,4 +257,4 @@ class EditorControlsCodecTest {
     }
 }
 
-private const val STORED_FORMAT_SHA256 = "acf85539be489e06519421ac027fa47861a2fe5dd5842ea110ad6ab658b114ac"
+private const val STORED_FORMAT_SHA256 = "dc5cc36f689419a523e90f3be7ca70eb2c4e20c38735540ee8a6c83895befc6b"

@@ -111,6 +111,11 @@ import dev.renkinProject.renkin.util.launchGuarded
 import dev.renkinProject.renkin.util.runCatchingCancellable
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import kotlinx.coroutines.CancellationException
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import dev.renkinProject.renkin.packages.AlternateApplicationIcon
+import dev.renkinProject.renkin.ui.PreparedAlternateIcon
+import dev.renkinProject.renkin.ui.prepareAlternateIcon
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -1274,6 +1279,12 @@ class MainViewModel @Inject constructor(
             }
         }
     }
+
+    internal suspend fun prepareAlternateIcon(app: PackageInfoStruct, alternate: AlternateApplicationIcon): PreparedAlternateIcon? =
+        withContext(Dispatchers.Default) { prepareAlternateIcon(app, alternate, installedIcons) }
+
+    internal suspend fun alternateIconPreview(icon: AlternateApplicationIcon, sizePx: Int): ImageBitmap? =
+        installedIcons.preview(icon.source, sizePx)?.asImageBitmap()
 
     /** Builds a preview icon for [app] from [options] (optionally a specific pack pick). */
     override suspend fun previewIcon(

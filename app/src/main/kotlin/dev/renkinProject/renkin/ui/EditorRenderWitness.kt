@@ -42,7 +42,7 @@ internal fun EditorSession.renderWitnessOrNull(): EditorRenderWitness? = try {
 
 @MainThread
 internal fun EditorSession.requirePublishedSources(witness: EditorRenderWitness) {
-    if (restoringModifiers || draft.replayRenderFailed) throw EditorCapturePendingException()
+    if (restoringModifiers || alternateIconPending || draft.replayRenderFailed) throw EditorCapturePendingException()
     if (witness.origin == IconOrigin.UPLOAD) {
         if (upload.publishedSelection != witness.upload) throw EditorCapturePendingException()
     }
@@ -53,7 +53,7 @@ internal fun EditorSession.requirePublishedSources(witness: EditorRenderWitness)
 
 @MainThread
 internal fun EditorSession.canConfirmDraft(witness: EditorRenderWitness?): Boolean =
-    !restoringModifiers && draft.canConfirm(witness) &&
+    !restoringModifiers && !alternateIconPending && draft.canConfirm(witness) &&
         (draft.origin != IconOrigin.UPLOAD || upload.publishedSelection == upload.selection()) &&
         ((draft.origin != IconOrigin.VECTOR && !vectorEditState.hasChangesFromSeed) ||
             vectorEditState.publishedInputs == vectorEditState.inputs())

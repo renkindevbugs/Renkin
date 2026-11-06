@@ -44,7 +44,8 @@ internal data class EditorCreateControls(
     val materialYouForegroundStyle: ColorizerStyle,
     val materialYouBackgroundStyle: ColorizerStyle,
     val iconPack: String,
-    val replayMaterialYou: Boolean
+    val replayMaterialYou: Boolean,
+    val applicationIconComponent: String = ""
 )
 
 internal data class EditorUploadControls(val asAdaptiveIcon: Boolean, val zoomLevel: Float)

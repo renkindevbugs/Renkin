@@ -81,6 +81,46 @@ class EditorCompleteCaptureTest {
         assertSame(editor.application.baseIcon, editor.draft.iconToConfirm)
     }
 
+    @Test fun alternateArtworkMustBeReadyBeforeApplyOrAutosaveAndItsComponentRoundTrips() = runBlocking<Unit> {
+        val editor = editor(); initialize(editor)
+        editor.source = Source.APPLICATION_ICON
+        editor.selectAlternateIcon("test.app.ClassicAlias")
+        val provisional = options().copy(source = IconSourceOptions(Source.APPLICATION_ICON))
+        editor.draft.regenerateCreate(Builder(IconGenerationResult(icon(Color.GREEN), draftInput = icon())),
+            editor.application, provisional, emptyList(), editor.captureRenderWitness())
+        assertTrue(editor.draft.canConfirm(editor.captureRenderWitness()))
+        assertFalse(editor.canConfirmDraft(editor.captureRenderWitness()))
+        pending { capture(editor) }
+
+        editor.applyAlternateIcon("test.app.ClassicAlias", PreparedAlternateIcon("test.app.ClassicAlias",
+            EditorApplicationIcon(editor.application, null, null, false, false)))
+        val selected = provisional.copy(source = provisional.source.copy(applicationIconComponent = "test.app.ClassicAlias"))
+        editor.draft.regenerateCreate(Builder(IconGenerationResult(icon(Color.BLUE), renderedOptions = selected, draftInput = icon())),
+            editor.application, selected, emptyList(), editor.captureRenderWitness())
+        assertTrue(editor.canConfirmDraft(editor.captureRenderWitness()))
+        val restored = roundTrip(capture(editor)).snapshot
+        assertEquals("test.app.ClassicAlias", restored.controls.create.applicationIconComponent)
+        assertEquals(selected, restored.requested.options)
+        assertEquals(selected, restored.renderedOptions!!.options)
+    }
+
+    @Test fun obsoleteAlternateLoadCannotReplaceANewerPickAndFailureSelectsCurrent() {
+        val editor = editor().apply { source = Source.APPLICATION_ICON }
+        editor.selectAlternateIcon("test.app.First")
+        editor.selectAlternateIcon("test.app.Second")
+        editor.applyAlternateIcon("test.app.First", PreparedAlternateIcon("test.app.First",
+            EditorApplicationIcon(editor.application, null, null, false, false)))
+        assertEquals("test.app.Second", editor.applicationIconComponent)
+        assertTrue(editor.alternateIconPending)
+        assertNull(editor.alternateApplicationIcon)
+        editor.applyAlternateIcon("test.app.First", null)
+        assertEquals("test.app.Second", editor.applicationIconComponent)
+        editor.applyAlternateIcon("test.app.Second", null)
+        assertEquals("", editor.applicationIconComponent)
+        assertTrue(editor.alternateIconMissing)
+        assertFalse(editor.alternateIconPending)
+    }
+
     @Test fun activeSourceClearRejectsCaptureAndApply() = runBlocking<Unit> {
         val editor = editor(); editor.activateUpload(icon()); editor.draft.regenerateUpload(Builder(), options(), editor.captureRenderWitness())
         editor.draft.clearUpload()

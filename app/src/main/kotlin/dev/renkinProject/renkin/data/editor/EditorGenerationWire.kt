@@ -65,10 +65,11 @@ internal fun EditorArtworkWriter.generation(value: EditorGenerationSnapshot) {
     require(value.backgroundMasks.size <= EditorControlsCodec.MAX_STROKES)
     output.writeInt(value.backgroundMasks.size)
     value.backgroundMasks.forEach { ensureActive(); text(it.action.name); text(it.artwork) }
+    optionalText(options.source.applicationIconComponent.ifEmpty { null })
 }
 
-// Captures written before the shape corner existed lack it; they decode with the default corner.
-internal fun EditorArtworkReader.generation(withShapeCorner: Boolean): EditorGenerationSnapshot {
+// Captures written before the shape corner or the alias icon existed lack them; they decode with defaults.
+internal fun EditorArtworkReader.generation(withShapeCorner: Boolean, withIconComponent: Boolean): EditorGenerationSnapshot {
     val source = IconSourceOptions(
         primarySource = enumValueOf<Source>(text()), primaryTextType = enumValueOf<TextType>(text()), primaryIconPack = text(),
         secondarySource = enumValueOf<Source>(text()), secondaryImageEdit = enumValueOf<ImageEdit>(text()),
@@ -98,7 +99,8 @@ internal fun EditorArtworkReader.generation(withShapeCorner: Boolean): EditorGen
     val pack = MaterialYouPackModifier(optionalInt(), optionalInt(), input.readInt(), optionalStyle(), optionalStyle(), number())
     val erase = optionalText()
     val masks = List(count(EditorControlsCodec.MAX_STROKES, 8)) { ensureActive(); EditorMaskReference(enumValueOf<BrushAction>(text()), text()) }
-    return EditorGenerationSnapshot(GenerationOptions(source, ModifierStack(effect, transform, shape, outline, shadow, pack), export, override), erase, masks)
+    val component = if (withIconComponent) optionalText().orEmpty() else ""
+    return EditorGenerationSnapshot(GenerationOptions(source.copy(applicationIconComponent = component), ModifierStack(effect, transform, shape, outline, shadow, pack), export, override), erase, masks)
 }
 
 internal fun EditorArtworkWriter.style(value: ColorizerStyle) = EditorControlsCodec.Writer(output).style(value)

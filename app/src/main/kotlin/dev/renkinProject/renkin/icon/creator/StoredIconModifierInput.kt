@@ -154,7 +154,8 @@ internal object StoredIconModifierInput {
                 .put("fallback", source.fallbackSource.name)
                 .put("variant", source.applicationIconVariant.name)
                 .put("invert", source.invertMonochrome)
-                .put("fullIcon", source.useFullApplicationIcon))
+                .put("fullIcon", source.useFullApplicationIcon)
+                .apply { if (source.applicationIconComponent.isNotEmpty()) put("component", source.applicationIconComponent) })
             .put("export", JSONObject()
                 .put("vector", export.vector)
                 .put("materialYou", export.materialYou)
@@ -185,7 +186,9 @@ internal object StoredIconModifierInput {
                 fallbackSource = enumValueOf<FallbackSource>(source.getString("fallback")),
                 applicationIconVariant = enumValueOf<ApplicationIconVariant>(source.getString("variant")),
                 invertMonochrome = source.getBoolean("invert"),
-                useFullApplicationIcon = source.getBoolean("fullIcon")
+                useFullApplicationIcon = source.getBoolean("fullIcon"),
+                // Optional key: documents without an alias pick (and older builds) omit it.
+                applicationIconComponent = source.optString("component", "").also { require(it.length <= MAX_TEXT_CHARS) }
             ),
             modifiers = modifiers,
             export = IconExportOptions(

@@ -20,8 +20,9 @@ import java.io.IOException
 /** Fixed versioned fields preserve inactive controls and exact finite float/packed-color bits. */
 internal object EditorControlsCodec {
     // v2 appends the shape corner; v1 drafts from the previous build decode with the default corner.
-    const val VERSION = 2
+    const val VERSION = 3
     private const val SHAPE_CORNER_VERSION = 2
+    private const val ICON_COMPONENT_VERSION = 3
     private const val PACK_VERSION = 1
     private const val MAGIC = 0x524B4544 // RKED
     const val MAX_TEXT_BYTES = 64 * 1024
@@ -74,6 +75,7 @@ internal object EditorControlsCodec {
             optionalText(snapshot.calendar.packName)
             optionalText(snapshot.onlineImageUrl)
             number(snapshot.adjustments.shapeCorner)
+            optionalText(snapshot.create.applicationIconComponent.ifEmpty { null })
         }
         return bytes.toByteArray()
     }
@@ -99,9 +101,12 @@ internal object EditorControlsCodec {
                         onlineImageUrl = optionalText()
                     )
                 }
-                val snapshot = if (version >= SHAPE_CORNER_VERSION) {
+                val withCorner = if (version >= SHAPE_CORNER_VERSION) {
                     decoded.copy(adjustments = decoded.adjustments.copy(shapeCorner = reader.number()))
                 } else decoded
+                val snapshot = if (version >= ICON_COMPONENT_VERSION) {
+                    withCorner.copy(create = withCorner.create.copy(applicationIconComponent = reader.optionalText().orEmpty()))
+                } else withCorner
                 require(input.read() == -1) { "Trailing editor controls content" }
                 snapshot
             }

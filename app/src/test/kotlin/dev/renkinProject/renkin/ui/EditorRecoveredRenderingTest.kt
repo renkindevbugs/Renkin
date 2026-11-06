@@ -81,6 +81,22 @@ class EditorRecoveredRenderingTest {
         assertEquals(saved, projection(initial = initial).optionsFor(ui, changed))
     }
 
+    @Test fun choosingAnotherAppAliasReplacesTheRecoveredSourceAndPresentation() {
+        editor.source = Source.APPLICATION_ICON
+        editor.applicationIconComponent = "test.editor.First"
+        val initial = witness
+        val retained = saved.copy(source = saved.source.copy(
+            primarySource = Source.APPLICATION_ICON, applicationIconComponent = "test.editor.First"))
+        val p = projection(retained, initial)
+        assertEquals(retained, p.optionsFor(ui, initial))
+        editor.applicationIconComponent = "test.editor.Second"
+        val proposed = ui.copy(source = ui.source.copy(
+            primarySource = Source.APPLICATION_ICON, applicationIconComponent = "test.editor.Second"))
+        val result = p.optionsFor(proposed, witness)
+        assertEquals(proposed.source, result.source)
+        assertEquals(proposed.export, result.export)
+    }
+
     @Test fun scaleEditChangesOnlyScaleAndReversalRecoversTheExactRequest() {
         val p = projection()
         val initial = witness

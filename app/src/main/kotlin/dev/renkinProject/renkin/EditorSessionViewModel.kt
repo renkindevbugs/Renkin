@@ -36,6 +36,7 @@ import dev.renkinProject.renkin.ui.EditorRecoveryAcceptance
 import dev.renkinProject.renkin.ui.EditorRecoveryAttachment
 import dev.renkinProject.renkin.ui.EditorRecoveryPreparation
 import dev.renkinProject.renkin.ui.EditorRenderWitness
+import dev.renkinProject.renkin.ui.EditorPurpose
 import dev.renkinProject.renkin.ui.EditorSession
 import dev.renkinProject.renkin.ui.PreparedEditorRecovery
 import dev.renkinProject.renkin.ui.bindEditorRecovery
@@ -366,13 +367,23 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
                     active.state.applicationIcon = prepared
                     active.state.applicationIconPrepared = true
                 }
+                if (active.state.purpose == EditorPurpose.APPLICATION && !active.state.alternateIconsLoaded) {
+                    val alternates = withContext(Dispatchers.Default) { loader.alternateIcons(active.state.application) }
+                    if (activeSession === active) active.state.applyAlternateIcons(alternates)
+                }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
                 Log.error("EditorSessionViewModel", "Application icon could not be prepared", error)
-                if (activeSession === active) active.state.applicationIconPrepared = true
+                if (activeSession === active) {
+                    active.state.applicationIconPrepared = true
+                    active.state.applyAlternateIcons(emptyList())
+                }
             } catch (error: OutOfMemoryError) {
                 Log.error("EditorSessionViewModel", "Application icon preparation exceeded available memory", error)
-                if (activeSession === active) active.state.applicationIconPrepared = true
+                if (activeSession === active) {
+                    active.state.applicationIconPrepared = true
+                    active.state.applyAlternateIcons(emptyList())
+                }
             }
         }
     }

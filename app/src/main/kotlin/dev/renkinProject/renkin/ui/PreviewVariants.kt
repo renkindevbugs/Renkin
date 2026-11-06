@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -99,12 +100,14 @@ internal fun PreviewVariantStrip(variants: PreviewVariants, mask: Shape) {
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         itemsIndexed(variants.labels, key = { index, _ -> index }) { index, label ->
-            val icon by produceState(cache[index], variants.renderKey, index) {
-                if (value == null) {
-                    value = runCatchingCancellable { variants.render(index) }.getOrNull()?.also { cache[index] = it }
+            key(variants.renderKey) {
+                val icon by produceState(cache[index], variants.renderKey, index) {
+                    if (value == null) {
+                        value = runCatchingCancellable { variants.render(index) }.getOrNull()?.also { cache[index] = it }
+                    }
                 }
+                PreviewVariantChip(label, icon, mask, selected = index == focus) { variants.onSelect(index) }
             }
-            PreviewVariantChip(label, icon, mask, selected = index == focus) { variants.onSelect(index) }
         }
     }
 }
