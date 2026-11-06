@@ -62,18 +62,11 @@ class DynamicClockExporter(
         val component = app.toInstalledApplication().toComponentInfo()
         val drawableName = appFilterDrawableName(elements, component) ?: return null
         val meta = clocks.firstOrNull { it.drawableLink == drawableName } ?: return null
-        if (meta.defaultHour.toIntOrNull() !in 0..23 ||
-            meta.defaultMinute.toIntOrNull() !in 0..59 ||
-            meta.defaultSecond.toIntOrNull() !in 0..59) return null
 
         val source = loadDrawable(sourcePack, drawableName) ?: return null
         val adaptive = if (PackageVersion.is26OrMore()) source as? AdaptiveIconDrawable else null
         val layered = (adaptive?.foreground ?: source) as? LayerDrawable ?: return null
-        val handIndices = listOf(meta.hourLayerIndex, meta.minuteLayerIndex, meta.secondLayerIndex)
-            .map { it.toIntOrNull() ?: return null }
-        if (handIndices.any { it < -1 || it >= layered.numberOfLayers }) return null
-        val activeHands = handIndices.filter { it >= 0 }
-        if (activeHands.isEmpty() || activeHands.distinct().size != activeHands.size) return null
+        val activeHands = meta.handLayerIndices(layered.numberOfLayers)?.filter { it >= 0 } ?: return null
 
         // User-edit guard: the composite must still look like the pack's own clock —
         // otherwise the user's edited static icon wins and no clock is copied.

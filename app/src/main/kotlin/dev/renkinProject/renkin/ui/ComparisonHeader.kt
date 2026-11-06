@@ -73,6 +73,7 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -102,6 +103,7 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.animation.EnterTransition
@@ -130,7 +132,8 @@ internal fun ComparisonHeader(
     titleContent: (@Composable () -> Unit)? = null,
     extraActions: (@Composable () -> Unit)? = null,
     onNavigateBack: (() -> Unit)? = null,
-    showProgress: Boolean = false
+    showProgress: Boolean = false,
+    previewVariants: PreviewVariants? = null
 ) {
     // Both icons fly up into their slots when the dialog opens
     val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
@@ -189,7 +192,7 @@ internal fun ComparisonHeader(
                 Row(verticalAlignment = Alignment.Top) {
                     CurrentSlot(heroBitmap, flyIn, flyInEnter, 44.dp, labelExpand = 0f)
                     ComparisonArrow(44.dp)
-                    NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 44.dp, labelExpand = 0f)
+                    NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 44.dp, labelExpand = 0f, variants = previewVariants)
                 }
 
                 Row(
@@ -265,7 +268,7 @@ internal fun ComparisonHeader(
                     ) {
                         CurrentSlot(heroBitmap, flyIn, flyInEnter, 56.dp, labelExpand = labelExpand)
                         ComparisonArrow(56.dp)
-                        NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 56.dp, labelExpand = labelExpand)
+                        NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 56.dp, labelExpand = labelExpand, variants = previewVariants)
                     }
                     ApplyButton(
                         onConfirm,
@@ -297,7 +300,8 @@ internal fun EditPreviewPane(
     onClear: () -> Unit,
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
-    extraCard: (@Composable () -> Unit)? = null
+    extraCard: (@Composable () -> Unit)? = null,
+    previewVariants: PreviewVariants? = null
 ) {
     val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
     val flyInSpec = spring<androidx.compose.ui.unit.IntOffset>(
@@ -360,7 +364,7 @@ internal fun EditPreviewPane(
                         .padding(vertical = 8.dp)
                         .size(20.dp)
                 )
-                NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 176.dp, labelExpand = 1f)
+                NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 176.dp, labelExpand = 1f, variants = previewVariants)
             }
 
             extraCard?.let {
@@ -512,7 +516,8 @@ private fun NewSlot(
     flyIn: MutableTransitionState<Boolean>,
     flyInEnter: EnterTransition,
     size: Dp,
-    labelExpand: Float
+    labelExpand: Float,
+    variants: PreviewVariants? = null
 ) {
     val borderColor = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     // Tapping the preview blows it up, so the result is judgeable before applying.
@@ -534,52 +539,57 @@ private fun NewSlot(
     val flight = LocalIconFlight.current
     if (flight != null) SideEffect { flight.newSlotIcon = previewIcon }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
-            Surface(
-                modifier = Modifier
-                    .then(
-                        if (flight == null) Modifier
-                        else Modifier
-                            .onGloballyPositioned { if (flight.tracksSlot) flight.newSlotBounds = it.boundsOnScreen() }
-                            .graphicsLayer { alpha = if (flight.newSlotHidden) 0f else 1f }
-                    )
-                    .size(size)
-                    .clickable(enabled = previewIcon != null) { enlarged = true },
-                shape = iconTileShape(size),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(2.dp, borderColor)
-            ) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    if (previewIcon != null) {
-                        Image(
-                            painter = previewIcon.getPainter(),
-                            contentDescription = null,
-                            // Keep full-viewBox vectors out from under the slot's 2 dp
-                            // border and rounded clip. The enlarged preview has no border,
-                            // so both previews now expose the same complete artwork.
-                            modifier = Modifier
-                                .padding(2.dp)
-                                .fillMaxSize()
+        Box {
+            androidx.compose.animation.AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
+                Surface(
+                    modifier = Modifier
+                        .then(
+                            if (flight == null) Modifier
+                            else Modifier
+                                .onGloballyPositioned { if (flight.tracksSlot) flight.newSlotBounds = it.boundsOnScreen() }
+                                .graphicsLayer { alpha = if (flight.newSlotHidden) 0f else 1f }
                         )
-                    } else {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.Add,
+                        .size(size)
+                        .clickable(enabled = previewIcon != null) { enlarged = true },
+                    shape = iconTileShape(size),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(2.dp, borderColor)
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        if (previewIcon != null) {
+                            Image(
+                                painter = previewIcon.getPainter(),
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.outlineVariant,
-                                modifier = Modifier.size(size / 2)
+                                // Keep full-viewBox vectors out from under the slot's 2 dp
+                                // border and rounded clip. The enlarged preview has no border,
+                                // so both previews now expose the same complete artwork.
+                                modifier = Modifier
+                                    .padding(2.dp)
+                                    .fillMaxSize()
+                            )
+                        } else {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.outlineVariant,
+                                    modifier = Modifier.size(size / 2)
+                                )
+                            }
+                        }
+                        // Only sustained work gets an activity indicator; quick updates stay instant.
+                        if (showLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(size / 2),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
-                    // Only sustained work gets an activity indicator; quick updates stay instant.
-                    if (showLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(size / 2),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
                 }
+            }
+            variants?.takeIf { previewIcon != null && it.labels.isNotEmpty() }?.let {
+                RotatingIconBadge(it.kind, Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-6).dp), size = 20.dp)
             }
         }
         Text(
@@ -591,7 +601,7 @@ private fun NewSlot(
     }
 
     if (enlarged && previewIcon != null) {
-        EnlargedIconDialog(previewIcon, previewMask, { previewMask = it }) { enlarged = false }
+        EnlargedIconDialog(previewIcon, previewMask, { previewMask = it }, variants) { enlarged = false }
     }
 }
 
@@ -601,6 +611,7 @@ internal fun EnlargedIconDialog(
     icon: IconPackDrawable,
     mask: LauncherPreviewMask? = null,
     onMaskChange: ((LauncherPreviewMask) -> Unit)? = null,
+    variants: PreviewVariants? = null,
     onDismiss: () -> Unit
 ) {
     var localMask by rememberSaveable { mutableStateOf(LauncherPreviewMask.ROUNDED) }
@@ -618,12 +629,13 @@ internal fun EnlargedIconDialog(
             color = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
             Column(
-                Modifier.padding(24.dp),
+                Modifier.padding(vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                variants?.takeIf { it.labels.isNotEmpty() }?.let { PreviewVariantStrip(it, selectedMask.shape) }
                 Box(
-                    Modifier.widthIn(max = 240.dp).fillMaxWidth().aspectRatio(1f)
+                    Modifier.padding(horizontal = 24.dp).widthIn(max = 240.dp).fillMaxWidth().aspectRatio(1f)
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .drawBehind { drawBlueprintGrid(gridColor) }
                         .border(1.dp, outline)
@@ -634,6 +646,15 @@ internal fun EnlargedIconDialog(
                         contentDescription = stringResource(R.string.iconNew),
                         modifier = Modifier.fillMaxSize().clip(selectedMask.shape)
                             .border(1.dp, outline, selectedMask.shape)
+                    )
+                }
+                variants?.note?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 24.dp).widthIn(max = 240.dp)
                     )
                 }
                 Row(horizontalArrangement = Arrangement.Center) {

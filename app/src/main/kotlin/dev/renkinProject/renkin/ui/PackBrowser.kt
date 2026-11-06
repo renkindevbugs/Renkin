@@ -27,8 +27,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
@@ -432,20 +430,7 @@ private fun PackIconItem(
                 stringResource(if (isCalendarGroup) R.string.calendarGroupTooltip else R.string.dynamicClockTooltip),
                 Modifier.align(Alignment.TopEnd)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.tertiaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (isCalendarGroup) Icons.Filled.DateRange else Icons.Filled.Schedule,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                        modifier = Modifier.size(10.dp)
-                    )
-                }
+                RotatingIconBadge(if (isCalendarGroup) RotatingIconKind.CALENDAR else RotatingIconKind.CLOCK)
             }
         }
     }

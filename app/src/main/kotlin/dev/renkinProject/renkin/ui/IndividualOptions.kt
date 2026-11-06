@@ -485,6 +485,26 @@ internal fun OptionsDialog(
     }
     val globalPreviewPending = globalPreview.isPendingFor(draftIcon, keptGlobalLayer)
     val previewIcon = if (keptGlobalLayer == null) draftIcon else globalPreview?.icon ?: draftIcon
+    val pickedPackIcon = customIconList.singleOrNull()?.takeIf {
+        session.purpose == EditorPurpose.APPLICATION && draft.origin == IconOrigin.CREATE &&
+            source == Source.ICON_PACK && draft.replay == null && draft.recoveredCreateStage == null
+    }
+    val storedMode = when {
+        customIconList.isNotEmpty() || session.purpose != EditorPurpose.APPLICATION ||
+            draft.origin != IconOrigin.CREATE || draft.recoveredCreateStage != null -> null
+        draft.replay != null -> StoredIconMode.REPLAY
+        source == Source.ICON_PACK && app.baseIcon != null -> StoredIconMode.BASE
+        else -> null
+    }
+    val rotatingPreview = rememberRotatingPreview(
+        viewModel, app, generationApplication, pickedPackIcon, iconPack,
+        rotatingCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },
+        calendarPack = calendarPackName ?: iconPack,
+        options = generatingOptions,
+        keptGlobalOptions = keptGlobalLayer?.options,
+        draftIcon = previewIcon,
+        storedMode = storedMode
+    )
 
     // The snackbar surface exists only for the upload gallery's Undo action; plain hints go
     // through the shared Toaster like everywhere else in the app.
@@ -849,9 +869,10 @@ internal fun OptionsDialog(
                 val preview = OptionsPreview(
                     heroBitmap = heroBitmap,
                     appName = app.appName,
-                    icon = previewIcon,
-                    loading = draft.generating || globalPreviewPending,
-                    canConfirm = interactionAllowed && session.canConfirmDraft(composedRenderWitness)
+                    icon = rotatingPreview.icon,
+                    loading = draft.generating || globalPreviewPending || rotatingPreview.pending,
+                    canConfirm = interactionAllowed && session.canConfirmDraft(composedRenderWitness),
+                    variants = rotatingPreview.variants
                 )
                 val actions = OptionsPreviewActions(
                     onDismiss = startClose,
@@ -990,7 +1011,8 @@ private data class OptionsPreview(
     val appName: String,
     val icon: IconPackDrawable?,
     val loading: Boolean,
-    val canConfirm: Boolean = !loading
+    val canConfirm: Boolean = !loading,
+    val variants: PreviewVariants? = null
 )
 
 @Composable
@@ -1147,7 +1169,8 @@ private fun WideOptionsLayout(
             onClear = actions.onClear,
             onConfirm = actions.onConfirm,
             modifier = Modifier.width(paneLayout.leadingWidth),
-            extraCard = if (calendar.visible || globalStyle.layer != null) {
+            previewVariants = preview.variants,
+            extraCard =if (calendar.visible || globalStyle.layer != null) {
                 {
                     androidx.compose.foundation.layout.Column {
                         globalStyle.layer?.let { GlobalStyleCard(it, globalStyle.keep, globalStyle.onToggle) }
@@ -1234,7 +1257,8 @@ private fun PhoneOptionsLayout(
                                 actions.onDismiss()
                             }
                         },
-                        showProgress = packBrowser.visible && packBrowser.busy
+                        showProgress = packBrowser.visible && packBrowser.busy,
+                        previewVariants = preview.variants
                     )
                     if (selectedTab != 0) HorizontalDivider()
                     globalStyle.layer?.let { GlobalStyleCard(it, globalStyle.keep, globalStyle.onToggle) }
