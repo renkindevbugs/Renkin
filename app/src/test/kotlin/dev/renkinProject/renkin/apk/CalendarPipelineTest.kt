@@ -9,6 +9,42 @@ import org.junit.Test
 
 class CalendarPipelineTest {
 
+    @Test fun appCalendarsAndPackCalendarsAreDistinctAndDroppedSourcesLeaveNoPickerDrawables() {
+        val native = app("app.calendar")
+        val pack = app("app.pack")
+        val nativeSource = CalendarSource.App(dev.renkinProject.renkin.packages.AppCalendarSource("app.calendar"))
+        val raw = buildCalendarData(listOf(
+            CalendarSelection(native, nativeSource), CalendarSelection(pack, "pack.calendar", "days_")
+        )) { source -> mapOf(1 to source.packageName) }
+        assertEquals(62, raw.drawables.size)
+        val nativePrefix = raw.mappings.getValue(native)
+        val kept = raw.withoutApplications(setOf(native))
+        assertEquals(setOf(pack), kept.mappings.keys)
+        assertEquals(31, kept.drawables.size)
+        assertFalse(kept.drawables.keys.any { it.startsWith(nativePrefix) })
+        assertFalse(nativePrefix in kept.sources)
+    }
+
+    @Test fun appSentinelRequiresItsOwningPackageAndNeverFallsBackToAPack() {
+        assertEquals(CalendarSource.App(dev.renkinProject.renkin.packages.AppCalendarSource("app.calendar")),
+            CalendarSource.decode("app.calendar", "app.calendar", "app:dynamic_icons"))
+        assertEquals(null, CalendarSource.decode("other.app", "app.calendar", "app:dynamic_icons"))
+        assertEquals(null, CalendarSource.decode("app.calendar", "pack", "app:dynamic_icons"))
+        assertEquals(null, CalendarSource.decode("app.calendar", "app.calendar", "app:unknown"))
+        assertEquals(CalendarSource.Pack("pack", "days_"), CalendarSource.decode("app.calendar", "pack", "days_"))
+    }
+
+    @Test fun removingOneAppKeepsASharedDaySetUsedByAnotherApp() {
+        val first = app("app.first"); val second = app("app.second")
+        val raw = buildCalendarData(listOf(
+            CalendarSelection(first, "pack", "days_"), CalendarSelection(second, "pack", "days_")
+        )) { mapOf(3 to "third") }
+        val kept = raw.withoutApplications(setOf(first))
+        assertEquals(31, kept.drawables.size)
+        assertEquals(raw.drawables, kept.drawables)
+        assertEquals(raw.sources, kept.sources)
+    }
+
     private fun app(pkg: String, activity: String = "$pkg.Main", iconId: Int = 0) =
         InstalledApplication(pkg, activity, iconId)
 
@@ -51,7 +87,8 @@ class CalendarPipelineTest {
             CalendarSelection(second, "pack.beta", "calendar_")
         )
 
-        val result = buildCalendarData(selections) { pack, _ ->
+        val result = buildCalendarData(selections) { source ->
+            val pack = source.packageName
             (1..31).associateWith { day -> "$pack-$day" }
         }
 
@@ -76,7 +113,9 @@ class CalendarPipelineTest {
                 CalendarSelection(untouched, "pack.global", "other_"),
                 CalendarSelection(overridden, "pack.custom", "custom_")
             )
-        ) { pack, prefix ->
+        ) { source ->
+            val pack = source.packageName
+            val prefix = (source as CalendarSource.Pack).prefix
             loadedSources += pack to prefix
             mapOf(1 to pack)
         }
@@ -95,7 +134,7 @@ class CalendarPipelineTest {
 
         val result = buildCalendarData(
             listOf(CalendarSelection(calendar, "pack.empty", "missing_"))
-        ) { _, _ -> emptyMap() }
+        ) { _ -> emptyMap() }
 
         assertTrue(result.mappings.isEmpty())
         assertTrue(result.drawables.isEmpty())
@@ -105,17 +144,18 @@ class CalendarPipelineTest {
     fun buildCalendarData_recordsTheSourcePackOfEveryExportedPrefix() {
         val calendar = app("com.calendar")
 
-        val result = buildCalendarData(listOf(CalendarSelection(calendar, "pack.alpha", "cal_"))) { pack, _ ->
+        val result = buildCalendarData(listOf(CalendarSelection(calendar, "pack.alpha", "cal_"))) { source ->
+            val pack = source.packageName
             (1..31).associateWith { "$pack-$it" }
         }
 
-        assertEquals("pack.alpha", result.sourcePacks[result.mappings.getValue(calendar)])
+        assertEquals(CalendarSource.Pack("pack.alpha", "cal_"), result.sources[result.mappings.getValue(calendar)])
     }
 
     @Test
     fun styledApp_getsItsOwnDaysAndTheUnusedSharedSetIsDropped() {
         val calendar = app("com.calendar")
-        val raw = buildCalendarData(listOf(CalendarSelection(calendar, "pack.alpha", "cal_"))) { _, _ ->
+        val raw = buildCalendarData(listOf(CalendarSelection(calendar, "pack.alpha", "cal_"))) { _ ->
             (1..31).associateWith { "raw-$it" }
         }
         val rawPrefix = raw.mappings.getValue(calendar)
@@ -127,7 +167,7 @@ class CalendarPipelineTest {
         assertEquals("styled-6", result.drawables[styledPrefix + "6"])
         assertEquals(31, result.drawables.size)
         assertFalse(result.drawables.keys.any { it.startsWith(rawPrefix) })
-        assertEquals(mapOf(styledPrefix to "pack.alpha"), result.sourcePacks)
+        assertEquals(mapOf(styledPrefix to CalendarSource.Pack("pack.alpha", "cal_")), result.sources)
     }
 
     @Test
@@ -139,7 +179,7 @@ class CalendarPipelineTest {
                 CalendarSelection(styled, "pack.alpha", "cal_"),
                 CalendarSelection(plain, "pack.alpha", "cal_")
             )
-        ) { _, _ -> (1..31).associateWith { "raw-$it" } }
+        ) { _ -> (1..31).associateWith { "raw-$it" } }
         val sharedPrefix = raw.mappings.getValue(plain)
 
         val result = raw.withStyledDays(mapOf(styled to (1..31).associateWith { "styled-$it" }))
@@ -153,7 +193,7 @@ class CalendarPipelineTest {
     @Test
     fun styledDaysForAnAppWithoutCalendarMapping_areIgnored() {
         val calendar = app("com.calendar")
-        val raw = buildCalendarData(listOf(CalendarSelection(calendar, "pack.alpha", "cal_"))) { _, _ ->
+        val raw = buildCalendarData(listOf(CalendarSelection(calendar, "pack.alpha", "cal_"))) { _ ->
             mapOf(1 to "raw")
         }
 

@@ -9,16 +9,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.apk.CalendarSource
 import dev.renkinProject.renkin.apk.DynamicClockSource
 import dev.renkinProject.renkin.apk.PreviewClock
 import dev.renkinProject.renkin.apk.keepsClockLayers
 import dev.renkinProject.renkin.apk.StoredCalendarStage
-import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.hasVisibleModifierEffect
-import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.util.runCatchingCancellable
 import java.time.LocalDate
@@ -50,36 +49,36 @@ internal fun rememberRotatingPreview(
     generationApplication: PackageInfoStruct,
     pickedPackIcon: ResourceDrawable?,
     iconPack: String,
-    rotatingCalendarPrefix: String?,
-    calendarPack: String,
+    rotatingCalendar: CalendarSource?,
+    freshAppCalendar: Boolean,
     options: GenerationOptions,
     keptGlobalOptions: GenerationOptions?,
     draftIcon: IconPackDrawable?,
     storedMode: StoredIconMode?
 ): RotatingPreview {
-    val rotates = pickedPackIcon != null || storedMode != null
-    val calendarDays by produceState(emptyMap<Int, ResourceDrawable>(), rotates, rotatingCalendarPrefix, calendarPack) {
-        value = if (rotates && rotatingCalendarPrefix != null) {
-            runCatchingCancellable { viewModel.calendarDayResources(calendarPack, rotatingCalendarPrefix) }
+    val rotates = pickedPackIcon != null || freshAppCalendar || storedMode != null
+    val calendarDays by produceState(emptyMap<Int, ResourceDrawable>(), rotates, rotatingCalendar) {
+        value = if (rotates && rotatingCalendar != null) {
+            runCatchingCancellable { viewModel.calendarDays(rotatingCalendar) }
                 .getOrDefault(emptyMap())
         } else emptyMap()
     }
     // An applied icon keeps no pick, so its stage is recovered the way the build recovers it.
-    val storedStage by produceState<StoredCalendarStage?>(null, storedMode, rotatingCalendarPrefix, calendarPack) {
-        value = if (storedMode != null && rotatingCalendarPrefix != null) {
-            runCatchingCancellable { viewModel.storedCalendarStage(app, calendarPack, rotatingCalendarPrefix) }.getOrNull()
+    val storedStage by produceState<StoredCalendarStage?>(null, storedMode, rotatingCalendar) {
+        value = if (storedMode != null && rotatingCalendar != null) {
+            runCatchingCancellable { viewModel.storedCalendarStage(app, rotatingCalendar) }.getOrNull()
         } else null
     }
-    val clockSource by produceState<DynamicClockSource?>(null, pickedPackIcon?.resourceId, storedMode, iconPack, rotatingCalendarPrefix) {
+    val clockSource by produceState<DynamicClockSource?>(null, pickedPackIcon?.resourceId, storedMode, iconPack, rotatingCalendar) {
         value = when {
-            rotatingCalendarPrefix != null -> null
+            rotatingCalendar != null -> null
             pickedPackIcon != null ->
                 runCatchingCancellable { viewModel.dynamicClockSource(app, iconPack, pickedPackIcon.resourceId) }.getOrNull()
             storedMode != null -> runCatchingCancellable { viewModel.storedDynamicClockSource(app) }.getOrNull()
             else -> null
         }
     }
-    var selected by remember(pickedPackIcon?.resourceId, storedMode, rotatingCalendarPrefix) { mutableStateOf<Int?>(null) }
+    var selected by remember(pickedPackIcon?.resourceId, storedMode, rotatingCalendar) { mutableStateOf<Int?>(null) }
     val todayLabel = stringResource(R.string.previewToday)
     val nowLabel = stringResource(R.string.previewTimeNow)
     val clockStillNote = stringResource(R.string.previewClockStill)
@@ -91,13 +90,15 @@ internal fun rememberRotatingPreview(
     val days = calendarDays
     val stage = storedStage
     val clock = clockSource
-    val calendarOptions = options.withSource { copy(primarySource = Source.ICON_PACK, primaryIconPack = calendarPack) }
-    // A fresh pick and a replayed retained input both regenerate each day from the pack; an icon
+    val appDay by produceState<Int?>(null, rotatingCalendar, freshAppCalendar) {
+        value = (rotatingCalendar as? CalendarSource.App)?.let { viewModel.appCalendarDay(it, app.iconID) }
+    }
+    // A fresh pick and a replayed retained input regenerate each day from its package; an icon
     // shown without replay gets the editor's modifiers on top of its recovered day renders.
     val renderDay: (suspend (Int) -> IconPackDrawable?)? = when {
-        days.isEmpty() -> null
-        pickedPackIcon != null || (storedMode == StoredIconMode.REPLAY && stage?.isRetained == true) -> { day ->
-            days[day]?.let { viewModel.previewIcon(generationApplication, calendarOptions, it) }
+        days.isEmpty() || rotatingCalendar == null -> null
+        pickedPackIcon != null || freshAppCalendar || (storedMode == StoredIconMode.REPLAY && stage?.isRetained == true) -> { day ->
+            days[day]?.let { viewModel.previewCalendarDay(generationApplication, rotatingCalendar, options, it) }
         }
         storedMode == StoredIconMode.BASE && stage != null -> { day ->
             stage.days[day]?.let { viewModel.applyModifier(it, options) }
@@ -114,7 +115,7 @@ internal fun rememberRotatingPreview(
     }
     val draftDay = if (pickedPackIcon != null) {
         days.entries.firstOrNull { it.value.resourceId == pickedPackIcon.resourceId }?.key
-    } else stage?.draftDay
+    } else if (freshAppCalendar) appDay else stage?.draftDay
     val variants = when {
         renderDay != null -> PreviewVariants(
             kind = RotatingIconKind.CALENDAR,

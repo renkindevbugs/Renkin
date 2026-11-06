@@ -119,8 +119,8 @@ class IconPackBuildService internal constructor(
             preferences.getBooleanValue(CalendarIconsKey) && primaryPackName.isNotEmpty()
         ) iconPackRepository.declaredCalendarSelections(primaryPackName) else emptyList()
         val perAppSelections = profileApps.filter { it.hasCalendarIcon }.mapNotNull { app ->
-            app.calendarSourcePack(primaryPackName).takeIf { it.isNotEmpty() }?.let {
-                CalendarSelection(app.toInstalledApplication(), it, app.calendarPrefix!!)
+            app.calendarSource(primaryPackName)?.let {
+                CalendarSelection(app.toInstalledApplication(), it)
             }
         }
         val lockedSources = lockManager.lockedPacksAmong(

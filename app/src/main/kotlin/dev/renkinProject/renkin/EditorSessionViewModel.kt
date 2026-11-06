@@ -370,6 +370,8 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
                 if (active.state.purpose == EditorPurpose.APPLICATION && !active.state.alternateIconsLoaded) {
                     val alternates = withContext(Dispatchers.Default) { loader.alternateIcons(active.state.application) }
                     if (activeSession === active) active.state.applyAlternateIcons(alternates)
+                    val calendar = withContext(Dispatchers.Default) { loader.appCalendar(active.state.application) }
+                    if (activeSession === active) active.state.applyAppCalendar(calendar)
                 }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
@@ -377,12 +379,14 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
                 if (activeSession === active) {
                     active.state.applicationIconPrepared = true
                     active.state.applyAlternateIcons(emptyList())
+                    active.state.applyAppCalendar(null)
                 }
             } catch (error: OutOfMemoryError) {
                 Log.error("EditorSessionViewModel", "Application icon preparation exceeded available memory", error)
                 if (activeSession === active) {
                     active.state.applicationIconPrepared = true
                     active.state.applyAlternateIcons(emptyList())
+                    active.state.applyAppCalendar(null)
                 }
             }
         }

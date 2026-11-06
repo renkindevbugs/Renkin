@@ -19,6 +19,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApkInstallBackend
 import dev.renkinProject.renkin.apk.ApkInstallResult
+import dev.renkinProject.renkin.apk.CalendarSource
+import dev.renkinProject.renkin.packages.LoadedApplicationIcon
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ApplicationRuntimeState
 import dev.renkinProject.renkin.apk.BuiltIconPack
@@ -99,6 +101,7 @@ import dev.renkinProject.renkin.service.RenkinNotifications
 import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
+import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews
@@ -1781,8 +1784,21 @@ class MainViewModel @Inject constructor(
     suspend fun dynamicClockDrawables(packPackageName: String): Set<String> =
         appProvider.dynamicClockDrawables(packPackageName)
 
-    suspend fun calendarDayResources(packPackageName: String, prefix: String): Map<Int, ResourceDrawable> =
-        appProvider.calendarDayResources(packPackageName, prefix)
+    internal suspend fun calendarDays(source: CalendarSource): Map<Int, ResourceDrawable> = appProvider.calendarDays(source)
+
+    internal suspend fun appCalendarDay(source: CalendarSource.App, resourceId: Int): Int? =
+        appProvider.appCalendarDay(source, resourceId)
+
+    internal suspend fun previewCalendarDay(
+        app: PackageInfoStruct, source: CalendarSource, options: GenerationOptions, day: ResourceDrawable
+    ): IconPackDrawable? = when (source) {
+        is CalendarSource.Pack -> previewIcon(app, options.withSource {
+            copy(primarySource = Source.ICON_PACK, primaryIconPack = source.packageName)
+        }.copy(override = true), day)
+        is CalendarSource.App -> previewIcon(
+            app.withLoadedApplicationIcon(LoadedApplicationIcon(day.drawable, day.resourceId)),
+            options.withSource { copy(primarySource = Source.APPLICATION_ICON, applicationIconComponent = "") }.copy(override = true), null)
+    }
 
     suspend fun dynamicClockSource(app: PackageInfoStruct, packPackageName: String, resourceId: Int) =
         appProvider.dynamicClockSource(app, packPackageName, resourceId)
@@ -1795,8 +1811,8 @@ class MainViewModel @Inject constructor(
 
     suspend fun storedDynamicClockSource(app: PackageInfoStruct) = appProvider.storedDynamicClockSource(app)
 
-    suspend fun storedCalendarStage(app: PackageInfoStruct, packPackageName: String, prefix: String) =
-        appProvider.storedCalendarStage(app, packPackageName, prefix)
+    internal suspend fun storedCalendarStage(app: PackageInfoStruct, source: CalendarSource) =
+        appProvider.storedCalendarStage(app, source)
 
 }
 

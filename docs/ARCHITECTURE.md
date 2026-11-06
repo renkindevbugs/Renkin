@@ -2210,6 +2210,18 @@ hand drawables, edited artwork and themed builds retain the static export. Defau
 icons do not acquire dynamic-clock support. The editor validates calendar candidates through
 the same repository check as browser badges before offering the calendar-day switch.
 
+Application icons can also rotate by date when the app declares a launcher or application
+`<package>.dynamic_icons` array. `AppCalendarIcons` resolves those resources again when needed,
+including aliases whose resource names point at the same underlying day file. The existing
+calendar fields store `app:dynamic_icons` with the owning app's package; decoding requires both
+to match. Room and backup versions stay unchanged. Pack and app sources are typed separately
+in the build pipeline, and unknown app markers never fall back to a pack.
+Selecting the app's current icon enables its calendar by default; the switch preserves an
+explicit opt-out on re-entry. Text, upload, vector and alternate app icons clear the selection.
+App day artwork goes through the same app-icon variant, modifiers and verified Global style as
+the saved icon. If no stage reproduces it, the build keeps the static icon and removes the app's
+calendar mapping and unused day drawables. The editor previews all 31 days using that pipeline.
+
 `IconPackBuildService` receives an immutable active-profile snapshot from `ApplicationProvider`,
 then resolves calendar/lock data and delegates assembly to `IconPackBuilder`. The provider holds
 the profile-operation gate throughout the build and persists that same snapshot after the install

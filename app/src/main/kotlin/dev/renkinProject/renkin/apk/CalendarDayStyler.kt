@@ -14,6 +14,7 @@ import dev.renkinProject.renkin.icon.creator.globalModifierOptions
 import dev.renkinProject.renkin.icon.creator.hasVisibleModifierEffect
 import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.packages.LoadedApplicationIcon
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -37,7 +38,8 @@ class StoredCalendarStage(
  *
  * The local stage comes from [storedStageCandidates] and is accepted only when one source day
  * re-renders to the stored base icon. The Global style layer is added only when it reproduces
- * the static icon from that base. Anything unverifiable keeps the raw days, the previous export.
+ * the static icon from that base. Unverifiable pack days retain their raw artwork; native app
+ * days are omitted so they cannot bypass the user's app-icon styling.
  */
 internal class CalendarDayStyler(
     private val context: Context,
@@ -52,19 +54,29 @@ internal class CalendarDayStyler(
         val appsByComponent = apps.associateBy { it.toInstalledApplication().toComponentInfo() }
         val global = globalModifierOptions(preferences).takeIf { it.hasVisibleModifierEffect() }
         val styled = linkedMapOf<InstalledApplication, Map<Int, Drawable>>()
+        val dropped = mutableSetOf<InstalledApplication>()
         for ((target, prefix) in raw.mappings) {
             currentCoroutineContext().ensureActive()
-            val app = appsByComponent[target.toComponentInfo()] ?: continue
-            val pack = raw.sourcePacks[prefix] ?: continue
+            val source = raw.sources[prefix] ?: continue
+            val app = appsByComponent[target.toComponentInfo()]
+            if (app == null) {
+                if (source is CalendarSource.App) dropped += target
+                continue
+            }
             val days = (1..31).mapNotNull { day -> raw.drawables[prefix + day]?.let { day to it } }.toMap()
-            styledDays(app, pack, days, preferences, global)?.let { styled[target] = it }
+            val rendered = styledDays(app, source, days, preferences, global)
+            if (rendered != null) styled[target] = rendered
+            else if (source is CalendarSource.App) {
+                dropped += target
+                Log.error("CalendarDayStyler", "App calendar for ${app.packageName} could not reproduce the saved icon; keeping it static")
+            }
         }
-        return raw.mapDrawables { it.drawable }.withStyledDays(styled)
+        return raw.mapDrawables { it.drawable }.withStyledDays(styled).withoutApplications(dropped)
     }
 
     private suspend fun styledDays(
         app: PackageInfoStruct,
-        pack: String,
+        source: CalendarSource,
         days: Map<Int, ResourceDrawable>,
         preferences: Preferences,
         global: GenerationOptions?
@@ -77,10 +89,10 @@ internal class CalendarDayStyler(
             val renderedBitmap = rendered.toBitmap()
             val hasGlobalLayer = !baseBitmap.looksAlike(renderedBitmap)
             val stages = storedStageCandidates(app, preferences, context)
-            if (stages.all { it.isPlainArtwork } && !hasGlobalLayer) return null
+            if (source is CalendarSource.Pack && stages.all { it.isPlainArtwork } && !hasGlobalLayer) return null
 
-            val match = matchStages(app, pack, days, stages, baseBitmap) ?: return null
-            if (!hasGlobalLayer) return if (match.isPlainArtwork) null else match.days
+            val match = matchStages(app, source, days, stages, baseBitmap) ?: return null
+            if (!hasGlobalLayer) return if (match.isPlainArtwork && source is CalendarSource.Pack) null else match.days
             global ?: return null
             val matched = match.days.getValue(match.draftDay)
             if (!iconGenService.applyModifier(matched, global).toBitmap().looksAlike(renderedBitmap)) return null
@@ -102,14 +114,14 @@ internal class CalendarDayStyler(
      */
     suspend fun storedStage(
         app: PackageInfoStruct,
-        pack: String,
+        source: CalendarSource,
         days: Map<Int, ResourceDrawable>,
         preferences: Preferences
     ): StoredCalendarStage? {
         val base = app.baseIcon ?: return null
         if (days.isEmpty()) return null
         return try {
-            matchStages(app, pack, days, storedStageCandidates(app, preferences, context), base.toBitmap())
+            matchStages(app, source, days, storedStageCandidates(app, preferences, context), base.toBitmap())
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -122,13 +134,13 @@ internal class CalendarDayStyler(
 
     private suspend fun matchStages(
         app: PackageInfoStruct,
-        pack: String,
+        source: CalendarSource,
         days: Map<Int, ResourceDrawable>,
         stages: List<StoredStageCandidate>,
         baseBitmap: Bitmap
     ): StoredCalendarStage? {
         for (stage in stages) {
-            val local = renderDays(app, pack, days, stage.options) ?: continue
+            val local = renderDays(app, source, days, stage.options) ?: continue
             val closest = local.entries.minByOrNull { it.value.toBitmap().averageDifference(baseBitmap, DETAIL_MATCH_SIZE) }
                 ?: continue
             if (!closest.value.toBitmap().looksAlike(baseBitmap)) continue
@@ -139,17 +151,25 @@ internal class CalendarDayStyler(
 
     private suspend fun renderDays(
         app: PackageInfoStruct,
-        pack: String,
+        source: CalendarSource,
         days: Map<Int, ResourceDrawable>,
         options: GenerationOptions
     ): Map<Int, IconPackDrawable>? {
         // Every styled app already has a created icon, so without override the generator skips it
         // and only the retained candidate could ever verify.
-        val packOptions = options.withSource { copy(primarySource = Source.ICON_PACK, primaryIconPack = pack) }
-            .copy(override = true)
+        val sourceOptions = options.withSource {
+            when (source) {
+                is CalendarSource.Pack -> copy(primarySource = Source.ICON_PACK, primaryIconPack = source.packageName)
+                is CalendarSource.App -> copy(primarySource = Source.APPLICATION_ICON, applicationIconComponent = "")
+            }
+        }.copy(override = true)
         val rendered = linkedMapOf<Int, IconPackDrawable>()
         for ((day, drawable) in days) {
-            rendered[day] = iconGenService.getIcon(app, packOptions, drawable) ?: return null
+            rendered[day] = when (source) {
+                is CalendarSource.Pack -> iconGenService.getIcon(app, sourceOptions, drawable)
+                is CalendarSource.App -> iconGenService.getIcon(
+                    app.withLoadedApplicationIcon(LoadedApplicationIcon(drawable.drawable, drawable.resourceId)), sourceOptions, null)
+            } ?: return null
         }
         return rendered
     }

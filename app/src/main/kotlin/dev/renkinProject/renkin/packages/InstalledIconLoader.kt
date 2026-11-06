@@ -178,6 +178,9 @@ class InstalledIconLoader @Inject constructor(@param:ApplicationContext private 
     internal fun alternateIcons(app: PackageInfoStruct): List<AlternateApplicationIcon> =
         context.alternateApplicationIcons(app)
 
+    @WorkerThread
+    internal fun appCalendar(app: PackageInfoStruct): AppCalendarSource? = AppCalendarIcons(context).detect(app)
+
     fun cachedPreview(source: ApplicationIconSource, size: Int): Bitmap? =
         cache.get(key(source, size))
 

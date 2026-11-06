@@ -24,6 +24,7 @@ import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.TextCase
 import dev.renkinProject.renkin.icon.creator.VerifiedModifierInput
 import dev.renkinProject.renkin.packages.AlternateApplicationIcon
+import dev.renkinProject.renkin.packages.AppCalendarSource
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 
 private const val MODIFIER_TAB_INDEX = 2
@@ -79,6 +80,9 @@ internal class EditorSession(
             applicationIconComponent.isNotEmpty() && alternateApplicationIcon?.component != applicationIconComponent
     var alternateIconMissing by mutableStateOf(false)
         private set
+    var appCalendarSource by mutableStateOf<AppCalendarSource?>(null)
+        private set
+    private var appCalendarLoaded = false
     var useFullApplicationIcon by mutableStateOf(false)
     var invertMonochrome by mutableStateOf(false)
     var materialYouScheme by mutableIntStateOf(0)
@@ -206,10 +210,29 @@ internal class EditorSession(
         calendarPackName = null
     }
 
-    // Pack day icons only belong to a pack pick; any other create source would export them
-    // as the rotating icon even though the user chose different artwork.
     private fun syncCalendarWithSource() {
-        if (source != Source.ICON_PACK) clearCalendar()
+        when (source) {
+            Source.APPLICATION_ICON -> {
+                if (applicationIconComponent.isNotEmpty()) clearCalendar()
+                else if (appCalendarLoaded) {
+                    val calendar = appCalendarSource
+                    if (calendar == null) clearCalendar()
+                    else if (calendarPackName != calendar.packageName || calendarPrefix != AppCalendarSource.PREFIX) {
+                        calendarPackName = calendar.packageName
+                        calendarPrefix = AppCalendarSource.PREFIX
+                        calendarEnabled = true
+                    }
+                } else if (calendarPrefix != AppCalendarSource.PREFIX) clearCalendar()
+            }
+            Source.ICON_PACK -> if (calendarPrefix?.startsWith("app:") == true) clearCalendar()
+            else -> clearCalendar()
+        }
+    }
+
+    fun applyAppCalendar(calendar: AppCalendarSource?) {
+        appCalendarSource = calendar
+        appCalendarLoaded = true
+        if (draft.origin == IconOrigin.CREATE && source == Source.APPLICATION_ICON) syncCalendarWithSource()
     }
 
     fun applyAlternateIcons(icons: List<AlternateApplicationIcon>) {
@@ -221,6 +244,7 @@ internal class EditorSession(
             applicationIconComponent = ""
             alternateApplicationIcon = null
         }
+        if (draft.origin == IconOrigin.CREATE && source == Source.APPLICATION_ICON) syncCalendarWithSource()
     }
 
     fun applyAlternateIcon(component: String, prepared: PreparedAlternateIcon?) {
@@ -229,6 +253,7 @@ internal class EditorSession(
         if (prepared == null) {
             applicationIconComponent = ""
             alternateIconMissing = true
+            if (source == Source.APPLICATION_ICON) syncCalendarWithSource()
         }
     }
 

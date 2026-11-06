@@ -13,6 +13,7 @@ import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.extension.getIdentifierByName
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.AppCalendarIcons
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.packages.PackageResourceResolver
 import dev.renkinProject.renkin.util.Log
@@ -344,7 +345,22 @@ class IconPackRepository(
 
     /** Builds one collision-free export from both global and per-app calendar selections. */
     internal fun calendarBuildData(selections: List<CalendarSelection>): CalendarBuildData<ResourceDrawable> =
-        buildCalendarData(selections, ::calendarDayResources)
+        buildCalendarData(selections, ::calendarDays)
+
+    private val appCalendars by lazy { AppCalendarIcons(context) }
+
+    internal fun calendarDays(source: CalendarSource): Map<Int, ResourceDrawable> = when (source) {
+        is CalendarSource.Pack -> calendarDayResources(source.packageName, source.prefix)
+        is CalendarSource.App -> completeCalendarDays(appCalendars.days(source.app))
+    }
+
+    internal fun missingDays(source: CalendarSource): Int = when (source) {
+        is CalendarSource.Pack -> missingCalendarDays(source.packageName, source.prefix).size
+        is CalendarSource.App -> 31 - appCalendars.days(source.app).size
+    }
+
+    internal fun appCalendarDay(source: CalendarSource.App, resourceId: Int): Int? =
+        appCalendars.dayForIcon(source.app, resourceId)
 
     /** Day 1..31 drawables of [prefix] in [pack], with missing days repeating the first one. */
     fun calendarDayResources(pack: String, prefix: String): Map<Int, ResourceDrawable> {

@@ -2227,8 +2227,11 @@ class ApplicationProvider internal constructor(
                 .toSet()
         }
 
-    suspend fun calendarDayResources(packPackageName: String, prefix: String): Map<Int, ResourceDrawable> =
-        withContext(Dispatchers.Default) { iconPackRepo.calendarDayResources(packPackageName, prefix) }
+    internal suspend fun calendarDays(source: CalendarSource): Map<Int, ResourceDrawable> =
+        withContext(Dispatchers.Default) { iconPackRepo.calendarDays(source) }
+
+    internal suspend fun appCalendarDay(source: CalendarSource.App, resourceId: Int): Int? =
+        withContext(Dispatchers.Default) { iconPackRepo.appCalendarDay(source, resourceId) }
 
     private val dynamicClockPreview by lazy { DynamicClockPreview(context) }
 
@@ -2248,10 +2251,10 @@ class ApplicationProvider internal constructor(
     private val calendarDayStyler by lazy { CalendarDayStyler(context, iconGenService) }
 
     /** How [app]'s applied icon was rendered from its calendar days, so the editor can preview the others. */
-    suspend fun storedCalendarStage(app: PackageInfoStruct, packPackageName: String, prefix: String): StoredCalendarStage? =
+    internal suspend fun storedCalendarStage(app: PackageInfoStruct, source: CalendarSource): StoredCalendarStage? =
         withContext(Dispatchers.Default) {
-            val days = iconPackRepo.calendarDayResources(packPackageName, prefix)
-            calendarDayStyler.storedStage(app, packPackageName, days, context.dataStore.getPreferencesAfterPendingWrites())
+            val days = iconPackRepo.calendarDays(source)
+            calendarDayStyler.storedStage(app, source, days, context.dataStore.getPreferencesAfterPendingWrites())
         }
 
     suspend fun styleDynamicClock(
@@ -2273,7 +2276,7 @@ class ApplicationProvider internal constructor(
     /**
      * Checks every calendar-enabled app against its source pack and reports those missing day
      * drawables (which would repeat a fallback icon instead of rotating). Uses the same
-     * [PackageInfoStruct.hasCalendarIcon] / [PackageInfoStruct.calendarSourcePack] selection as
+     * [PackageInfoStruct.hasCalendarIcon] / [calendarSource] selection as
      * [buildAndSignIconPack], so the warning matches what the build will actually emit.
      */
     suspend fun calendarWarnings(preferences: Preferences): List<CalendarWarning> = withContext(Dispatchers.Default) {
@@ -2281,10 +2284,9 @@ class ApplicationProvider internal constructor(
         applicationList
             .filter { it.hasCalendarIcon }
             .mapNotNull { app ->
-                val packName = app.calendarSourcePack(primaryPackName)
-                if (packName.isEmpty()) return@mapNotNull null
-                val missing = iconPackRepo.missingCalendarDays(packName, app.calendarPrefix!!)
-                if (missing.isNotEmpty()) CalendarWarning(app.appName, missing.size) else null
+                val source = app.calendarSource(primaryPackName) ?: return@mapNotNull null
+                val missing = iconPackRepo.missingDays(source)
+                if (missing > 0) CalendarWarning(app.appName, missing) else null
             }
     }
 

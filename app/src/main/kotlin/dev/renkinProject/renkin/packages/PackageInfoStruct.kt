@@ -159,13 +159,6 @@ class PackageInfoStruct(
     val hasCalendarIcon: Boolean get() = calendarEnabled && !calendarPrefix.isNullOrEmpty()
 
     /**
-     * The pack the calendar day drawables should load from: the one the user picked the icon from,
-     * falling back to [primaryPackName] (the global default) when no per-app pack was stored.
-     */
-    fun calendarSourcePack(primaryPackName: String): String =
-        calendarPackName?.takeIf { it.isNotEmpty() } ?: primaryPackName
-
-    /**
      * Stable identity ("packageName/activityName") used to diff against the saved/built pack
      * (builtKeys, updatedKeys) and as a LazyList item key. RenkinPackStore builds the same string
      * from its DbApplication rows, so the two match.
