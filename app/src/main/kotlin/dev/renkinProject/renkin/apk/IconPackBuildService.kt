@@ -162,7 +162,8 @@ class IconPackBuildService internal constructor(
                         context, prepared.buildApps, calendarData.mappings, calendarData.drawables,
                         packPackageName = prepared.packageName, packLabel = prepared.label,
                         iconPackCatalog = iconPackCatalog, apkDir = directory, packIcon = prepared.packIcon,
-                        packIconSource = prepared.packIconSource, profileName = prepared.profileName
+                        packIconSource = prepared.packIconSource, profileName = prepared.profileName,
+                        clockStageChains = { storedStageChains(it, preferences, context) }
                     )
                     val buildContext = currentCoroutineContext()
                     val canBeInstalled = StorageOperationGate.run { builder.canBeInstalled() }

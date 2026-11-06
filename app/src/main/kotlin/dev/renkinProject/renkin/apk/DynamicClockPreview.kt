@@ -1,20 +1,16 @@
 package dev.renkinProject.renkin.apk
 
 import android.content.Context
-import android.graphics.drawable.AdaptiveIconDrawable
-import android.graphics.drawable.LayerDrawable
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawDynamicClock
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
-import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
-import dev.renkinProject.renkin.extension.getIdentifierByName
+import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.PackageResourceResolver
-import dev.renkinProject.renkin.packages.PackageVersion
 import dev.renkinProject.renkin.packages.appFilterDrawableName
 
 /** Hour, minute and second layer indices (-1 = absent), or null when the declaration is unusable. */
@@ -67,11 +63,14 @@ class DynamicClockPreview(private val context: Context) {
     }
 
     /** The live clock an already applied icon exports, decided by the same check as the build. */
-    fun storedSourceFor(app: PackageInfoStruct): DynamicClockSource? {
+    fun storedSourceFor(
+        app: PackageInfoStruct,
+        stageChains: (PackageInfoStruct) -> List<List<GenerationOptions>>
+    ): DynamicClockSource? {
         val pack = app.sourcePackName?.takeIf { it.isNotEmpty() } ?: return null
         val icon = app.createdIcon ?: return null
         val installed = app.toInstalledApplication()
-        DynamicClockExporter(context, listOf(installed)).clockIconFor(app, pack, icon) ?: return null
+        DynamicClockExporter(context, listOf(installed), stageChains).clockIconFor(app, pack, icon) ?: return null
         return mappedClock(installed, pack)
     }
 
@@ -84,21 +83,26 @@ class DynamicClockPreview(private val context: Context) {
         return DynamicClockSource(packPackageName, drawableName, meta)
     }
 
-    fun render(source: DynamicClockSource, hour: Int, minute: Int): IconPackDrawable? {
-        val res = resourceResolver.getResources(source.packPackageName) ?: return null
-        val id = res.getIdentifierByName(source.drawableName, "drawable", source.packPackageName)
-        val drawable = resourceResolver.getDrawable(res, id)?.mutate() ?: return null
-        val adaptive = if (PackageVersion.is26OrMore()) drawable as? AdaptiveIconDrawable else null
-        val layered = (adaptive?.foreground ?: drawable) as? LayerDrawable ?: return null
-        val hands = source.meta.handLayerIndices(layered.numberOfLayers) ?: return null
-        source.meta.handLevels(hour, minute).forEachIndexed { hand, level ->
-            hands[hand].takeIf { it >= 0 }?.let { layered.getDrawable(it).level = level }
-        }
-        return if (adaptive != null) AdaptiveIconPackDrawable.capture(adaptive)
-        else drawable.toSafeBitmapOrNull(CLOCK_RENDER_SIZE, CLOCK_RENDER_SIZE)?.let { BitmapIconDrawable(resources, it) }
+    /**
+     * [source]'s layers styled by [chain] the way the build styles them, or null when the result
+     * does not reproduce [frame], the icon the editor shows: the strip must not promise times the
+     * built pack would not show.
+     */
+    fun styledClock(source: DynamicClockSource, chain: List<GenerationOptions>, frame: IconPackDrawable?): PreviewClock? {
+        val captured = DynamicClockExporter(context, emptyList())
+            .captureClock(source.packPackageName, source.drawableName, source.meta) ?: return null
+        if (captured.background == null) return PreviewClock(captured.icon, null).takeIf { chain.isEmpty() }
+        val adaptiveFrame = frame as? AdaptiveIconPackDrawable ?: return null
+        val styled = if (chain.isEmpty()) captured.icon else captured.icon.styledWith(resources, chain) ?: return null
+        if (!styled.authoredForeground().looksAlike(adaptiveFrame.foreground)) return null
+        return PreviewClock(styled, adaptiveFrame)
     }
 
-    private companion object {
-        const val CLOCK_RENDER_SIZE = 500
+    fun frameAt(clock: PreviewClock, hour: Int, minute: Int): IconPackDrawable {
+        val foreground = clock.icon.foregroundAt(hour, minute)
+        return clock.frame?.withForeground(foreground) ?: BitmapIconDrawable(resources, foreground)
     }
 }
+
+/** A clock ready to preview: its styled layers and the editor icon whose foreground they replace. */
+class PreviewClock(internal val icon: DynamicClockExporter.ClockIcon, internal val frame: AdaptiveIconPackDrawable?)

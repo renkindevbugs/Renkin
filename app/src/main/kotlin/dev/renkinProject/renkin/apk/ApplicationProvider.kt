@@ -2240,7 +2240,9 @@ class ApplicationProvider internal constructor(
 
     suspend fun storedDynamicClockSource(app: PackageInfoStruct): DynamicClockSource? =
         withContext(Dispatchers.Default) {
-            runCatching { dynamicClockPreview.storedSourceFor(app) }.getOrNull()
+            val preferences = context.dataStore.getPreferencesAfterPendingWrites()
+            runCatching { dynamicClockPreview.storedSourceFor(app) { storedStageChains(it, preferences, context) } }
+                .getOrNull()
         }
 
     private val calendarDayStyler by lazy { CalendarDayStyler(context, iconGenService) }
@@ -2252,12 +2254,18 @@ class ApplicationProvider internal constructor(
             calendarDayStyler.storedStage(app, packPackageName, days, context.dataStore.getPreferencesAfterPendingWrites())
         }
 
-    suspend fun renderDynamicClock(source: DynamicClockSource, hour: Int, minute: Int): IconPackDrawable? =
-        withContext(Dispatchers.Default) {
-            runCatching { dynamicClockPreview.render(source, hour, minute) }
-                .onFailure { Log.error("ApplicationProvider", "Clock preview failed", it) }
-                .getOrNull()
-        }
+    suspend fun styleDynamicClock(
+        source: DynamicClockSource,
+        chain: List<GenerationOptions>,
+        frame: IconPackDrawable?
+    ): PreviewClock? = withContext(Dispatchers.Default) {
+        runCatching { dynamicClockPreview.styledClock(source, chain, frame) }
+            .onFailure { Log.error("ApplicationProvider", "Clock preview failed", it) }
+            .getOrNull()
+    }
+
+    suspend fun dynamicClockFrame(clock: PreviewClock, hour: Int, minute: Int): IconPackDrawable =
+        withContext(Dispatchers.Default) { dynamicClockPreview.frameAt(clock, hour, minute) }
 
     /** A calendar-enabled app whose source pack is missing some of the 1..31 day drawables. */
     data class CalendarWarning(val appName: String, val missingDays: Int)

@@ -30,3 +30,6 @@ internal fun Bitmap.averageDifference(other: Bitmap, size: Int = 32): Long {
     }
     return diff / (size * size * 4)
 }
+
+// Calendar digits and clock hands are a few pixels at looksAlike's 32px; ranking needs more detail.
+internal const val DETAIL_MATCH_SIZE = 96
