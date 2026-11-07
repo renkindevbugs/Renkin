@@ -204,16 +204,60 @@ class SvgVectorImporterTest {
             """<svg viewBox="0 0 24 24"><use href="#other"/></svg>"""
         ))
         assertNull(SvgVectorImporter.parse(
-            """<svg viewBox="0 0 24 24" stroke="black"><path d="M0 0h1"/></svg>"""
-        ))
-        assertNull(SvgVectorImporter.parse(
             """<svg viewBox="1 1 24 24"><path d="M1 1h1"/></svg>"""
         ))
         assertNull(SvgVectorImporter.parse(
-            """<svg viewBox="0 0 24 24"><g opacity="0.5"><path d="M1 1h1"/></g></svg>"""
+            """<svg viewBox="0 0 24 24"><g opacity="half"><path d="M1 1h1"/></g></svg>"""
+        ))
+        assertNull(SvgVectorImporter.parse(
+            """<svg viewBox="0 0 24 24"><path fill="red" stroke="url(#g)" d="M1 1h1"/></svg>"""
         ))
         assertNull(SvgVectorImporter.parse(
             """<svg viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="wide"><path d="M1 1h1"/></svg>"""
         ))
+    }
+
+    @Test
+    fun pathPaintedBothWays_becomesFillThenStrokeWithOwnPaints() {
+        val svg = """
+            <svg viewBox="0 0 24 24">
+              <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path fill="#ff0000" fill-opacity="0.5" stroke-opacity="0.25" d="M11.5 7.5a.5.5 0 1 0 1 0"/>
+              </g>
+            </svg>
+        """.trimIndent()
+
+        val paths = SvgVectorImporter.parse(svg)!!.paths
+
+        assertEquals(2, paths.size)
+        val (fill, stroke) = paths
+        assertTrue(fill.filled)
+        assertNull(fill.strokeWidth)
+        assertEquals("#ff0000", fill.color)
+        assertEquals(0.5f, fill.alpha)
+        assertFalse(stroke.filled)
+        assertEquals(2f, stroke.strokeWidth)
+        assertNull(stroke.color)
+        assertEquals(0.25f, stroke.alpha)
+        assertEquals(StrokeCap.Round, stroke.strokeLineCap)
+        assertEquals(fill.pathData, stroke.pathData)
+    }
+
+    @Test
+    fun groupOpacity_multipliesIntoEveryChildIncludingNestedGroups() {
+        val svg = """
+            <svg viewBox="0 0 24 24" opacity="0.5">
+              <path d="M1 1h4v4z"/>
+              <g fill="currentColor" opacity=".5">
+                <path opacity="0.5" d="M6 6h4v4z"/>
+                <g style="opacity:50%"><path d="M12 12h4v4z"/></g>
+              </g>
+              <path d="M18 18h4v4z"/>
+            </svg>
+        """.trimIndent()
+
+        val alphas = SvgVectorImporter.parse(svg)!!.paths.map { it.alpha }
+
+        assertEquals(listOf(0.5f, 0.125f, 0.125f, 0.5f), alphas)
     }
 }

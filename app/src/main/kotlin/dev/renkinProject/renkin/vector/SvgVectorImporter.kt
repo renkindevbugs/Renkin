@@ -65,11 +65,10 @@ object SvgVectorImporter {
                 when (parser.name) {
                     "svg" -> if (!sawSvg) {
                         sawSvg = true
-                        stylesByDepth[parser.depth] = SvgStyle().merge(parser)
+                        val groupAlpha = parser.groupAlpha(1f)
+                        if (groupAlpha == null) unsupported = true
+                        stylesByDepth[parser.depth] = SvgStyle(groupAlpha = groupAlpha ?: 1f).merge(parser)
                         if (!parser.attr("transform").isNullOrBlank()) unsupported = true
-                        parser.property("opacity")?.let { opacity ->
-                            if (opacity.toUnitFloatOrNull() != 1f) unsupported = true
-                        }
                         val viewBox = parser.attr("viewBox")?.trim()
                             ?.split(Regex("[ ,]+"))
                             ?.mapNotNull { it.toFloatOrNull() }
@@ -86,11 +85,10 @@ object SvgVectorImporter {
                     }
                     "g" -> {
                         val inherited = stylesByDepth[parser.depth - 1] ?: SvgStyle()
-                        stylesByDepth[parser.depth] = inherited.merge(parser)
+                        val groupAlpha = parser.groupAlpha(inherited.groupAlpha)
+                        if (groupAlpha == null) unsupported = true
+                        stylesByDepth[parser.depth] = inherited.copy(groupAlpha = groupAlpha ?: 1f).merge(parser)
                         if (!parser.attr("transform").isNullOrBlank()) unsupported = true
-                        parser.property("opacity")?.let { opacity ->
-                            if (opacity.toUnitFloatOrNull() != 1f) unsupported = true
-                        }
                     }
                     "path", "rect", "circle", "ellipse", "line", "polyline", "polygon" -> {
                         if (!parser.attr("transform").isNullOrBlank()) unsupported = true
@@ -117,27 +115,11 @@ object SvgVectorImporter {
                                 unsupported = true
                             }
                             val strokeWidth = parsedStrokeWidth ?: 1f
-                            // The editor models a path as fill OR stroke. Reject dual-painted paths
-                            // instead of silently dropping one paint during import.
-                            if (filled && stroked) unsupported = true
                             val nodes = runCatching { PathParser().parsePathString(d).toNodes() }.getOrNull()
                             if (nodes == null || nodes == EmptyPath) unsupported = true
-                            // The active paint's own colour (multicolour icon sets); gradients
-                            // and other paint servers can't become a solid path colour, so they
-                            // reject the document rather than silently flattening it.
-                            val paint = if (filled) fill else stroke
-                            if (paint != null && paint.trim().startsWith("url(", ignoreCase = true)) {
-                                unsupported = true
-                            }
-                            val color = paint?.trim()?.takeIf {
-                                !it.equals("none", true) && !it.equals("currentColor", true)
-                            }
-                            val paintAlphaRaw = if (filled) style.fillOpacity else style.strokeOpacity
-                            val paintAlpha = paintAlphaRaw?.toUnitFloatOrNull() ?: 1f
                             val elementAlpha = parser.property("opacity")?.toUnitFloatOrNull() ?: 1f
-                            if ((paintAlphaRaw != null && paintAlphaRaw.toUnitFloatOrNull() == null) ||
-                                (parser.property("opacity") != null &&
-                                    parser.property("opacity")?.toUnitFloatOrNull() == null)
+                            if (parser.property("opacity") != null &&
+                                parser.property("opacity")?.toUnitFloatOrNull() == null
                             ) unsupported = true
                             val fillType = when (style.fillRule?.lowercase()) {
                                 null, "nonzero" -> PathFillType.NonZero
@@ -156,18 +138,36 @@ object SvgVectorImporter {
                                 "bevel" -> StrokeJoin.Bevel
                                 else -> { unsupported = true; StrokeJoin.Miter }
                             }
-                            paths.add(
-                                ImportedPath(
-                                    d,
-                                    filled,
-                                    strokeWidth.takeIf { stroked },
-                                    color,
-                                    (paintAlpha * elementAlpha).coerceIn(0f, 1f),
-                                    fillType,
-                                    lineCap,
-                                    lineJoin
+                            // The editor models a path as fill OR stroke, so a path painted both ways
+                            // becomes two paths with the same geometry: the fill first, because SVG
+                            // paints the stroke on top of it.
+                            val paintsFill = if (filled && stroked) listOf(true, false) else listOf(filled)
+                            for (isFill in paintsFill) {
+                                val paint = if (isFill) fill else stroke
+                                // Gradients and other paint servers have no solid path colour, so
+                                // they reject the document rather than silently flattening it.
+                                if (paint != null && paint.trim().startsWith("url(", ignoreCase = true)) {
+                                    unsupported = true
+                                }
+                                val color = paint?.trim()?.takeIf {
+                                    !it.equals("none", true) && !it.equals("currentColor", true)
+                                }
+                                val paintAlphaRaw = if (isFill) style.fillOpacity else style.strokeOpacity
+                                val paintAlpha = paintAlphaRaw?.toUnitFloatOrNull() ?: 1f
+                                if (paintAlphaRaw != null && paintAlphaRaw.toUnitFloatOrNull() == null) unsupported = true
+                                paths.add(
+                                    ImportedPath(
+                                        d,
+                                        isFill,
+                                        strokeWidth.takeIf { !isFill && stroked },
+                                        color,
+                                        (paintAlpha * elementAlpha * style.groupAlpha).coerceIn(0f, 1f),
+                                        fillType,
+                                        lineCap,
+                                        lineJoin
+                                    )
                                 )
-                            )
+                            }
                         }
                     }
                     "use", "image", "text",
@@ -195,6 +195,16 @@ object SvgVectorImporter {
             val parts = declaration.split(':', limit = 2)
             parts.takeIf { it.size == 2 && it[0].trim() == name }?.get(1)?.trim()
         }
+    }
+
+    /**
+     * The group's opacity combined with its ancestors', or null for a malformed value. Folding it
+     * into each child's alpha matches SVG wherever the children don't overlap, which holds for
+     * duotone icon sets (Solar); overlapping children would show a darker overlap.
+     */
+    private fun XmlPullParser.groupAlpha(inherited: Float): Float? {
+        val opacity = property("opacity") ?: return inherited
+        return opacity.toUnitFloatOrNull()?.let { it * inherited }
     }
 
     private fun String.toUnitFloatOrNull(): Float? {
@@ -302,7 +312,9 @@ object SvgVectorImporter {
         val fillOpacity: String? = null,
         val strokeOpacity: String? = null,
         val strokeLineCap: String? = null,
-        val strokeLineJoin: String? = null
+        val strokeLineJoin: String? = null,
+        /** Product of the enclosing `<svg>`/`<g>` opacities, folded into each path's alpha. */
+        val groupAlpha: Float = 1f
     ) {
         fun merge(parser: XmlPullParser): SvgStyle {
             val declarations = parser.attr("style")
@@ -313,8 +325,8 @@ object SvgVectorImporter {
                 }
                 ?.toMap()
                 .orEmpty()
-            return SvgStyle(
-                fill = parser.attr("fill") ?: declarations["fill"] ?: fill,
+            return copy(
+                fill =parser.attr("fill") ?: declarations["fill"] ?: fill,
                 stroke = parser.attr("stroke") ?: declarations["stroke"] ?: stroke,
                 strokeWidth = parser.attr("stroke-width") ?: declarations["stroke-width"] ?: strokeWidth,
                 fillRule = parser.attr("fill-rule") ?: declarations["fill-rule"] ?: fillRule,
