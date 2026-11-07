@@ -15,6 +15,11 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.online.CollapsedSetCategories
+import dev.renkinProject.renkin.data.online.DownloadedIconSet
+import dev.renkinProject.renkin.data.online.DownloadedIconSets
+import dev.renkinProject.renkin.data.online.IconSetDownloadResult
+import dev.renkinProject.renkin.data.online.IconSetRelease
+import dev.renkinProject.renkin.data.online.IconSetReleaseLookup
 import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIcon
 import dev.renkinProject.renkin.data.online.OnlineIconRepository
@@ -28,6 +33,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -61,12 +67,31 @@ sealed interface OnlineIconImport {
  */
 data class OnlineImageImport(val bitmap: Bitmap, val galleryPath: String?)
 
+sealed interface SetDownloadState {
+    /** Asking jsDelivr for the newest release and its size. */
+    data object Preparing : SetDownloadState
+    data class Downloading(val progress: Float) : SetDownloadState
+    data class Failed(val reason: SetDownloadFailure) : SetDownloadState
+}
+
+enum class SetDownloadFailure { Network, Damaged, NotAvailable }
+
+/** The confirmation for downloading [set]; [installed] is set when this replaces a download. */
+data class SetDownloadOffer(
+    val set: IconifyCollection,
+    val release: IconSetRelease,
+    val installed: DownloadedIconSet?
+) {
+    val upToDate: Boolean get() = installed?.version == release.version
+}
+
 /** Owns one open Online Icons browsing session; closing the browser explicitly resets it. */
 @HiltViewModel
 class OnlineIconBrowserViewModel @Inject constructor(
     private val repository: OnlineIconRepository,
     @param:ApplicationContext private val context: Context,
-    private val collapsedStore: CollapsedSetCategories
+    private val collapsedStore: CollapsedSetCategories,
+    private val downloads: DownloadedIconSets
 ) : ViewModel() {
 
     /** Collapsed set-list categories; remembered across sessions, so not reset on close. */
@@ -148,6 +173,99 @@ class OnlineIconBrowserViewModel @Inject constructor(
 
     fun isBuiltIn(set: IconifyCollection): Boolean = repository.isBuiltIn(set.prefix)
 
+    val downloadedSets: StateFlow<Map<String, DownloadedIconSet>> = downloads.sets
+
+    /** Per-set download progress or failure for this session; absent means idle. */
+    var downloadStates: Map<String, SetDownloadState> by mutableStateOf(emptyMap())
+        private set
+    var downloadOffer: SetDownloadOffer? by mutableStateOf(null)
+        private set
+    var pendingDelete: IconifyCollection? by mutableStateOf(null)
+        private set
+    var downloadedOnly by mutableStateOf(false)
+    private val downloadJobs = mutableMapOf<String, Job>()
+
+    /** Looks up the newest pinned release first, so the confirmation can show its real size. */
+    fun offerDownload(set: IconifyCollection) {
+        val state = downloadStates[set.prefix]
+        if (state == SetDownloadState.Preparing || state is SetDownloadState.Downloading) return
+        downloadStates = downloadStates + (set.prefix to SetDownloadState.Preparing)
+        launchInSession { started ->
+            val lookup = downloads.latestRelease(set.prefix)
+            if (!isCurrent(started)) return@launchInSession
+            when (lookup) {
+                is IconSetReleaseLookup.Found -> {
+                    downloadStates = downloadStates - set.prefix
+                    downloadOffer = SetDownloadOffer(set, lookup.release, downloadedSets.value[set.prefix])
+                }
+                IconSetReleaseLookup.NotAvailable -> fail(set.prefix, SetDownloadFailure.NotAvailable)
+                IconSetReleaseLookup.Failed -> fail(set.prefix, SetDownloadFailure.Network)
+            }
+        }
+    }
+
+    fun dismissDownloadOffer() {
+        downloadOffer = null
+    }
+
+    fun confirmDownload() {
+        val offer = downloadOffer ?: return
+        downloadOffer = null
+        val prefix = offer.set.prefix
+        downloadStates = downloadStates + (prefix to SetDownloadState.Downloading(0f))
+        var shownPercent = 0
+        downloadJobs[prefix] = launchInSession { started ->
+            val result = downloads.download(offer.release) { progress ->
+                val percent = (progress * 100).toInt()
+                if (percent == shownPercent) return@download
+                shownPercent = percent
+                viewModelScope.launch {
+                    if (isCurrent(started) && downloadStates[prefix] is SetDownloadState.Downloading) {
+                        downloadStates = downloadStates + (prefix to SetDownloadState.Downloading(percent / 100f))
+                    }
+                }
+            }
+            if (!isCurrent(started)) return@launchInSession
+            downloadJobs.remove(prefix)
+            when (result) {
+                IconSetDownloadResult.Done -> {
+                    downloadStates = downloadStates - prefix
+                    selectedCollection?.takeIf { it.prefix == prefix }?.let(::loadIcons)
+                }
+                IconSetDownloadResult.NotAvailable -> fail(prefix, SetDownloadFailure.NotAvailable)
+                IconSetDownloadResult.IntegrityFailed -> fail(prefix, SetDownloadFailure.Damaged)
+                IconSetDownloadResult.Failed -> fail(prefix, SetDownloadFailure.Network)
+            }
+        } ?: return
+    }
+
+    fun cancelDownload(prefix: String) {
+        downloadJobs.remove(prefix)?.cancel()
+        downloadStates = downloadStates - prefix
+    }
+
+    private fun fail(prefix: String, reason: SetDownloadFailure) {
+        downloadStates = downloadStates + (prefix to SetDownloadState.Failed(reason))
+    }
+
+    fun requestDelete(set: IconifyCollection) {
+        pendingDelete = set
+    }
+
+    fun dismissDelete() {
+        pendingDelete = null
+    }
+
+    /** Runs outside the session so closing the browser right after the tap still removes the files. */
+    fun confirmDelete() {
+        val set = pendingDelete ?: return
+        pendingDelete = null
+        viewModelScope.launch {
+            downloads.delete(set.prefix)
+            selectedCollection?.takeIf { it.prefix == set.prefix }?.let(::loadIcons)
+        }
+    }
+
     // Each open session owns its loads: closing cancels them, and a late result never publishes
     // into the next session, even when the browser reopens at once (the generation moves on).
     private var sessionJob: Job? = null
@@ -175,6 +293,7 @@ class OnlineIconBrowserViewModel @Inject constructor(
         generation++
         sessionJob = SupervisorJob(viewModelScope.coroutineContext[Job])
         resetSessionState()
+        viewModelScope.launch { downloads.ensureScanned() }
         loadCollections()
     }
 
@@ -330,6 +449,11 @@ class OnlineIconBrowserViewModel @Inject constructor(
     private fun resetSessionState() {
         iconsJob?.cancel()
         iconsJob = null
+        downloadJobs.clear()
+        downloadStates = emptyMap()
+        downloadOffer = null
+        pendingDelete = null
+        downloadedOnly = false
         selectedCollection = null
         collections = null
         collectionsFailed = false

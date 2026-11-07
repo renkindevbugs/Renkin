@@ -173,6 +173,12 @@ class OnlineIconRepository internal constructor(
 
     suspend fun svg(icon: OnlineIcon, cachedOnly: Boolean = false): String? = withContext(ioDispatcher) {
         svgMemory.get(icon.svgUrl)?.let { return@withContext it }
+        // The disk cache goes first: only one downloaded set stays parsed, so sample rows of several
+        // downloaded sets would otherwise re-parse them in turn.
+        readCachedSvg(icon)?.let {
+            svgMemory.put(icon.svgUrl, it)
+            return@withContext it
+        }
         // A local set counts as cache: it renders while scrolling, offline and during a 429 pause.
         (localSets?.set(icon.prefix)?.lookup(icon.name) as? IconLookup.Markup)?.let {
             svgMemory.put(icon.svgUrl, it.svg)

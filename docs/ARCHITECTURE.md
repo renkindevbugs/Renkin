@@ -1192,6 +1192,24 @@ profile snapshots and Renkin backups. The name filter and Colour/Monochrome chip
 categories and recount the rest. Headers and rows animate with `animateItem()`; the header's chevron,
 bottom corners and gap morph with `motionScheme.fastSpatialSpec()` (clamped against overshoot).
 
+**Downloadable icon sets (verified)** let the user keep
+any Iconify set offline. An opened online set shows a "Use this set offline" card; Download first
+asks data.jsdelivr.com for the newest `@iconify-json/<prefix>` version and its file listing, then a
+confirmation shows size, icon count and version. `DownloadedIconSets` streams the pinned
+`cdn.jsdelivr.net/npm/@iconify-json/<prefix>@<version>/icons.json` into
+`filesDir/online-icon-sets/<prefix>/icons-<version>.json.part`, checks size and the listed SHA-256
+(protection against damaged transfers, not authenticity), parses it, renames it, and writes
+`manifest.json` last; a folder without a valid manifest and files it does not name are deleted on the
+next scan, so a process death never mixes versions. `info.json` is copied too so the set appears in
+the offline set list. Sets over 16 MiB raw or without an npm package are offered as browse-only.
+At most one download runs; it belongs to the browser session, so closing the browser cancels it and
+removes the partial file. Only one downloaded set stays parsed in memory besides the bundled one,
+and SVG lookups check the disk cache before the local set to avoid re-parsing sets in turn. The set
+list shows Downloaded/percent badges and an always-visible first "Downloaded" chip (downloaded plus built-in sets; count and
+size summary when downloads exist). A downloaded set's overflow menu offers "Download latest version" (manual; there is
+no background update check) and "Remove download". The folder is excluded from Auto Backup in both
+rule files and is not part of Renkin backups. Imported icons keep the canonical Iconify `svgUrl`.
+
 **7D4 (verified)** groups the help presentation in `feature.help`:
 `IntroShowcase`, `InfoDialog` and `WhatsNewDialog` (including the full history screen).
 The guided-tour targets, composition local and placement helper move with the tour. MainScreen
