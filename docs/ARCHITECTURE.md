@@ -2443,6 +2443,9 @@ and, when available, `drawable-anydpi-v33` XML with monochrome. Each XML has a d
 path. `appfilter.xml` points to the versioned resource; `appmap.xml` and `theme_resources.xml`
 point directly to a legacy bitmap alias. Qualifiers select by Android version, not launcher
 capability: a launcher using appfilter on API 26+ must accept/render adaptive drawables itself.
+`appmap.xml` keys icons by activity class alone, so it skips classes shared by several packages
+(always the pack's own `MainActivity`, which every profile pack runs); otherwise launchers that
+fall back to it give one pack's icon to every other profile pack without its own entry.
 Monochrome is captured from the framework on API 33+, or from the selected source XML on older
 systems. A source variant available only under v33 cannot be selected by Android 26–32.
 
