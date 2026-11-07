@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.feature.online
 import android.app.Application
 import android.content.Context
 import android.content.ContextWrapper
+import dev.renkinProject.renkin.data.online.CollapsedSetCategories
 import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIconRepository
 import dev.renkinProject.renkin.data.online.OnlineIconRepository.Companion.HttpTextResponse
@@ -68,7 +69,7 @@ class OnlineIconBrowserSessionTest {
             { testScheduler.currentTime },
             StandardTestDispatcher(testScheduler)
         )
-        return OnlineIconBrowserViewModel(repository, context)
+        return OnlineIconBrowserViewModel(repository, context, CollapsedSetCategories(context))
     }
 
     private fun collection(prefix: String) = IconifyCollection(prefix, prefix, 1, "MIT", "General", false, emptyList())

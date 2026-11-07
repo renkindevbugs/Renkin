@@ -552,7 +552,6 @@ class OnlineIconRepository internal constructor(
                     )
                 )
             }
-            collections.sortBy { it.name.lowercase() }
             collections.toList().takeIf { it.isNotEmpty() }
         }.getOrNull()
 

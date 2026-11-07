@@ -14,6 +14,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.renkinProject.renkin.data.UploadedImageStore
+import dev.renkinProject.renkin.data.online.CollapsedSetCategories
 import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIcon
 import dev.renkinProject.renkin.data.online.OnlineIconRepository
@@ -64,8 +65,24 @@ data class OnlineImageImport(val bitmap: Bitmap, val galleryPath: String?)
 @HiltViewModel
 class OnlineIconBrowserViewModel @Inject constructor(
     private val repository: OnlineIconRepository,
-    @param:ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context,
+    private val collapsedStore: CollapsedSetCategories
 ) : ViewModel() {
+
+    /** Collapsed set-list categories; remembered across sessions, so not reset on close. */
+    var collapsedCategories by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    init {
+        viewModelScope.launch { collapsedCategories = collapsedStore.read() }
+    }
+
+    fun toggleCategory(category: String) {
+        val next = if (category in collapsedCategories) collapsedCategories - category
+            else collapsedCategories + category
+        collapsedCategories = next
+        viewModelScope.launch { collapsedStore.write(next) }
+    }
 
     var selectedCollection: IconifyCollection? by mutableStateOf(null)
         private set
@@ -80,7 +97,6 @@ class OnlineIconBrowserViewModel @Inject constructor(
 
     var collectionQuery by mutableStateOf("")
         private set
-    var category by mutableStateOf<String?>(null)
     var palette by mutableStateOf<Boolean?>(null)
     var iconQuery by mutableStateOf("")
 
@@ -320,7 +336,6 @@ class OnlineIconBrowserViewModel @Inject constructor(
         icons = null
         iconsFailed = false
         collectionQuery = ""
-        category = null
         palette = null
         iconQuery = ""
         searchJob?.cancel()

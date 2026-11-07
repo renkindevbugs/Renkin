@@ -3,6 +3,7 @@
 package dev.renkinProject.renkin.feature.online
 
 import android.os.SystemClock
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -19,17 +21,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.EditOff
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
@@ -55,13 +60,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -342,7 +350,6 @@ private fun CollectionList(
 ) {
     val collections = viewModel.collections
     val query = viewModel.collectionQuery
-    val category = viewModel.category
     val palette = viewModel.palette
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = viewModel.collectionListIndex,
@@ -353,18 +360,16 @@ private fun CollectionList(
         derivedStateOf { listState.layoutInfo.visibleItemsInfo.map { it.key }.toSet() }
     }
 
-    val categories = remember(collections) {
-        collections.orEmpty().mapNotNull { it.category.takeIf(String::isNotEmpty) }
-            .distinct().sorted()
-    }
-    val filtered = remember(collections, query, category, palette) {
+    val filtered = remember(collections, query, palette) {
         val needle = query.trim().lowercase()
         collections.orEmpty().filter { set ->
             (needle.isEmpty() || needle in set.name.lowercase() || needle in set.prefix) &&
-                (category == null || set.category == category) &&
                 (palette == null || set.palette == palette)
         }
     }
+    // Categories and their sets keep the API order, as on icon-sets.iconify.design.
+    val groups = remember(filtered) { filtered.groupBy { it.category } }
+    val collapsed = viewModel.collapsedCategories
 
     Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
         SearchField(
@@ -382,8 +387,6 @@ private fun CollectionList(
         SearchResults(viewModel, enabled, onPick)
         return
     }
-    // Palette toggle + category chips in one horizontally scrolling row, like the site's
-    // filter bar. The palette chips sit first — they're the ones users reach for.
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -402,20 +405,6 @@ private fun CollectionList(
             onClick = { viewModel.palette = if (palette == false) null else false },
             label = { Text(stringResource(R.string.onlineFilterMono)) }
         )
-        if (categories.isNotEmpty()) {
-            Text(
-                text = "·",
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(horizontal = 2.dp)
-            )
-        }
-        categories.forEach { candidate ->
-            FilterChip(
-                selected = category == candidate,
-                onClick = { viewModel.category = if (category == candidate) null else candidate },
-                label = { Text(candidate) }
-            )
-        }
     }
     Row(
         modifier = Modifier
@@ -459,23 +448,40 @@ private fun CollectionList(
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxSize()
                     .drawVerticalScrollbar(listState)
             ) {
-                items(filtered, key = { it.prefix }) { set ->
-                    CollectionRow(
-                        set,
-                        viewModel,
-                        loadPreviews = set.prefix in visibleKeys && !listState.isScrollInProgress
-                    ) {
-                        viewModel.openCollection(
-                            set,
-                            listState.firstVisibleItemIndex,
-                            listState.firstVisibleItemScrollOffset,
-                            filterScrollState.value
+                // Each category reads as one card (like Advanced options), built from separate
+                // lazy items whose shapes join: the header carries the top corners, the last set
+                // the bottom ones.
+                groups.forEach { (category, sets) ->
+                    val expanded = category !in collapsed
+                    item(key = "category:$category", contentType = "categoryHeader") {
+                        CategoryHeader(
+                            title = category.ifEmpty { stringResource(R.string.onlineCategoryOther) },
+                            count = sets.size,
+                            expanded = expanded,
+                            onToggle = { viewModel.toggleCategory(category) },
+                            modifier = Modifier.animateItem()
                         )
+                    }
+                    if (expanded) itemsIndexed(sets, key = { _, set -> set.prefix }, contentType = { _, _ -> "set" }) { index, set ->
+                        CollectionRow(
+                            set,
+                            viewModel,
+                            loadPreviews = set.prefix in visibleKeys && !listState.isScrollInProgress,
+                            isFirst = index == 0,
+                            isLast = index == sets.lastIndex,
+                            modifier = Modifier.animateItem()
+                        ) {
+                            viewModel.openCollection(
+                                set,
+                                listState.firstVisibleItemIndex,
+                                listState.firstVisibleItemScrollOffset,
+                                filterScrollState.value
+                            )
+                        }
                     }
                 }
             }
@@ -548,67 +554,156 @@ private fun SearchResults(
     }
 }
 
-/** One set row: name, size + licence line, and up to three live sample previews. */
+/** One set row inside its category card: name, size + licence line, and up to three live sample previews. */
 @Composable
 private fun CollectionRow(
     set: IconifyCollection,
     viewModel: OnlineIconBrowserViewModel,
     loadPreviews: Boolean,
+    isFirst: Boolean,
+    isLast: Boolean,
+    modifier: Modifier = Modifier,
     onOpen: () -> Unit
 ) {
     Surface(
-        shape = CardShape,
+        shape = if (isLast) CategoryBottomShape else RectangleShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = if (isLast) CATEGORY_GAP else 0.dp)
+    ) {
+        Column {
+            if (!isFirst) {
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(role = Role.Button, onClick = onOpen)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                set.samples.take(3).forEach { sample ->
+                    SamplePreview(OnlineIcon(set.prefix, sample), viewModel, loadPreviews)
+                }
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .padding(start = 6.dp, end = 4.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = set.name,
+                            style = MaterialTheme.typography.titleSmallEmphasized,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (viewModel.isBuiltIn(set)) SetSourceBadge(stringResource(R.string.onlineSetBuiltIn))
+                    }
+                    Text(
+                        text = stringResource(R.string.onlineSetCount, set.total) + " · " +
+                            set.license.ifEmpty { stringResource(R.string.onlineUnknownLicense) },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (set.license.isEmpty()) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+/** The first row of a category card, like the Advanced options header; tapping folds the sets away. */
+@Composable
+private fun CategoryHeader(
+    title: String,
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+        label = "categoryChevron"
+    )
+    // 0 = joined to its sets, 1 = a standalone card: the corners and the gap below morph together.
+    val collapseProgress by animateFloatAsState(
+        targetValue = if (expanded) 0f else 1f,
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+        label = "categoryCollapse"
+    )
+    // The expressive spring overshoots; a negative gap or corner would crash.
+    val collapse = collapseProgress.coerceIn(0f, 1f)
+    Surface(
+        shape = CardShape.copy(
+            bottomStart = CornerSize(CATEGORY_CORNER * collapse),
+            bottomEnd = CornerSize(CATEGORY_CORNER * collapse)
+        ),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = CATEGORY_GAP * collapse)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(role = Role.Button, onClick = onOpen)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            set.samples.take(3).forEach { sample ->
-                SamplePreview(OnlineIcon(set.prefix, sample), viewModel, loadPreviews)
-            }
-            Column(
-                Modifier
-                    .weight(1f)
-                    .padding(start = 6.dp, end = 4.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = set.name,
-                        style = MaterialTheme.typography.titleSmallEmphasized,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    if (viewModel.isBuiltIn(set)) SetSourceBadge(stringResource(R.string.onlineSetBuiltIn))
-                }
-                Text(
-                    text = stringResource(R.string.onlineSetCount, set.total) + " · " +
-                        set.license.ifEmpty { stringResource(R.string.onlineUnknownLicense) },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (set.license.isEmpty()) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = stringResource(
+                        if (expanded) R.string.onlineCategoryCollapse else R.string.onlineCategoryExpand
+                    ),
+                    onClick = onToggle
                 )
-            }
+                .padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Only the spacer takes weight: a weighted title would split the free width with it
+            // and leave the chevron short of the set rows' chevrons.
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMediumEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = pluralStringResource(R.plurals.onlineCategorySetCount, count, count),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            Spacer(Modifier.weight(1f))
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                imageVector = Icons.Filled.KeyboardArrowDown,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.rotate(chevronRotation)
             )
         }
     }
 }
+
+private val CATEGORY_CORNER = 20.dp // CardShape radius; the header morphs its bottom corners to it
+private val CategoryBottomShape = CardShape.copy(topStart = CornerSize(0.dp), topEnd = CornerSize(0.dp))
+private val CATEGORY_GAP = 12.dp
 
 @Composable
 private fun SetSourceBadge(label: String) {

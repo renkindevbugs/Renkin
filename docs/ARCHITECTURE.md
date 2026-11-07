@@ -1181,6 +1181,17 @@ Built-in sets show a quiet "Built in" badge. Imported icons keep the canonical I
 attribution and stored rows are unchanged. The MIT notice ships as `LICENSE-tabler.txt` and the
 About dialog credits the set.
 
+**Set list categories (verified)** groups the online set
+list into one collapsible card per category (styled like Advanced options: header row with the
+chevron at the far right, sets as rows of the same card split by hairlines) instead of category
+filter chips. Each card is built from separate lazy items whose corner shapes join. Categories and
+the sets inside them keep the `/collections` API order (as on icon-sets.iconify.design); sets
+without a category appear under "Other". All categories start expanded; `CollapsedSetCategories`
+keeps the collapsed ones in a device-local SharedPreferences file (`online_icon_browser`), outside
+profile snapshots and Renkin backups. The name filter and Colour/Monochrome chips hide empty
+categories and recount the rest. Headers and rows animate with `animateItem()`; the header's chevron,
+bottom corners and gap morph with `motionScheme.fastSpatialSpec()` (clamped against overshoot).
+
 **7D4 (verified)** groups the help presentation in `feature.help`:
 `IntroShowcase`, `InfoDialog` and `WhatsNewDialog` (including the full history screen).
 The guided-tour targets, composition local and placement helper move with the tour. MainScreen

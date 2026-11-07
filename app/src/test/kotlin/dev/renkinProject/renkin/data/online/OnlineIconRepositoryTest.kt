@@ -18,29 +18,29 @@ import java.time.format.DateTimeFormatter
 class OnlineIconRepositoryTest {
 
     @Test
-    fun parseCollections_readsMetadataAndSortsByName() {
+    fun parseCollections_readsMetadataAndKeepsApiOrder() {
         val json = """
             {
+              "twemoji": {"name":"Twitter Emoji","total":3000,
+                          "license":{"title":"CC BY 4.0"},
+                          "samples":["1f600"],"category":"Emoji","palette":true},
               "mdi": {"name":"Material Design Icons","total":7447,
                       "license":{"title":"Apache 2.0","spdx":"Apache-2.0"},
                       "samples":["account","home","alert"],
                       "category":"General","palette":false},
-              "twemoji": {"name":"Twitter Emoji","total":3000,
-                          "license":{"title":"CC BY 4.0"},
-                          "samples":["1f600"],"category":"Emoji","palette":true},
               "broken": {"total":0}
             }
         """.trimIndent()
 
         val sets = OnlineIconRepository.parseCollections(json)!!
 
-        assertEquals(listOf("mdi", "twemoji"), sets.map { it.prefix })
-        assertEquals("Apache-2.0", sets[0].license)
-        assertEquals("CC BY 4.0", sets[1].license)
-        assertTrue(sets[1].palette)
-        assertFalse(sets[0].palette)
-        assertEquals(listOf("account", "home", "alert"), sets[0].samples)
-        assertEquals("Emoji", sets[1].category)
+        assertEquals(listOf("twemoji", "mdi"), sets.map { it.prefix })
+        assertEquals("Apache-2.0", sets[1].license)
+        assertEquals("CC BY 4.0", sets[0].license)
+        assertTrue(sets[0].palette)
+        assertFalse(sets[1].palette)
+        assertEquals(listOf("account", "home", "alert"), sets[1].samples)
+        assertEquals("Emoji", sets[0].category)
     }
 
     @Test
