@@ -227,6 +227,7 @@
     <string name="retrieveCalendarIcon">Retrieve calendar icons</string>
     <string name="calendarDayIcons">Calendar day icons</string>
     <string name="calendarDayIconsDesc">%1$s from %2$s · rotates with the date</string>
+    <string name="calendarDayIconsFromAppDesc">Uses %1$s\'s own day icons and rotates with the date.</string>
     <string name="previewToday">Today</string>
     <string name="previewTimeNow">Now</string>
     <string name="previewClockStill">Shape, outline, shadow and image edits other than Colorize turn this clock into a still image, so its hands do not move.</string>

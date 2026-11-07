@@ -26,6 +26,19 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [33])
 class BackupCodecTest {
 
+    @Test fun appCalendarSourceRoundTripsWithoutChangingTheBackupSchema() {
+        val icon = DbApplication("app.calendar", "Main", false, false, "aWNvbg==",
+            calendarEnabled = true, calendarPrefix = "app:dynamic_icons", calendarPackName = "app.calendar")
+        val profile = Profile(id = 1, name = "Calendar", prefsSnapshot = "{}",
+            profileStyle = ProfileStyleCodec.encode(ProfileStyle()))
+        val data = BackupData(listOf(BackupProfile(profile, listOf(icon), emptyList())), emptyMap())
+        val encoded = BackupCodec.encode(data, BackupCodec.FORMAT_VERSION)
+        val restored = BackupCodec.decode(encoded, BackupCodec.FORMAT_VERSION).profiles.single().icons.single()
+        assertEquals(icon.calendarEnabled, restored.calendarEnabled)
+        assertEquals(icon.calendarPrefix, restored.calendarPrefix)
+        assertEquals(icon.calendarPackName, restored.calendarPackName)
+    }
+
     @Test fun profilePackIdentityRoundTripsAndOlderArchivesKeepDefaultIdentity() {
         val icon = JSONObject().put("version", 1).put("sourcePackName", "pack.logo")
             .put("sourceUrl", "https://example.org/logo.svg").put("modifierRecipe", "")

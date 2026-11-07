@@ -50,6 +50,7 @@ import android.graphics.Bitmap
 import dev.renkinProject.renkin.icon.creator.materialYouSchemes
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.apk.CalendarSource
 import dev.renkinProject.renkin.apk.GeneratedPackIdentity
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.calendarPrefixOrNull
@@ -259,6 +260,7 @@ internal fun OptionsDialog(
     var calendarEnabled by session::calendarEnabled
     var calendarPrefix by session::calendarPrefix
     var calendarPackName by session::calendarPackName
+    val calendarSelectionSource = CalendarSource.decode(app.packageName, calendarPackName ?: iconPack, calendarPrefix)
     val calendarPackLabel = iconPacks.find { it.packageName == (calendarPackName ?: iconPack) }?.applicationName ?: ""
 
     val activateCreate = session::activateCreate
@@ -520,8 +522,9 @@ internal fun OptionsDialog(
     }
     val rotatingPreview = rememberRotatingPreview(
         viewModel, app, generationApplication, pickedPackIcon, iconPack,
-        rotatingCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },
-        calendarPack = calendarPackName ?: iconPack,
+        rotatingCalendar = calendarSelectionSource.takeIf { calendarEnabled },
+        freshAppCalendar = calendarSelectionSource is CalendarSource.App && source == Source.APPLICATION_ICON &&
+            draft.origin == IconOrigin.CREATE && draft.replay == null,
         options = generatingOptions,
         keptGlobalOptions = keptGlobalLayer?.options,
         draftIcon = previewIcon,
@@ -727,7 +730,7 @@ internal fun OptionsDialog(
                                 onFontPathChange = session::selectFont,
                                 contentReady = createTabReady,
                                 selectedResourceId = customIconList.firstOrNull()?.resourceId,
-                                selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },
+                                selectedCalendarPrefix = (calendarSelectionSource as? CalendarSource.Pack)?.prefix?.takeIf { calendarEnabled },
                                 appHasMaterialYouIcon = appHasMaterialYouIcon,
                                 appHasAdaptiveIcon = appHasAdaptiveIcon,
                                 alternateIcons = if (session.purpose == EditorPurpose.APPLICATION) session.alternateIcons else emptyList(),
@@ -920,8 +923,15 @@ internal fun OptionsDialog(
                 )
                 val calendar = CalendarSelection(
                     visible = session.purpose == EditorPurpose.APPLICATION &&
-                        selectedTab == 0 && source == Source.ICON_PACK && calendarPrefix != null,
-                    packName = calendarPackLabel,
+                        selectedTab == 0 && when (calendarSelectionSource) {
+                            is CalendarSource.Pack -> source == Source.ICON_PACK
+                            is CalendarSource.App -> draft.origin == IconOrigin.CREATE &&
+                                (source == Source.APPLICATION_ICON || session.modifierReplay != null ||
+                                    (source == Source.ICON_PACK && customIconList.isEmpty()))
+                            null -> false
+                        },
+                    fromApp = calendarSelectionSource is CalendarSource.App,
+                    packName = if (calendarSelectionSource is CalendarSource.App) app.appName else calendarPackLabel,
                     prefix = calendarPrefix.orEmpty(),
                     enabled = calendarEnabled,
                     onToggle = { calendarEnabled = it }
@@ -1168,6 +1178,7 @@ private data class GlobalStyleSelection(
 
 private data class CalendarSelection(
     val visible: Boolean,
+    val fromApp: Boolean,
     val packName: String,
     val prefix: String,
     val enabled: Boolean,
@@ -1204,6 +1215,7 @@ private fun WideOptionsLayout(
                         if (calendar.visible) {
                             CalendarCard(
                                 packName = calendar.packName,
+                                fromApp = calendar.fromApp,
                                 calendarPrefix = calendar.prefix,
                                 calendarEnabled = calendar.enabled,
                                 onToggle = calendar.onToggle
@@ -1292,6 +1304,7 @@ private fun PhoneOptionsLayout(
                     AnimatedVisibility(visible = calendar.visible) {
                         CalendarCard(
                             packName = calendar.packName,
+                            fromApp = calendar.fromApp,
                             calendarPrefix = calendar.prefix,
                             calendarEnabled = calendar.enabled,
                             onToggle = calendar.onToggle
@@ -1471,6 +1484,7 @@ private fun GlobalStyleCard(layer: EditorGlobalLayer, keep: Boolean, onToggle: (
 @Composable
 private fun CalendarCard(
     packName: String,
+    fromApp: Boolean,
     calendarPrefix: String,
     calendarEnabled: Boolean,
     onToggle: (Boolean) -> Unit
@@ -1481,6 +1495,7 @@ private fun CalendarCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
+            .toggleable(value = calendarEnabled, role = Role.Switch, onValueChange = onToggle)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -1501,14 +1516,15 @@ private fun CalendarCard(
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
                 Text(
-                    text = stringResource(R.string.calendarDayIconsDesc, calendarPrefix.prettyDrawableName(), packName),
+                    text = if (fromApp) stringResource(R.string.calendarDayIconsFromAppDesc, packName)
+                        else stringResource(R.string.calendarDayIconsDesc, calendarPrefix.prettyDrawableName(), packName),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
                 )
             }
             Switch(
                 checked = calendarEnabled,
-                onCheckedChange = onToggle
+                onCheckedChange = null
             )
         }
     }

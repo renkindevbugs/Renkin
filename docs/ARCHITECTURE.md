@@ -1459,7 +1459,9 @@ be assumed to open the upgraded database.
   opened editor requires its live draft to exist: an Activity destroyed without configuration
   retention cannot silently create a default replacement. A missing draft closes with a notice;
   a changed profile/provider token closes with the existing session-expired notice before
-  displaying controls. Activity-only destruction and process death have no draft persistence in
+  displaying controls. A null restored attachment marker is treated as already attached, so it
+  cannot crash Boolean unboxing or permit a missing edit to be replaced with defaults. A matching
+  live draft still reattaches. Activity-only destruction and process death have no draft persistence in
   this phase. Keeping the draft across composition disposal does not extend the Activity's
   ViewModel lifetime after non-configuration destruction.
   `getOrCreate` is deliberately called from composition (`OpenAppOptions` in `ui/MainScreen.kt`):
@@ -2207,6 +2209,18 @@ hour/minute/second metadata travels in `appfilter.xml`. Missing hands use index 
 hand drawables, edited artwork and themed builds retain the static export. Default application
 icons do not acquire dynamic-clock support. The editor validates calendar candidates through
 the same repository check as browser badges before offering the calendar-day switch.
+
+Application icons can also rotate by date when the app declares a launcher or application
+`<package>.dynamic_icons` array. `AppCalendarIcons` resolves those resources again when needed,
+including aliases whose resource names point at the same underlying day file. The existing
+calendar fields store `app:dynamic_icons` with the owning app's package; decoding requires both
+to match. Room and backup versions stay unchanged. Pack and app sources are typed separately
+in the build pipeline, and unknown app markers never fall back to a pack.
+Selecting the app's current icon enables its calendar by default; the switch preserves an
+explicit opt-out on re-entry. Text, upload, vector and alternate app icons clear the selection.
+App day artwork goes through the same app-icon variant, modifiers and verified Global style as
+the saved icon. If no stage reproduces it, the build keeps the static icon and removes the app's
+calendar mapping and unused day drawables. The editor previews all 31 days using that pipeline.
 
 `IconPackBuildService` receives an immutable active-profile snapshot from `ApplicationProvider`,
 then resolves calendar/lock data and delegates assembly to `IconPackBuilder`. The provider holds
