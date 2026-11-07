@@ -1156,6 +1156,19 @@ comparisons; compileDebugKotlin and assembleDebug pass with the existing local t
 Logs are under build/verify-7d3-{compile,targeted,full}.log. No new production dependency, Gradle
 module or persistence format is introduced.
 
+**Online icon batching (verified)** replaces one HTTP request
+per previewed icon with one `/{prefix}.json?icons=a,b,c` request per set. Names that miss the cache
+queue per prefix; a single flight per prefix waits 50 ms for tiles unlocked in the same frame, then
+for the normal throttle slot, and freezes its names (sorted, URL up to 480 characters) only when the
+slot is granted, so the 300 ms spacing, the shared 429 deadline, mirrors and the six permits apply
+per batch. The repository rebuilds the exact API SVG (height 1em, width rounded up to 1/100 em,
+viewBox from left/top/width/height) and writes it to the unchanged per-icon cache path, so old
+caches and canonical `svgUrl`/attribution stay valid. Names in `not_found` resolve to null;
+rotated/flipped icons, aliases with overrides and names outside the Iconify name pattern use the
+old per-icon `.svg` request. When the last waiter of a flight is cancelled, the flight is cancelled
+and disconnects. Requests no longer force `Accept-Encoding: identity`, so responses arrive gzipped
+and size limits apply to inflated bytes. Search results use the shared 7-day disk cache.
+
 **7D4 (verified)** groups the help presentation in `feature.help`:
 `IntroShowcase`, `InfoDialog` and `WhatsNewDialog` (including the full history screen).
 The guided-tour targets, composition local and placement helper move with the tour. MainScreen

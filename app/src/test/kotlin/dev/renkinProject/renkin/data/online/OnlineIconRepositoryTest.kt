@@ -140,4 +140,45 @@ class OnlineIconRepositoryTest {
             .atZone(java.time.ZoneOffset.UTC).format(DateTimeFormatter.RFC_1123_DATE_TIME)
         assertEquals(maxDelayMs, OnlineIconRepository.retryAfterDelayMs(future, now, maxDelayMs))
     }
+
+    @Test
+    fun parseIconBatch_rebuildsApiSvgAndResolvesPlainAliases() {
+        val json = """
+            {"prefix":"fa6-solid","width":512,"height":512,
+             "aliases":{"home":{"parent":"house"},"home-flipped":{"parent":"house","hFlip":true}},
+             "icons":{"house":{"body":"<path d=\"M0 0\"/>","width":576},
+                      "user":{"body":"<path d=\"M1 1\"/>","width":448},
+                      "square":{"body":"<path d=\"M2 2\"/>"},
+                      "turned":{"body":"<path d=\"M3 3\"/>","rotate":1}},
+             "not_found":["gone"]}
+        """.trimIndent()
+
+        val batch = OnlineIconRepository.parseIconBatch(json)!!
+
+        val house = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1.13em\" height=\"1em\" " +
+            "viewBox=\"0 0 576 512\"><path d=\"M0 0\"/></svg>"
+        assertEquals(OnlineIconRepository.Companion.BatchIcon.Markup(house), batch["house"])
+        assertEquals(batch["house"], batch["home"])
+        assertEquals(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"0.88em\" height=\"1em\" " +
+                "viewBox=\"0 0 448 512\"><path d=\"M1 1\"/></svg>",
+            (batch["user"] as OnlineIconRepository.Companion.BatchIcon.Markup).svg
+        )
+        assertTrue((batch["square"] as OnlineIconRepository.Companion.BatchIcon.Markup).svg
+            .contains("width=\"1em\" height=\"1em\" viewBox=\"0 0 512 512\""))
+        assertEquals(OnlineIconRepository.Companion.BatchIcon.NeedsDirectFetch, batch["turned"])
+        assertEquals(OnlineIconRepository.Companion.BatchIcon.NeedsDirectFetch, batch["home-flipped"])
+        assertEquals(OnlineIconRepository.Companion.BatchIcon.Missing, batch["gone"])
+        assertNull(OnlineIconRepository.parseIconBatch("not json"))
+    }
+
+    @Test
+    fun parseIconBatch_usesIconifyDefaultSizeWhenTheSetOmitsIt() {
+        val batch = OnlineIconRepository.parseIconBatch(
+            """{"prefix":"bi","icons":{"dot":{"body":"<circle r=\"1\"/>"}}}"""
+        )!!
+
+        assertTrue((batch["dot"] as OnlineIconRepository.Companion.BatchIcon.Markup).svg
+            .contains("viewBox=\"0 0 16 16\""))
+    }
 }

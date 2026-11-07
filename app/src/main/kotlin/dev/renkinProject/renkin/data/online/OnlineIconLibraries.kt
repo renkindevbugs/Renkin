@@ -22,9 +22,17 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -42,7 +50,7 @@ import org.xmlpull.v1.XmlPullParser
 /**
  * Online icons come from the Iconify API (api.iconify.design) — an open-source aggregator of
  * 200+ FOSS icon sets with unified licence metadata, categories and a colour/monochrome flag.
- * Only the set list, one set's icon-name index and the individually viewed SVGs are ever
+ * Only the set list, one set's icon-name index and the viewed icons (batched per set) are ever
  * downloaded — never a whole set.
  *
  * Note this deliberately lists SETS OF SVG FILES, not Android icon packs — packs install
@@ -76,7 +84,7 @@ fun onlineAttributionLabel(url: String): String? {
 }
 
 /**
- * Fetches the Iconify set list, per-set icon indexes and individual SVGs, with a disk cache
+ * Fetches the Iconify set list, per-set icon indexes, searches and SVGs, with a disk cache
  * under cacheDir so browsing works offline once visited. Every method returns null on failure
  * instead of throwing — the browser shows a retryable error state.
  */
@@ -105,6 +113,15 @@ class OnlineIconRepository internal constructor(
     }
     private val searchMemory = LruCache<String, List<OnlineIcon>>(SEARCH_MEMORY_QUERIES)
     @Volatile private var preferredApiHost = API_HOSTS.first()
+    private val batchScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val iconBatches = HashMap<String, IconBatchQueue>()
+
+    private class IconBatchQueue {
+        val pending = LinkedHashMap<String, CompletableDeferred<String?>>()
+        val inFlight = HashMap<String, CompletableDeferred<String?>>()
+        val abandoned = HashSet<String>()
+        var flight: Job? = null
+    }
 
     private val cacheRoot: File
         get() = File(context.cacheDir, "online-icons").apply { mkdirs() }
@@ -134,16 +151,17 @@ class OnlineIconRepository internal constructor(
 
     /**
      * Cross-set icon search through the API — matches icon NAMES across every set at once,
-     * like the search box on iconify.design. Memory-cached per query for the session; an
-     * empty list is a valid "no matches", null means the request failed.
+     * like the search box on iconify.design. Cached per query in memory and on disk with the
+     * index TTL; an empty list is a valid "no matches", null means the request failed.
      */
     suspend fun search(query: String): List<OnlineIcon>? = withContext(ioDispatcher) {
         val key = query.trim().lowercase()
         searchMemory.get(key)?.let { return@withContext it }
-        val json = httpGetText(
-            "https://api.iconify.design/search?query=" +
+        val json = cachedOrFetch(
+            cache = File(cacheRoot, "iconify-search-${cacheKey(key)}.json"),
+            url = "https://api.iconify.design/search?query=" +
                 URLEncoder.encode(key, "UTF-8") + "&limit=$SEARCH_LIMIT",
-            MAX_INDEX_BYTES
+            parses = { parseSearch(it) != null }
         ) ?: return@withContext null
         parseSearch(json)?.also { searchMemory.put(key, it) }
     }
@@ -176,6 +194,11 @@ class OnlineIconRepository internal constructor(
 
     private suspend fun loadSvg(icon: OnlineIcon): String? {
         readCachedSvg(icon)?.let { return it }
+        if (!ICONIFY_NAME.matches(icon.name)) return fetchSingleSvg(icon)
+        return awaitBatchedSvg(icon)
+    }
+
+    private suspend fun fetchSingleSvg(icon: OnlineIcon): String? {
         val markup = httpGetText(icon.svgUrl, MAX_SVG_BYTES, limitSvgRequests = true) ?: return null
         if (!isWellFormedSvg(markup)) {
             Log.error("OnlineIcons", "Invalid SVG response: ${icon.svgUrl}")
@@ -183,6 +206,114 @@ class OnlineIconRepository internal constructor(
         }
         writeAtomically(svgCacheFile(icon), markup)
         return markup
+    }
+
+    /**
+     * Visible tiles of one set join a single `/{prefix}.json?icons=` request. Names keep joining
+     * while the flight waits for its throttle slot and are frozen only when the slot is granted,
+     * so the 300 ms spacing and the shared 429 pause apply per batch. At most one flight per
+     * prefix is active; the SVG permit is held only during its HTTP call.
+     */
+    private suspend fun awaitBatchedSvg(icon: OnlineIcon): String? {
+        val result = synchronized(iconBatches) {
+            val queue = iconBatches.getOrPut(icon.prefix) { IconBatchQueue() }
+            queue.abandoned.remove(icon.name)
+            val existing = queue.inFlight[icon.name]?.takeIf { !it.isCompleted }
+                ?: queue.pending[icon.name]
+            existing ?: CompletableDeferred<String?>().also { deferred ->
+                queue.pending[icon.name] = deferred
+                if (queue.flight == null) queue.flight = launchBatchFlight(icon.prefix, queue)
+            }
+        }
+        try {
+            return result.await()
+        } catch (e: CancellationException) {
+            abandonBatchedName(icon)
+            throw e
+        }
+    }
+
+    private fun abandonBatchedName(icon: OnlineIcon) {
+        val flightToCancel = synchronized(iconBatches) {
+            val queue = iconBatches[icon.prefix] ?: return
+            if (queue.pending.remove(icon.name) == null) queue.abandoned.add(icon.name)
+            val nobodyWaits = queue.pending.isEmpty() &&
+                queue.inFlight.keys.all { it in queue.abandoned }
+            if (!nobodyWaits) return
+            queue.flight.also {
+                queue.flight = null
+                queue.inFlight.clear()
+                queue.abandoned.clear()
+            }
+        }
+        flightToCancel?.cancel()
+    }
+
+    private fun launchBatchFlight(prefix: String, queue: IconBatchQueue): Job = batchScope.launch {
+        val flight = coroutineContext[Job]
+        try {
+            while (true) {
+                // Tiles unlocked in the same frame enqueue a moment apart; let them join this batch.
+                delay(BATCH_GATHER_MS)
+                val idle = synchronized(iconBatches) {
+                    queue.pending.isEmpty().also { if (it && queue.flight === flight) queue.flight = null }
+                }
+                if (idle) return@launch
+                var sent: Map<String, CompletableDeferred<String?>> = emptyMap()
+                val json = httpGetText(
+                    urlForAttempt = {
+                        if (sent.isEmpty()) sent = takeNextBatch(prefix, queue)
+                        if (sent.isEmpty()) null else batchUrl(prefix, sent.keys)
+                    },
+                    maxBytes = MAX_INDEX_BYTES,
+                    limitSvgRequests = true
+                )
+                if (sent.isEmpty()) continue
+                val parsed = json?.let(::parseIconBatch)
+                for ((name, deferred) in sent) {
+                    val icon = OnlineIcon(prefix, name)
+                    val markup = when (val entry = parsed?.get(name)) {
+                        is BatchIcon.Markup -> entry.svg.takeIf(::isWellFormedSvg)
+                            ?.also { writeAtomically(svgCacheFile(icon), it) }
+                        BatchIcon.NeedsDirectFetch -> fetchSingleSvg(icon)
+                        BatchIcon.Missing, null -> null
+                    }
+                    deferred.complete(markup)
+                }
+                synchronized(iconBatches) {
+                    sent.keys.forEach { queue.inFlight.remove(it); queue.abandoned.remove(it) }
+                }
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.error("OnlineIcons", "Icon batch failed for $prefix", e)
+            synchronized(iconBatches) {
+                (queue.inFlight.values + queue.pending.values).forEach { it.complete(null) }
+                queue.inFlight.clear()
+                queue.pending.clear()
+                queue.abandoned.clear()
+            }
+        } finally {
+            synchronized(iconBatches) {
+                if (queue.flight === flight) queue.flight = null
+            }
+        }
+    }
+
+    private fun takeNextBatch(
+        prefix: String,
+        queue: IconBatchQueue
+    ): Map<String, CompletableDeferred<String?>> = synchronized(iconBatches) {
+        val batch = linkedMapOf<String, CompletableDeferred<String?>>()
+        val iterator = queue.pending.entries.iterator()
+        while (iterator.hasNext()) {
+            val (name, deferred) = iterator.next()
+            if (batch.isNotEmpty() && batchUrl(prefix, batch.keys + name).length > MAX_BATCH_URL_LENGTH) break
+            batch[name] = deferred
+            iterator.remove()
+        }
+        queue.inFlight.putAll(batch)
+        batch
     }
 
     /**
@@ -226,14 +357,35 @@ class OnlineIconRepository internal constructor(
         url: String,
         maxBytes: Int,
         limitSvgRequests: Boolean = false
+    ): String? = httpGetText({ url }, maxBytes, limitSvgRequests)
+
+    /**
+     * [urlForAttempt] is evaluated only once a throttle slot is granted, so a batch can keep
+     * growing while it waits; returning null gives the slot back and skips the request.
+     */
+    private suspend fun httpGetText(
+        urlForAttempt: () -> String?,
+        maxBytes: Int,
+        limitSvgRequests: Boolean = false
     ): String? {
-        require(url.startsWith(API_HOSTS.first() + "/")) { "Expected a canonical Iconify API URL" }
         var host = preferredApiHost
         repeat(HTTP_ATTEMPTS) { attempt ->
             currentCoroutineContext().ensureActive()
-            val requestUrl = host + url.removePrefix(API_HOSTS.first())
+            var requestUrl = ""
+            val attemptHost = host
             val response = try {
-                executeThrottledGet(requestUrl, maxBytes, limitSvgRequests)
+                executeThrottledGet(
+                    url = {
+                        urlForAttempt()?.let { url ->
+                            require(url.startsWith(API_HOSTS.first() + "/")) {
+                                "Expected a canonical Iconify API URL"
+                            }
+                            (attemptHost + url.removePrefix(API_HOSTS.first())).also { requestUrl = it }
+                        }
+                    },
+                    maxBytes = maxBytes,
+                    limitSvgRequests = limitSvgRequests
+                ) ?: return null
             } catch (e: IOException) {
                 currentCoroutineContext().ensureActive()
                 Log.error("OnlineIcons", "GET failed: $requestUrl", e)
@@ -258,10 +410,10 @@ class OnlineIconRepository internal constructor(
     }
 
     private suspend fun executeThrottledGet(
-        url: String,
+        url: () -> String?,
         maxBytes: Int,
         limitSvgRequests: Boolean
-    ): HttpTextResponse {
+    ): HttpTextResponse? {
         while (true) {
             val waitMs = requestTimingMutex.withLock {
                 (maxOf(nextRequestAt, mutableRateLimitUntil.value) - monotonicMillis()).coerceAtLeast(0L)
@@ -273,15 +425,14 @@ class OnlineIconRepository internal constructor(
             if (limitSvgRequests) svgFetchPermits.acquire()
             try {
                 // Recheck after acquiring a slot: another response may have imposed a shared pause.
-                val admitted = requestTimingMutex.withLock {
+                val admittedUrl = requestTimingMutex.withLock {
                     val now = monotonicMillis()
-                    if (now < maxOf(nextRequestAt, mutableRateLimitUntil.value)) false else {
-                        nextRequestAt = now + HTTP_REQUEST_INTERVAL_MS
-                        true
+                    if (now < maxOf(nextRequestAt, mutableRateLimitUntil.value)) "" else {
+                        url()?.also { nextRequestAt = now + HTTP_REQUEST_INTERVAL_MS }
                     }
-                }
-                if (!admitted) continue
-                val response = request(url, maxBytes)
+                } ?: return null
+                if (admittedUrl.isEmpty()) continue
+                val response = request(admittedUrl, maxBytes)
                 if (response.status == 429) {
                     val pauseMs = (response.retryAfterMs ?: HTTP_RATE_LIMIT_FALLBACK_MS)
                         .coerceIn(HTTP_REQUEST_INTERVAL_MS, HTTP_MAX_RATE_LIMIT_MS)
@@ -321,6 +472,65 @@ class OnlineIconRepository internal constructor(
         private const val HTTP_REQUEST_INTERVAL_MS = 300L
         private const val HTTP_RATE_LIMIT_FALLBACK_MS = 60_000L
         private const val HTTP_MAX_RATE_LIMIT_MS = 5 * 60_000L
+        private const val MAX_BATCH_URL_LENGTH = 480
+        private const val BATCH_GATHER_MS = 50L
+        private val ICONIFY_NAME = Regex("^[a-z0-9]+(-[a-z0-9]+)*$")
+        private const val ICONIFY_DEFAULT_SIZE = 16.0
+
+        private fun batchUrl(prefix: String, names: Collection<String>): String =
+            "https://api.iconify.design/" + URLEncoder.encode(prefix, "UTF-8") +
+                ".json?icons=" + names.sorted().joinToString(",")
+
+        internal sealed interface BatchIcon {
+            data class Markup(val svg: String) : BatchIcon
+            data object Missing : BatchIcon
+            /** Transformed aliases/icons (rotate, flip, overrides) are left to the API's own SVG. */
+            data object NeedsDirectFetch : BatchIcon
+        }
+
+        /** Parses an IconifyJSON batch response into the same SVG the `/prefix/name.svg` API returns. */
+        internal fun parseIconBatch(json: String): Map<String, BatchIcon>? = runCatching {
+            val root = JSONObject(json)
+            val icons = root.optJSONObject("icons") ?: return null
+            val aliases = root.optJSONObject("aliases")
+            val result = HashMap<String, BatchIcon>()
+            root.optJSONArray("not_found")?.let { missing ->
+                for (i in 0 until missing.length()) result[missing.optString(i)] = BatchIcon.Missing
+            }
+            fun markup(icon: JSONObject): BatchIcon {
+                if (icon.has("rotate") || icon.has("hFlip") || icon.has("vFlip")) return BatchIcon.NeedsDirectFetch
+                val body = icon.optString("body").takeIf { it.isNotEmpty() } ?: return BatchIcon.Missing
+                fun dimension(key: String, default: Double) =
+                    icon.optDouble(key, root.optDouble(key, default)).takeIf { !it.isNaN() } ?: default
+                val width = dimension("width", ICONIFY_DEFAULT_SIZE)
+                val height = dimension("height", ICONIFY_DEFAULT_SIZE)
+                return BatchIcon.Markup(
+                    iconifySvg(body, dimension("left", 0.0), dimension("top", 0.0), width, height)
+                )
+            }
+            for (name in icons.keys()) icons.optJSONObject(name)?.let { result[name] = markup(it) }
+            aliases?.keys()?.forEach { name ->
+                val alias = aliases.optJSONObject(name) ?: return@forEach
+                val parent = alias.optString("parent")
+                result[name] = if (alias.length() != 1 || parent.isEmpty()) {
+                    BatchIcon.NeedsDirectFetch
+                } else {
+                    result[parent] ?: if (aliases.has(parent)) BatchIcon.NeedsDirectFetch else BatchIcon.Missing
+                }
+            }
+            result
+        }.getOrNull()
+
+        /** Matches the API's own SVG: height 1em and a width rounded up to 1/100 em from the aspect ratio. */
+        internal fun iconifySvg(body: String, left: Double, top: Double, width: Double, height: Double): String {
+            val widthEm = if (width == height) "1em" else "${number(ceil(width / height * 100) / 100)}em"
+            val viewBox = listOf(left, top, width, height).joinToString(" ") { number(it) }
+            return "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"$widthEm\" height=\"1em\" " +
+                "viewBox=\"$viewBox\">$body</svg>"
+        }
+
+        private fun number(value: Double): String =
+            if (value == floor(value)) value.toLong().toString() else value.toString()
 
         fun parseSearch(json: String): List<OnlineIcon>? = runCatching {
             val array = JSONObject(json).optJSONArray("icons") ?: return null
@@ -416,8 +626,8 @@ class OnlineIconRepository internal constructor(
                     connectTimeout = 3_000
                     readTimeout = 5_000
                     instanceFollowRedirects = true
+                    // No Accept-Encoding: HttpURLConnection then requests gzip and inflates it itself.
                     setRequestProperty("User-Agent", "Renkin (Android)")
-                    setRequestProperty("Accept-Encoding", "identity")
                 }
                 // Disconnect while the blocking child is still running when its caller is cancelled.
                 coroutineScope {
