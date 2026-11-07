@@ -342,7 +342,14 @@ class IconPackBuilder(
                         when (insetDrawable.drawable) {
                             is ImageVectorDrawable -> {
                                 val exportCopy = insetDrawable.drawable.deepCopy().scaleAtCenter(0.666f)
-                                exportVectorIcon(insetXml, exportCopy)
+                                // A VectorDrawable cannot hold our gradients (matrix, API 24); rasterise
+                                // the same scaled copy so the icon keeps its size.
+                                if (exportCopy.hasGradientBrush()) {
+                                    insetXml.insetDrawable(appFileName + "_foreground")
+                                    createBitmapResource(apkModule, packageBlock, exportCopy.toBitmap(), appFileName + "_foreground")
+                                } else {
+                                    exportVectorIcon(insetXml, exportCopy)
+                                }
                             }
 
                             is BitmapIconDrawable -> {
@@ -436,13 +443,13 @@ class IconPackBuilder(
     private fun exportVectorIcon(file: VectorWrapperXml, icon: ImageVectorDrawable, brush: ReferenceBrush) {
         file.startVector()
         val vector = icon.deepCopy().also { it.root.setReferenceColorPaths(brush) }.toImageVector()
-        vector.toXmlFile(file)
+        vector.toXmlFile(file, includeGradients = false)
         file.endVector()
     }
 
     private fun exportVectorIcon(file: VectorWrapperXml, icon: ImageVectorDrawable) {
         file.startVector()
-        icon.toImageVector().toXmlFile(file)
+        icon.toImageVector().toXmlFile(file, includeGradients = false)
         file.endVector()
     }
 

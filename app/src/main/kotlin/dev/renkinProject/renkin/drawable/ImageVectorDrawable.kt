@@ -21,6 +21,7 @@ import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyViewportInset
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.resizeTo
 import dev.renkinProject.renkin.vector.VectorExporter.Companion.toXml
 import dev.renkinProject.renkin.vector.VectorRenderer.Companion.renderToCanvas
+import dev.renkinProject.renkin.vector.brush.VectorGradientBrush
 
 class ImageVectorDrawable(imageVector: ImageVector, internal val scaleStrokesWithBounds: Boolean = false): IconPackDrawable() {
     var name: String = imageVector.name
@@ -181,6 +182,15 @@ class ImageVectorDrawable(imageVector: ImageVector, internal val scaleStrokesWit
     override fun toDbString(): String {
         val bytes = toImageVector().toXml()
         return Base64.encodeToString(bytes, Base64.NO_WRAP)
+    }
+
+    fun hasGradientBrush(): Boolean = root.hasGradientBrush()
+}
+
+private fun MutableVectorGroup.hasGradientBrush(): Boolean = children.any { child ->
+    when (child) {
+        is MutableVectorGroup -> child.hasGradientBrush()
+        is MutableVectorPath -> child.fill is VectorGradientBrush || child.stroke is VectorGradientBrush
     }
 }
 

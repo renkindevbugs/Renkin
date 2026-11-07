@@ -151,7 +151,7 @@ internal object EditorCompleteCodec {
     private suspend fun decodeMasks(bytes: ByteArray): Map<String, EditorArtworkSnapshot> {
         val owner = currentCoroutineContext()
         return try {
-            EditorArtworkReader(bytes) { owner.ensureActive() }.run {
+            EditorArtworkReader(bytes, checkActive = { owner.ensureActive() }).run {
                 require(input.readInt() == MASK_MAGIC && input.readInt() == MASK_VERSION) { "Unsupported editor masks format" }
                 val count = count(MAX_MASKS, 12)
                 require(count > 0) { "Empty editor masks artifact" }
@@ -197,7 +197,7 @@ internal object EditorCompleteCodec {
 
     private suspend fun decodeSession(bytes: ByteArray, controlsBytes: ByteArray, controls: EditorControlsSnapshot, vector: EditorVectorWorkingState): EditorCompleteSnapshot {
         val owner = currentCoroutineContext()
-        return try { EditorArtworkReader(bytes) { owner.ensureActive() }.run {
+        return try { EditorArtworkReader(bytes, checkActive = { owner.ensureActive() }).run {
             require(input.readInt() == MAGIC) { "Unsupported complete editor capture" }
             val version = input.readInt()
             require(version in 1..VERSION) { "Unsupported complete editor capture" }

@@ -470,6 +470,19 @@
     <string name="paths">Paths</string>
     <string name="addPath">Add path</string>
     <string name="editPath">Edit path</string>
+    <string name="gradientMakeSolid">Make solid</string>
+    <plurals name="gradientSwatchDescription">
+        <item quantity="one">Gradient, %1$d colour</item>
+        <item quantity="other">Gradient, %1$d colours</item>
+    </plurals>
+    <plurals name="linearGradientColours">
+        <item quantity="one">Linear gradient · %1$d colour</item>
+        <item quantity="other">Linear gradient · %1$d colours</item>
+    </plurals>
+    <plurals name="radialGradientColours">
+        <item quantity="one">Radial gradient · %1$d colour</item>
+        <item quantity="other">Radial gradient · %1$d colours</item>
+    </plurals>
     <string name="pathData">SVG path data</string>
     <string name="noPathsYet">No paths yet — add one to start drawing</string>
     <string name="lineThickness">Line thickness</string>

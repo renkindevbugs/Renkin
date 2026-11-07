@@ -1234,12 +1234,7 @@ private fun SvgVectorImporter.ImportedSvg.toPreviewVector(
     )
     for (path in paths) {
         val nodes = PathParser().parsePathString(path.pathData).toNodes()
-        val solid = SolidColor(
-            path.color?.let { raw ->
-                ColorDecoder.decodeSvgCss(raw).takeIf { it.isSpecified }
-            }?.let { it.copy(alpha = it.alpha * path.alpha) }
-                ?: tint.copy(alpha = tint.alpha * path.alpha)
-        )
+        val solid = with(SvgVectorImporter) { path.brush(tint) }
         if (path.filled) {
             builder.addPath(nodes, pathFillType = path.fillType, fill = solid)
         } else {

@@ -1210,6 +1210,23 @@ size summary when downloads exist). A downloaded set's overflow menu offers "Dow
 no background update check) and "Remove download". The folder is excluded from Auto Backup in both
 rule files and is not part of Renkin backups. Imported icons keep the canonical Iconify `svgUrl`.
 
+**SVG gradients (device-verified 2026-11-07)** let colourful SVG icons import
+as editable vectors. `SvgGradients` resolves `url(#id)` paints (linear/radial, href chains, both
+gradientUnits with tight geometry bounds, any gradientTransform, spreadMethod, stop-opacity times
+the path, element and group opacity) into `VectorGradientBrush` (`vector/brush`), a value-equality
+`ShaderBrush` that keeps authored coordinates plus a 6-value matrix, so ellipses and skew are
+exact. Focal radials, `currentColor` stops, broken references, element transforms, `<use>`, clips
+and masks still reject the document. `VectorEditor`'s scale/translate/rotate primitives map the
+matrix together with the path data; `VectorRenderer` paints it as a shader (with the current
+matrix in non-scaling-stroke mode), which covers every bitmap. Stored vector XML keeps a solid
+fallback colour attribute (offset-weighted mean of the stops, never transparent) plus one
+`<renkin-gradient>` child per painted slot with every value as an attribute and no grandchildren,
+because releases before v2026.11.01 rebuild deeper trees wrongly; older builds paint the fallback.
+No Room, backup or journal change: the gradient lives in the opaque payload. APK export never
+writes the child; a non-themed inset icon with a gradient is rasterised from the same
+0.666-scaled copy, and themed export flattens to `@color/icon_color`. The Paths list marks
+gradient paths with a corner swatch; Edit path shows the stops read-only and offers Make solid.
+
 **7D4 (verified)** groups the help presentation in `feature.help`:
 `IntroShowcase`, `InfoDialog` and `WhatsNewDialog` (including the full history screen).
 The guided-tour targets, composition local and placement helper move with the tour. MainScreen

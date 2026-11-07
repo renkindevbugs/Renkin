@@ -210,15 +210,19 @@ base stroke widths, thickness, auto-centering, viewport, attribution and baked-e
 An initialized vector without its seed is rejected instead of treating its current paths as
 an unchanged seed. This checkpoint exposes a read-only seed accessor without changing editing.
 
-`EditorArtworkCodec` version 1 uses separate big-endian `RKEA` artwork and `RKEV` working-state
+`EditorArtworkCodec` versions 1 and 2 use separate big-endian `RKEA` artwork and `RKEV` working-state
 headers. It preserves finite Float bits, strict UTF-8, nullable values and exact 0/1 booleans,
 rejecting unknown kinds/commands, versions, trailing/truncated content and invalid counts.
 All 19 PathNode kinds have explicit tags. Vectors retain names, root/group transforms and clip
 paths, path fill type, colors/reference brushes, alpha, stroke cap/join/miter and trim, tint,
 viewport/default size, mirroring and stroke-scaling policy. Ordinary DB vector XML is not
 used because its conversion loses editable properties. SolidColor and ReferenceBrush with a
-SolidColorShader fallback are supported; other shaders/gradients fail capture rather than
-being flattened or substituted. A reference is preserved metadata, never permission to load
+SolidColorShader fallback are supported, and so is `VectorGradientBrush` (SVG linear/radial
+gradients). Version 2 adds an optional gradient to each brush (type, stops, coordinates, tile
+mode, 6-value matrix, validated like `VectorGradientBrush.of`); documents without a gradient are
+still written as version 1, so ordinary drafts stay byte-identical and readable by older builds,
+and both versions decode. Opaque shaders from installed apps fail capture rather than being
+flattened or substituted. A reference is preserved metadata, never permission to load
 an external resource during binding.
 
 Bitmaps preserve raw ARGB_8888 sRGB pixels, row layout, density, alpha/premultiplication,

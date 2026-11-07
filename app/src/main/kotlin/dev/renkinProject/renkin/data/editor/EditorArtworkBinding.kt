@@ -17,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import dev.renkinProject.renkin.vector.brush.VectorGradientBrush
 
 /** Native decoding/binding is off Main, after the owner verifies artifact checksums and ownership. */
 internal suspend fun restoreEditorArtwork(value: EditorArtworkSnapshot): IconPackDrawable = withContext(Dispatchers.Default) {
@@ -93,7 +94,12 @@ private fun ImageVector.Builder.addArtworkGroup(group: EditorVectorGroup) {
 private fun ImageVector.Builder.addArtworkPath(path: EditorVectorPath) {
     fun brush(value: EditorVectorBrush?): Brush? = value?.let {
         val color = artworkColor(it.colorBits)
-        if (it.reference == null) SolidColor(color) else ReferenceBrush(it.reference, color)
+        when {
+            it.gradient != null -> it.gradient.toBrush() as? VectorGradientBrush
+                ?: throw IllegalArgumentException("Invalid editor gradient")
+            it.reference == null -> SolidColor(color)
+            else -> ReferenceBrush(it.reference, color)
+        }
     }
     val cap = when (path.cap) {
         "Butt" -> StrokeCap.Butt

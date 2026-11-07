@@ -7,15 +7,20 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /** Versioned exact artwork values; live state capture and native binding are separate boundaries. */
+/**
+ * Version 2 adds optional gradients to brushes. Documents without a gradient are still written as
+ * version 1, so ordinary drafts stay byte-identical and readable by older builds; both versions decode.
+ */
 internal object EditorArtworkCodec {
-    const val VERSION = 1
+    const val VERSION = 2
+    private const val VERSION_WITHOUT_GRADIENTS = 1
     private const val ARTWORK_MAGIC = 0x524b4541 // RKEA
     private const val VECTOR_STATE_MAGIC = 0x524b4556 // RKEV
 
-    suspend fun encode(value: EditorArtworkSnapshot): ByteArray = write(ARTWORK_MAGIC) { artwork(value) }
+    suspend fun encode(value: EditorArtworkSnapshot): ByteArray = write(ARTWORK_MAGIC, value.hasGradient()) { artwork(value) }
     suspend fun decode(bytes: ByteArray): EditorArtworkSnapshot = read(bytes, ARTWORK_MAGIC) { artwork() }
 
-    suspend fun encodeVectorState(value: EditorVectorWorkingState): ByteArray = write(VECTOR_STATE_MAGIC) {
+    suspend fun encodeVectorState(value: EditorVectorWorkingState): ByteArray = write(VECTOR_STATE_MAGIC, value.hasGradient()) {
         require(!value.initialized || value.seed != null) { "Initialized editor vector has no seed" }
         boolean(value.initialized); inputs(value.current); boolean(value.seed != null); value.seed?.let { inputs(it) }
     }
@@ -25,17 +30,20 @@ internal object EditorArtworkCodec {
         }
     }
 
-    private suspend fun write(magic: Int, body: EditorArtworkWriter.() -> Unit): ByteArray = withContext(Dispatchers.Default) {
+    private suspend fun write(magic: Int, gradients: Boolean, body: EditorArtworkWriter.() -> Unit): ByteArray = withContext(Dispatchers.Default) {
         val owner = currentCoroutineContext()
-        EditorArtworkWriter { owner.ensureActive() }.run {
-            output.writeInt(magic); output.writeInt(VERSION); body(); owner.ensureActive(); result()
+        EditorArtworkWriter(gradients) { owner.ensureActive() }.run {
+            output.writeInt(magic); output.writeInt(if (gradients) VERSION else VERSION_WITHOUT_GRADIENTS)
+            body(); owner.ensureActive(); result()
         }
     }
     private suspend fun <T> read(bytes: ByteArray, magic: Int, body: EditorArtworkReader.() -> T): T = withContext(Dispatchers.Default) {
         val owner = currentCoroutineContext()
         try {
-            EditorArtworkReader(bytes) { owner.ensureActive() }.run {
-                require(input.readInt() == magic && input.readInt() == VERSION) { "Unsupported editor artwork format" }
+            val version = bytes.formatVersion()
+            require(version == VERSION_WITHOUT_GRADIENTS || version == VERSION) { "Unsupported editor artwork format" }
+            EditorArtworkReader(bytes, gradients = version == VERSION) { owner.ensureActive() }.run {
+                require(input.readInt() == magic && input.readInt() == version) { "Unsupported editor artwork format" }
                 body().also { finished(); owner.ensureActive() }
             }
         } catch (error: IOException) { throw IllegalArgumentException("Invalid editor artwork document", error) }
@@ -102,6 +110,19 @@ internal object EditorArtworkCodec {
         }
         return EditorVectorInputs(entries, number(), boolean(), if (boolean()) EditorViewport(number(), number()) else null, optionalText(), boolean())
     }
+
+    private fun ByteArray.formatVersion(): Int =
+        if (size < 8) -1 else (this[4].toInt() and 0xff shl 24) or (this[5].toInt() and 0xff shl 16) or
+            (this[6].toInt() and 0xff shl 8) or (this[7].toInt() and 0xff)
+
+    private fun EditorArtworkSnapshot.hasGradient(): Boolean = when (this) {
+        is EditorVectorArtwork -> root.hasGradient()
+        is EditorInsetArtwork -> child.hasGradient()
+        is EditorBitmapArtwork, is EditorAdaptiveArtwork -> false
+    }
+
+    private fun EditorVectorWorkingState.hasGradient(): Boolean =
+        (listOf(current) + listOfNotNull(seed)).any { inputs -> inputs.entries.any { it.path.hasGradient() } }
 
     internal fun validateBitmap(value: EditorBitmapArtwork) {
         require(value.width in 1..4096 && value.height in 1..4096 && value.density >= 0 &&

@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.vector.*
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.vector.brush.ReferenceBrush
+import dev.renkinProject.renkin.vector.brush.GradientXml
 import dev.renkinProject.renkin.xml.XmlNode
 
 class VectorParser(val resources: Resources, private val defaultColor: Color = Color.Unspecified) {
@@ -105,9 +106,9 @@ class VectorParser(val resources: Resources, private val defaultColor: Color = C
         val rawPathData = node.getAttributeValue("pathData") ?: ""
         val fillType = parseFill(node.getAttributeValue("fillType")?.toInt() ?: 0)
         val name = node.getAttributeValue("name") ?: DefaultPathName
-        val fillColor = parseColor(node.getAttributeValue("fillColor"))
+        val fillColor = storedGradient(node, GradientXml.TARGET_FILL) ?: parseColor(node.getAttributeValue("fillColor"))
         val fillAlpha = node.getAttributeValue("fillAlpha")?.toFloat() ?: 1F
-        val strokeColor = parseColor(node.getAttributeValue("strokeColor"))
+        val strokeColor = storedGradient(node, GradientXml.TARGET_STROKE) ?: parseColor(node.getAttributeValue("strokeColor"))
         val strokeAlpha = node.getAttributeValue("strokeAlpha")?.toFloat() ?: 1F
         val strokeWidth = node.getAttributeValue("strokeWidth")?.toFloat() ?: DefaultStrokeLineWidth
         val strokeLineCap = parseCap(node.getAttributeValue("strokeLineCap")?.toInt() ?: -1)
@@ -138,6 +139,11 @@ class VectorParser(val resources: Resources, private val defaultColor: Color = C
             trimPathOffset
         )
     }
+
+    // A malformed gradient child is ignored, so the path keeps its solid fallback colour.
+    private fun storedGradient(path: XmlNode, target: String): Brush? = path.children
+        .firstOrNull { it.name == GradientXml.TAG && it.getAttributeValue("target") == target }
+        ?.let { element -> GradientXml.decode(element::getAttributeValue) }
 
     private fun parseDimension(text: String): Dp {
         return text.filter { it.isDigit() || it == '.' }.toFloat().dp

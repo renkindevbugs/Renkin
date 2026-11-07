@@ -1,6 +1,10 @@
 package dev.renkinProject.renkin.vector
 
 import android.util.Xml
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.vector.EmptyPath
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.vector.PathParser
@@ -16,7 +20,9 @@ import java.io.StringReader
  * vectors (no rasterising, no blur). Compose's PathParser speaks the same `d` syntax, so
  * the data feeds the editor directly.
  *
- * Deliberately small beyond that: no transforms, `<use>`/`<defs>` or stylesheet rules.
+ * Linear and radial gradients (`url(#id)` paints, defined anywhere, usually in `<defs>`) import as
+ * exact gradient brushes. Deliberately small beyond that: no transforms, `<use>`, clips, masks or
+ * stylesheet rules.
  * Unsupported documents are rejected as a whole so the editor never presents a silently
  * partial icon. Inline fill/stroke/stroke-width attributes and simple style declarations
  * inherit through groups, which covers icon sets such as Heroicons, Lucide and Tabler.
@@ -37,8 +43,20 @@ object SvgVectorImporter {
         val alpha: Float = 1f,
         val fillType: PathFillType = PathFillType.NonZero,
         val strokeLineCap: StrokeCap = StrokeCap.Butt,
-        val strokeLineJoin: StrokeJoin = StrokeJoin.Miter
+        val strokeLineJoin: StrokeJoin = StrokeJoin.Miter,
+        /** A resolved `url(#id)` paint with every opacity folded into its stops; [alpha] is then 1. */
+        val gradient: Brush? = null
     )
+
+    /**
+     * The paint of an imported path: its gradient, else its authored colour, else [uncoloured]
+     * (monochrome paths), with the path alpha applied to solid colours.
+     */
+    fun ImportedPath.brush(uncoloured: Color): Brush {
+        gradient?.let { return it }
+        val solid = color?.let { raw -> ColorDecoder.decodeSvgCss(raw).takeIf { it.isSpecified } } ?: uncoloured
+        return SolidColor(solid.copy(alpha = solid.alpha * alpha))
+    }
 
     data class ImportedSvg(
         val viewportWidth: Float,
@@ -58,6 +76,8 @@ object SvgVectorImporter {
         val paths = mutableListOf<ImportedPath>()
         val stylesByDepth = mutableMapOf<Int, SvgStyle>()
         var unsupported = false
+        val gradients = SvgGradients.collect(markup)
+        var defsDepth = -1
 
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT) {
@@ -90,8 +110,11 @@ object SvgVectorImporter {
                         stylesByDepth[parser.depth] = inherited.copy(groupAlpha = groupAlpha ?: 1f).merge(parser)
                         if (!parser.attr("transform").isNullOrBlank()) unsupported = true
                     }
+                    "defs" -> if (defsDepth < 0) defsDepth = parser.depth
                     "path", "rect", "circle", "ellipse", "line", "polyline", "polygon" -> {
                         if (!parser.attr("transform").isNullOrBlank()) unsupported = true
+                        // Shapes in <defs> are only drawn through <use>, which is not supported.
+                        if (defsDepth >= 0) unsupported = true
                         // Shapes become equivalent path data; a malformed shape (missing or
                         // non-positive dimensions) rejects the document like any other
                         // unsupported construct.
@@ -144,40 +167,44 @@ object SvgVectorImporter {
                             val paintsFill = if (filled && stroked) listOf(true, false) else listOf(filled)
                             for (isFill in paintsFill) {
                                 val paint = if (isFill) fill else stroke
-                                // Gradients and other paint servers have no solid path colour, so
-                                // they reject the document rather than silently flattening it.
-                                if (paint != null && paint.trim().startsWith("url(", ignoreCase = true)) {
-                                    unsupported = true
-                                }
-                                val color = paint?.trim()?.takeIf {
-                                    !it.equals("none", true) && !it.equals("currentColor", true)
-                                }
                                 val paintAlphaRaw = if (isFill) style.fillOpacity else style.strokeOpacity
                                 val paintAlpha = paintAlphaRaw?.toUnitFloatOrNull() ?: 1f
                                 if (paintAlphaRaw != null && paintAlphaRaw.toUnitFloatOrNull() == null) unsupported = true
+                                val alpha = (paintAlpha * elementAlpha * style.groupAlpha).coerceIn(0f, 1f)
+                                // Paint servers that are not representable gradients (patterns, focal
+                                // radials, broken references) reject the document instead of flattening it.
+                                val gradient = if (paint != null && SvgGradients.isUrl(paint)) {
+                                    gradients.resolve(paint, nodes.orEmpty(), alpha, viewportWidth, viewportHeight)
+                                        ?: run { unsupported = true; null }
+                                } else null
+                                val color = paint?.trim()?.takeIf {
+                                    gradient == null && !it.equals("none", true) && !it.equals("currentColor", true)
+                                }
                                 paths.add(
                                     ImportedPath(
                                         d,
                                         isFill,
                                         strokeWidth.takeIf { !isFill && stroked },
                                         color,
-                                        (paintAlpha * elementAlpha * style.groupAlpha).coerceIn(0f, 1f),
+                                        if (gradient != null) 1f else alpha,
                                         fillType,
                                         lineCap,
-                                        lineJoin
+                                        lineJoin,
+                                        gradient
                                     )
                                 )
                             }
                         }
                     }
                     "use", "image", "text",
-                    "clipPath", "mask", "pattern", "symbol", "defs", "style" ->
+                    "clipPath", "mask", "pattern", "symbol", "style" ->
                         unsupported = true
                 }
             }
             if (event == XmlPullParser.END_TAG && (parser.name == "g" || parser.name == "svg")) {
                 stylesByDepth.remove(parser.depth)
             }
+            if (event == XmlPullParser.END_TAG && parser.name == "defs" && parser.depth == defsDepth) defsDepth = -1
             event = parser.next()
         }
 

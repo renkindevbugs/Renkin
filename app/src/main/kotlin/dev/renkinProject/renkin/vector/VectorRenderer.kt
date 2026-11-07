@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.vector.toPath
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.vector.brush.ReferenceBrush
 import dev.renkinProject.renkin.vector.brush.SolidColorShader
+import dev.renkinProject.renkin.vector.brush.VectorGradientBrush
 
 class VectorRenderer(private val imageVector: ImageVector) {
     private val matrixStack = ArrayDeque<Matrix>()
@@ -71,7 +72,7 @@ class VectorRenderer(private val imageVector: ImageVector) {
     private fun renderPath(canvas: Canvas, path: VectorPath) {
         val androidPath = path.pathData.toPath().asAndroidPath()
         androidPath.fillType = convertFillType(path.pathFillType)
-        drawPath(canvas, androidPath, path)
+        drawPath(canvas, androidPath, path, shaderMatrix = null)
     }
 
     private fun renderNonScalingStroke(canvas: Canvas, targetWidth: Int, targetHeight: Int) {
@@ -115,7 +116,8 @@ class VectorRenderer(private val imageVector: ImageVector) {
         androidPath.transform(currentMatrix, newPath)
         newPath.fillType = convertFillType(path.pathFillType)
 
-        drawPath(canvas, newPath, path)
+        // The path is pre-transformed here instead of the canvas, so gradients need the same matrix.
+        drawPath(canvas, newPath, path, shaderMatrix = currentMatrix)
     }
 
     /**
@@ -125,20 +127,34 @@ class VectorRenderer(private val imageVector: ImageVector) {
      * saw the non-zero width, drew only the invisible stroke and dropped the fill entirely,
      * blanking every icon of such packs.
      */
-    private fun drawPath(canvas: Canvas, androidPath: Path, path: VectorPath) {
-        getFillPaint(path)?.let { canvas.drawPath(androidPath, it) }
-        getStrokePaint(path)?.let { canvas.drawPath(androidPath, it) }
+    private fun drawPath(canvas: Canvas, androidPath: Path, path: VectorPath, shaderMatrix: Matrix?) {
+        getFillPaint(path, shaderMatrix)?.let { canvas.drawPath(androidPath, it) }
+        getStrokePaint(path, shaderMatrix)?.let { canvas.drawPath(androidPath, it) }
     }
 
-    private fun getStrokePaint(path: VectorPath): Paint? {
-        if (path.strokeLineWidth <= 0f) return null
-        val color = convertColor(path.stroke)
-        val alpha = (Color(color).alpha * path.strokeAlpha * 255).toInt()
-        if (alpha <= 0) return null
+    /** Colour or gradient shader of [brush] at [alpha]; null when nothing would be painted. */
+    private fun paintFor(brush: Brush?, alpha: Float, shaderMatrix: Matrix?): Paint? {
+        if (brush is VectorGradientBrush) {
+            val paintAlpha = (alpha * 255).toInt()
+            if (paintAlpha <= 0) return null
+            return Paint().apply {
+                color = android.graphics.Color.WHITE
+                this.alpha = paintAlpha
+                shader = brush.shader(shaderMatrix)
+            }
+        }
+        val color = convertColor(brush)
+        val paintAlpha = (Color(color).alpha * alpha * 255).toInt()
+        if (paintAlpha <= 0) return null
+        return Paint().apply {
+            this.color = color
+            this.alpha = paintAlpha
+        }
+    }
 
-        val paint = Paint()
-        paint.color = color
-        paint.alpha = alpha
+    private fun getStrokePaint(path: VectorPath, shaderMatrix: Matrix?): Paint? {
+        if (path.strokeLineWidth <= 0f) return null
+        val paint = paintFor(path.stroke, path.strokeAlpha, shaderMatrix) ?: return null
         paint.strokeCap = convertCap(path.strokeLineCap)
         paint.strokeJoin = convertJoin(path.strokeLineJoin)
         paint.strokeWidth = path.strokeLineWidth
@@ -149,14 +165,8 @@ class VectorRenderer(private val imageVector: ImageVector) {
         return paint
     }
 
-    private fun getFillPaint(path: VectorPath): Paint? {
-        val color = convertColor(path.fill)
-        val alpha = (Color(color).alpha * path.fillAlpha * 255).toInt()
-        if (alpha <= 0) return null
-
-        val paint = Paint()
-        paint.color = color
-        paint.alpha = alpha
+    private fun getFillPaint(path: VectorPath, shaderMatrix: Matrix?): Paint? {
+        val paint = paintFor(path.fill, path.fillAlpha, shaderMatrix) ?: return null
         paint.style = Paint.Style.FILL
         paint.flags = Paint.ANTI_ALIAS_FLAG or Paint.LINEAR_TEXT_FLAG or Paint.SUBPIXEL_TEXT_FLAG
 
