@@ -18,29 +18,29 @@ import java.time.format.DateTimeFormatter
 class OnlineIconRepositoryTest {
 
     @Test
-    fun parseCollections_readsMetadataAndSortsByName() {
+    fun parseCollections_readsMetadataAndKeepsApiOrder() {
         val json = """
             {
+              "twemoji": {"name":"Twitter Emoji","total":3000,
+                          "license":{"title":"CC BY 4.0"},
+                          "samples":["1f600"],"category":"Emoji","palette":true},
               "mdi": {"name":"Material Design Icons","total":7447,
                       "license":{"title":"Apache 2.0","spdx":"Apache-2.0"},
                       "samples":["account","home","alert"],
                       "category":"General","palette":false},
-              "twemoji": {"name":"Twitter Emoji","total":3000,
-                          "license":{"title":"CC BY 4.0"},
-                          "samples":["1f600"],"category":"Emoji","palette":true},
               "broken": {"total":0}
             }
         """.trimIndent()
 
         val sets = OnlineIconRepository.parseCollections(json)!!
 
-        assertEquals(listOf("mdi", "twemoji"), sets.map { it.prefix })
-        assertEquals("Apache-2.0", sets[0].license)
-        assertEquals("CC BY 4.0", sets[1].license)
-        assertTrue(sets[1].palette)
-        assertFalse(sets[0].palette)
-        assertEquals(listOf("account", "home", "alert"), sets[0].samples)
-        assertEquals("Emoji", sets[1].category)
+        assertEquals(listOf("twemoji", "mdi"), sets.map { it.prefix })
+        assertEquals("Apache-2.0", sets[1].license)
+        assertEquals("CC BY 4.0", sets[0].license)
+        assertTrue(sets[0].palette)
+        assertFalse(sets[1].palette)
+        assertEquals(listOf("account", "home", "alert"), sets[1].samples)
+        assertEquals("Emoji", sets[0].category)
     }
 
     @Test
@@ -139,5 +139,56 @@ class OnlineIconRepositoryTest {
         val future = java.time.Instant.ofEpochMilli(now + 3_600_000)
             .atZone(java.time.ZoneOffset.UTC).format(DateTimeFormatter.RFC_1123_DATE_TIME)
         assertEquals(maxDelayMs, OnlineIconRepository.retryAfterDelayMs(future, now, maxDelayMs))
+    }
+
+    @Test
+    fun iconifyJson_rebuildsApiSvgAndResolvesPlainAliases() {
+        val json = """
+            {"prefix":"fa6-solid","width":512,"height":512,
+             "aliases":{"home":{"parent":"house"},"home-flipped":{"parent":"house","hFlip":true}},
+             "icons":{"house":{"body":"<path d=\"M0 0\"/>","width":576},
+                      "user":{"body":"<path d=\"M1 1\"/>","width":448},
+                      "square":{"body":"<path d=\"M2 2\"/>"},
+                      "turned":{"body":"<path d=\"M3 3\"/>","rotate":1}},
+             "not_found":["gone"]}
+        """.trimIndent()
+
+        val batch = IconifyJson.parse(json)!!
+
+        val house = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1.13em\" height=\"1em\" " +
+            "viewBox=\"0 0 576 512\"><path d=\"M0 0\"/></svg>"
+        assertEquals(IconLookup.Markup(house), batch.lookup("house"))
+        assertEquals(batch.lookup("house"), batch.lookup("home"))
+        assertEquals(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"0.88em\" height=\"1em\" " +
+                "viewBox=\"0 0 448 512\"><path d=\"M1 1\"/></svg>",
+            (batch.lookup("user") as IconLookup.Markup).svg
+        )
+        assertTrue((batch.lookup("square") as IconLookup.Markup).svg
+            .contains("width=\"1em\" height=\"1em\" viewBox=\"0 0 512 512\""))
+        assertEquals(IconLookup.NeedsDirectFetch, batch.lookup("turned"))
+        assertEquals(IconLookup.NeedsDirectFetch, batch.lookup("home-flipped"))
+        assertEquals(IconLookup.Missing, batch.lookup("gone"))
+        assertNull(IconifyJson.parse("not json"))
+    }
+
+    @Test
+    fun iconifyJson_usesIconifyDefaultSizeWhenTheSetOmitsIt() {
+        val batch = IconifyJson.parse(
+            """{"prefix":"bi","icons":{"dot":{"body":"<circle r=\"1\"/>"}}}"""
+        )!!
+
+        assertTrue((batch.lookup("dot") as IconLookup.Markup).svg
+            .contains("viewBox=\"0 0 16 16\""))
+    }
+
+    @Test
+    fun iconifyJson_appliesRootSizeListedAfterIconsAndHidesHiddenIcons() {
+        val set = IconifyJson.parse(
+            """{"prefix":"t","icons":{"b":{"body":"<g/>"},"a":{"body":"<g/>","hidden":true}},"width":24,"height":24}"""
+        )!!
+
+        assertEquals(listOf("b"), set.visibleNames)
+        assertTrue((set.lookup("a") as IconLookup.Markup).svg.contains("viewBox=\"0 0 24 24\""))
     }
 }

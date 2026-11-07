@@ -78,6 +78,22 @@ import dev.renkinProject.renkin.vector.SvgVectorImporter
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyAndRemoveGroup
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.center
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import dev.renkinProject.renkin.ui.theme.InnerShape
+import dev.renkinProject.renkin.ui.theme.SwatchShape
+import dev.renkinProject.renkin.vector.brush.GradientType
+import dev.renkinProject.renkin.vector.brush.VectorGradientBrush
 
 @Composable
 internal fun PrepareEditVector(
@@ -183,10 +199,7 @@ internal class VectorEditState {
  * width, so [filled] maps straight onto `strokeLineWidth == 0`.
  */
 internal fun PathEntry.toMutablePath(thickness: Float): MutableVectorPath {
-    // XML persistence represents an absent brush as transparent (#00000000), which parses
-    // back as a non-null brush. Select the brush that belongs to this path's actual paint
-    // mode; preferring stroke unconditionally made every reloaded filled SVG transparent.
-    val color = (if (filled) path.fill else path.stroke) ?: SolidColor(Color.White)
+    val color = activeBrush()
     return MutableVectorPath(path).also { mp ->
         if (filled) {
             mp.fill = color
@@ -200,6 +213,27 @@ internal fun PathEntry.toMutablePath(thickness: Float): MutableVectorPath {
             mp.strokeLineWidth = baseStroke * thickness
         }
     }
+}
+
+/**
+ * The paint this path draws with in its current Fill/Stroke mode.
+ *
+ * XML persistence represents an absent brush as transparent (#00000000), which parses back
+ * as a non-null brush, so the brush of the actual paint mode wins; preferring stroke
+ * unconditionally made every reloaded filled SVG transparent. A reloaded path stores only
+ * its painted slot, so a toggled path borrows the other slot's paint (colour or gradient)
+ * instead of falling back to white.
+ */
+private fun PathEntry.activeBrush(): Brush {
+    val own = if (filled) path.fill else path.stroke
+    val other = if (filled) path.stroke else path.fill
+    return own.takeIf { it.isPainted() } ?: other.takeIf { it.isPainted() } ?: SolidColor(Color.White)
+}
+
+private fun Brush?.isPainted(): Boolean = when (this) {
+    null -> false
+    is SolidColor -> value.alpha > 0f
+    else -> true
 }
 
 /** A single-path vector for the per-path preview thumbnail. */
@@ -319,18 +353,15 @@ internal fun EditVectorColumn(
                         viewportWidth = imported.viewportWidth,
                         viewportHeight = imported.viewportHeight
                     )
-                    // Multicolour sets keep their authored per-path colours; monochrome
-                    // paths stay white and get their colour from the Modifier tab. Both
-                    // brushes carry the colour so toMutablePath picks the active one.
-                    val decoded = spec.color?.let { raw ->
-                        ColorDecoder.decodeSvgCss(raw).takeIf { it.isSpecified }
-                    } ?: Color.White
-                    val painted = decoded.copy(alpha = decoded.alpha * spec.alpha)
+                    // Multicolour sets keep their authored per-path colours and gradients;
+                    // monochrome paths stay white and get their colour from the Modifier tab.
+                    // Both slots carry the paint so toMutablePath picks the active one.
+                    val painted = with(SvgVectorImporter) { spec.brush(Color.White) }
                     builder.addPath(
                         nodes,
                         pathFillType = spec.fillType,
-                        fill = SolidColor(painted),
-                        stroke = SolidColor(painted),
+                        fill = painted,
+                        stroke = painted,
                         strokeLineWidth = spec.strokeWidth ?: importStroke,
                         strokeLineCap = spec.strokeLineCap,
                         strokeLineJoin = spec.strokeLineJoin
@@ -398,6 +429,26 @@ internal fun EditVectorColumn(
                     previewVector = entry.toPreviewVector(vector, state.thickness, state.viewportOverride),
                     pathString = entry.path.pathData.toStringPath(),
                     filled = entry.filled,
+                    gradient = entry.activeBrush() as? VectorGradientBrush,
+                    onMakeSolid = { solid ->
+                        val builder = ImageVector.Builder(
+                            defaultWidth = vector.defaultWidth,
+                            defaultHeight = vector.defaultHeight,
+                            viewportWidth = viewportWidth,
+                            viewportHeight = viewportHeight
+                        )
+                        builder.addPath(
+                            entry.path.pathData,
+                            pathFillType = entry.path.pathFillType,
+                            fill = SolidColor(solid),
+                            stroke = SolidColor(solid),
+                            strokeLineWidth = entry.baseStroke,
+                            strokeLineCap = entry.path.strokeLineCap,
+                            strokeLineJoin = entry.path.strokeLineJoin
+                        )
+                        val rebuilt = builder.build().root.first() as VectorPath
+                        state.entries = state.entries.toMutableList().also { it[index] = entry.copy(path = rebuilt) }
+                    },
                     onToggleFill = {
                         state.entries = state.entries.toMutableList().also {
                             it[index] = entry.copy(filled = !entry.filled)
@@ -463,6 +514,8 @@ fun VectorPathItem(
     previewVector: ImageVector,
     pathString: String,
     filled: Boolean,
+    gradient: VectorGradientBrush?,
+    onMakeSolid: (Color) -> Unit,
     onToggleFill: () -> Unit,
     onDelete: () -> Unit,
     onChange: (newPath: String) -> Unit
@@ -481,14 +534,29 @@ fun VectorPathItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Surface(
-                shape = IconShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh
-            ) {
-                val painter = rememberVectorPainter(previewVector)
-                Image(painter, null, Modifier
-                    .padding(6.dp)
-                    .size(48.dp, 48.dp))
+            Box {
+                Surface(
+                    shape = IconShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    val painter = rememberVectorPainter(previewVector)
+                    Image(painter, null, Modifier
+                        .padding(6.dp)
+                        .size(48.dp, 48.dp))
+                }
+                if (gradient != null) {
+                    val description = pluralStringResource(R.plurals.gradientSwatchDescription, gradient.colors.size, gradient.colors.size)
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(x = 3.dp, y = 3.dp)
+                            .size(16.dp)
+                            .border(2.dp, MaterialTheme.colorScheme.surfaceContainer, SwatchShape)
+                            .padding(2.dp)
+                            .background(gradient.previewBrush(diagonal = true), SwatchShape)
+                            .semantics { contentDescription = description }
+                    )
+                }
             }
 
             Text(
@@ -529,7 +597,15 @@ fun VectorPathItem(
     }
 
     if (showPathEditor) {
-        EditPathDialog(pathString, { showPathEditor = false }) {
+        EditPathDialog(
+            pathString,
+            { showPathEditor = false },
+            gradient = gradient,
+            onMakeSolid = {
+                gradient?.let { onMakeSolid(it.fallbackColor()) }
+                showPathEditor = false
+            }
+        ) {
             onChange(it)
             showPathEditor = false
         }
@@ -636,7 +712,13 @@ fun NewPath(onChange: (newPath: String) -> Unit) {
 }
 
 @Composable
-fun EditPathDialog(path: String, onDismiss: () -> Unit, onChange: (newPath: String) -> Unit) {
+fun EditPathDialog(
+    path: String,
+    onDismiss: () -> Unit,
+    gradient: VectorGradientBrush? = null,
+    onMakeSolid: () -> Unit = {},
+    onChange: (newPath: String) -> Unit
+) {
     var newPath by rememberSaveable { mutableStateOf(path) }
     var badFormatting by rememberSaveable { mutableStateOf(false) }
     var formatError by rememberSaveable { mutableStateOf("") }
@@ -660,6 +742,8 @@ fun EditPathDialog(path: String, onDismiss: () -> Unit, onChange: (newPath: Stri
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                if (gradient != null) GradientStops(gradient, onMakeSolid)
 
                 if (badFormatting) {
                     Text(
@@ -716,6 +800,58 @@ fun EditPathDialog(path: String, onDismiss: () -> Unit, onChange: (newPath: Stri
             }
         }
     )
+}
+
+/** Read-only view of a path's gradient: its stops on a strip, the kind and count, and Make solid. */
+@Composable
+private fun GradientStops(gradient: VectorGradientBrush, onMakeSolid: () -> Unit) {
+    Surface(
+        shape = InnerShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+    ) {
+        Column(Modifier.padding(start = 12.dp, end = 4.dp, top = 12.dp)) {
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(end = 8.dp)
+                    .height(20.dp)
+                    .background(gradient.previewBrush(diagonal = false), SwatchShape)
+            ) {
+                val inset = 6.dp
+                gradient.offsets.zip(gradient.colors).forEach { (offset, color) ->
+                    Box(
+                        Modifier
+                            .offset(x = inset + (maxWidth - inset * 2) * offset - 6.dp, y = 4.dp)
+                            .size(12.dp)
+                            .background(color.copy(alpha = 1f), CircleShape)
+                            .border(2.dp, Color.White, CircleShape)
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = pluralStringResource(
+                        if (gradient.type == GradientType.RADIAL) R.plurals.radialGradientColours else R.plurals.linearGradientColours,
+                        gradient.colors.size,
+                        gradient.colors.size
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onMakeSolid) { Text(stringResource(R.string.gradientMakeSolid)) }
+            }
+        }
+    }
+}
+
+/** The stops as a Compose brush for swatches; geometry stays in the real gradient. */
+private fun VectorGradientBrush.previewBrush(diagonal: Boolean): Brush {
+    val stops = offsets.zip(colors).toTypedArray()
+    return if (diagonal) Brush.linearGradient(*stops) else Brush.horizontalGradient(*stops)
 }
 
 @Composable

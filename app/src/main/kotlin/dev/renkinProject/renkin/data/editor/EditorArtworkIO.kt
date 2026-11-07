@@ -4,7 +4,8 @@ import java.io.ByteArrayInputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 
-internal class EditorArtworkWriter(private val checkActive: () -> Unit = {}) {
+/** [gradients]: format version 2, whose brushes carry an optional gradient; version 1 never has one. */
+internal class EditorArtworkWriter(val gradients: Boolean = false, private val checkActive: () -> Unit = {}) {
     fun ensureActive() = checkActive()
     private val bytes = CappedByteArrayOutputStream(EditorDraftCodec.MAX_ARTIFACT_BYTES, "Editor artwork is too large")
     val output = DataOutputStream(bytes)
@@ -19,7 +20,7 @@ internal class EditorArtworkWriter(private val checkActive: () -> Unit = {}) {
     fun result(): ByteArray = bytes.toByteArray()
 }
 
-internal class EditorArtworkReader(encoded: ByteArray, private val checkActive: () -> Unit = {}) {
+internal class EditorArtworkReader(encoded: ByteArray, val gradients: Boolean = false, private val checkActive: () -> Unit = {}) {
     fun ensureActive() = checkActive()
     init { require(encoded.size.toLong() in 1..EditorDraftCodec.MAX_ARTIFACT_BYTES) { "Invalid artwork document size" } }
     val input = DataInputStream(ByteArrayInputStream(encoded))

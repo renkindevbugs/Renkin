@@ -10,11 +10,17 @@ import androidx.compose.ui.graphics.vector.VectorGroup
 import androidx.compose.ui.graphics.vector.VectorPath
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.vector.PathExporter.Companion.toStringPath
+import dev.renkinProject.renkin.vector.brush.GradientXml
 import dev.renkinProject.renkin.vector.brush.ReferenceBrush
+import dev.renkinProject.renkin.vector.brush.VectorGradientBrush
 import dev.renkinProject.renkin.xml.file.BaseVectorXml
 import dev.renkinProject.renkin.xml.file.VectorXml
 
-class VectorExporter(val vector: ImageVector) {
+/**
+ * [includeGradients] writes readable gradient children for stored editor vectors; APK export turns it
+ * off because a real VectorDrawable cannot hold them (the solid fallback colour stays).
+ */
+class VectorExporter(val vector: ImageVector, private val includeGradients: Boolean = true) {
     private val lineCapButt = 0
     private val lineCapRound = 1
     private val lineCapSquare = 2
@@ -79,6 +85,10 @@ class VectorExporter(val vector: ImageVector) {
     // ReferenceBrush is intentionally preserved as its resource string so themed vectors keep
     // following @color/icon_color after export; unsupported brush types become transparent.
     private fun setXmlPath(file : BaseVectorXml, path: VectorPath) {
+        val gradients = if (!includeGradients) emptyList() else listOfNotNull(
+            (path.fill as? VectorGradientBrush)?.let { GradientXml.attributes(GradientXml.TARGET_FILL, it) },
+            (path.stroke as? VectorGradientBrush)?.let { GradientXml.attributes(GradientXml.TARGET_STROKE, it) }
+        )
         file.path(
             path.pathData.toStringPath(),
             setXmlJoin(path.strokeLineJoin).toString(),
@@ -88,7 +98,9 @@ class VectorExporter(val vector: ImageVector) {
             setXmlFill(path.pathFillType).toString(),
             setXmlCap(path.strokeLineCap).toString(),
             path.fillAlpha,
-            path.strokeAlpha
+            path.strokeAlpha,
+            gradients,
+            GradientXml.TAG
         )
     }
 
@@ -125,6 +137,10 @@ class VectorExporter(val vector: ImageVector) {
             is ReferenceBrush -> {
                 return brush.reference
             }
+            // Never transparent: builds without gradient support paint this colour instead.
+            is VectorGradientBrush -> {
+                brush.fallbackColor().toHexString()
+            }
             else -> {
                 "#00000000"
             }
@@ -142,8 +158,8 @@ class VectorExporter(val vector: ImageVector) {
             return exporter.toXmlFile()
         }
 
-        fun ImageVector.toXmlFile(parent: BaseVectorXml): BaseVectorXml {
-            val exporter = VectorExporter(this)
+        fun ImageVector.toXmlFile(parent: BaseVectorXml, includeGradients: Boolean = true): BaseVectorXml {
+            val exporter = VectorExporter(this, includeGradients)
             return exporter.toXmlFile(parent)
         }
     }

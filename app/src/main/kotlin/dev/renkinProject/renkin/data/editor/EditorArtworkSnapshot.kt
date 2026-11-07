@@ -38,7 +38,14 @@ internal data class EditorVectorPath(
     val trimStart: Float, val trimEnd: Float, val trimOffset: Float
 ) : EditorVectorNode
 
-internal data class EditorVectorBrush(val colorBits: Long, val reference: String? = null)
+internal data class EditorVectorBrush(val colorBits: Long, val reference: String? = null, val gradient: EditorVectorGradient? = null)
+
+/** Values of a VectorGradientBrush; the brush's colorBits hold the solid fallback colour. */
+internal data class EditorVectorGradient(
+    val radial: Boolean, val colorBits: List<Long>, val offsets: List<Float>,
+    val x0: Float, val y0: Float, val x1: Float, val y1: Float, val radius: Float,
+    val tileMode: Int, val matrix: List<Float>
+)
 
 internal data class EditorAdaptiveArtwork(
     val foreground: EditorArtworkBytes, val background: EditorArtworkBytes, val monochrome: EditorArtworkBytes?,
@@ -60,6 +67,7 @@ internal data class EditorVectorWorkingState(val initialized: Boolean, val curre
 internal class EditorArtworkBudget(private val checkActive: () -> Unit = {}) {
     private var nodes = 0
     private var commands = 0
+    private var stops = 0
     private var bytes = 0L
     fun node(depth: Int) {
         checkActive()
@@ -69,6 +77,10 @@ internal class EditorArtworkBudget(private val checkActive: () -> Unit = {}) {
         require(count in 0..MAX_COMMANDS - commands) { "Editor artwork has too many path commands" }
         commands += count
     }
+    fun stops(count: Int) {
+        require(count in 0..MAX_GRADIENT_STOPS - stops) { "Editor artwork has too many gradient stops" }
+        stops += count
+    }
     fun bytes(count: Int) {
         require(count >= 0 && count.toLong() <= EditorDraftCodec.MAX_ARTIFACT_BYTES - bytes) { "Editor artwork is too large" }
         bytes += count
@@ -77,5 +89,6 @@ internal class EditorArtworkBudget(private val checkActive: () -> Unit = {}) {
         const val MAX_DEPTH = 64
         const val MAX_NODES = 10_000
         const val MAX_COMMANDS = 100_000
+        const val MAX_GRADIENT_STOPS = 100_000
     }
 }

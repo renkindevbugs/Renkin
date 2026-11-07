@@ -17,6 +17,7 @@ import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.ui.*
 import dev.renkinProject.renkin.vector.brush.ReferenceBrush
 import dev.renkinProject.renkin.vector.brush.SolidColorShader
+import dev.renkinProject.renkin.vector.brush.VectorGradientBrush
 import java.nio.ByteBuffer
 import kotlinx.coroutines.*
 import org.junit.Assert.*
@@ -222,6 +223,46 @@ class EditorArtworkCodecTest {
             viewportWidth = 24f, viewportHeight = 24f).addPath(emptyList(), fill = Brush.linearGradient(listOf(Color.Red, Color.Blue))).build())
         rejected { captureEditorArtwork(source) }
         rejected { captureEditorArtwork(InsetIconDrawable(ColorDrawable(0), Rect(), RectF())) }
+    }
+
+    private fun gradient(offsets: List<Float> = listOf(0.1f, 0.9f), matrix: List<Float> = listOf(2f, 0f, 0.5f, 3f, 1f, -1f)) =
+        EditorVectorGradient(true, listOf(Color.Red.value.toLong(), packedColor), offsets, 4f, 5f, 0f, 0f, 6f, 1, matrix)
+    private fun EditorVectorGradient.brush() =
+        EditorVectorBrush((toBrush() as VectorGradientBrush).fallbackColor().value.toLong(), null, this)
+    private fun gradientPath() = path().copy(
+        fill = gradient().brush(),
+        stroke = gradient().copy(radial = false, x1 = 9f, y1 = 10f, radius = 0f, tileMode = 2).brush())
+    private fun ByteArray.formatVersion() = ByteBuffer.wrap(this).getInt(4)
+
+    @Test fun gradientDraftsRoundTripAsVersionTwoAndPlainDraftsStayVersionOne() = runBlocking<Unit> {
+        val plain = vector()
+        assertEquals(1, EditorArtworkCodec.encode(plain).formatVersion())
+
+        val withGradient = vector(group(listOf(group(listOf(gradientPath())), path())))
+        val encoded = EditorArtworkCodec.encode(withGradient)
+        assertEquals(2, encoded.formatVersion())
+        assertEquals(withGradient, EditorArtworkCodec.decode(encoded))
+        assertArtwork(withGradient)
+        assertTrue(gradientPath().toDraftVectorPath().fill is VectorGradientBrush)
+    }
+
+    @Test fun nativeGradientBrushCapturesAndBindsBack() = runBlocking<Unit> {
+        val brush = gradient().toBrush() as VectorGradientBrush
+        val source = ImageVectorDrawable(ImageVector.Builder(defaultWidth = 24.dp, defaultHeight = 24.dp,
+            viewportWidth = 24f, viewportHeight = 24f).addPath(listOf(PathNode.MoveTo(1f, 2f)), fill = brush).build())
+        val captured = captureEditorArtwork(source)
+        val restored = restoreEditorArtwork(EditorArtworkCodec.decode(EditorArtworkCodec.encode(captured))) as ImageVectorDrawable
+        assertEquals(brush, (restored.toImageVector().root.single() as VectorPath).fill)
+    }
+
+    @Test fun invalidGradientValuesAreRejected() {
+        rejected { validateGradient(gradient(offsets = listOf(0.9f, 0.1f))) }
+        rejected { validateGradient(gradient(offsets = listOf(0f, Float.NaN))) }
+        rejected { validateGradient(gradient(matrix = listOf(0f, 0f, 0f, 0f, 0f, 0f))) }
+        rejected { validateGradient(gradient(matrix = listOf(1f, 0f, 0f))) }
+        rejected { validateGradient(gradient().copy(radius = -1f)) }
+        rejected { validateGradient(gradient().copy(tileMode = 7)) }
+        rejected { validateGradient(gradient().copy(colorBits = listOf(packedColor), offsets = listOf(0f))) }
     }
 
     @Test fun adaptiveLayersOriginalsAndPackControlsAreExactAndDetached() = runBlocking<Unit> {

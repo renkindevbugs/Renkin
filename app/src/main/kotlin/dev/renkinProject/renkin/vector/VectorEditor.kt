@@ -15,8 +15,10 @@ import dev.renkinProject.renkin.vector.NodeEditor.Companion.scale
 import dev.renkinProject.renkin.vector.NodeEditor.Companion.translate
 import dev.renkinProject.renkin.vector.PathConverter.Companion.isRelative
 import dev.renkinProject.renkin.vector.PathConverter.Companion.toAbsolute
+import dev.renkinProject.renkin.vector.brush.GradientMatrix
 import dev.renkinProject.renkin.vector.brush.ReferenceBrush
 import dev.renkinProject.renkin.vector.brush.SolidColorShader
+import dev.renkinProject.renkin.vector.brush.transformedBy
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
@@ -93,6 +95,7 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
 
             path.pathData[i] = node.scale(scaleX, scaleY, pivotX, pivotY)
         }
+        path.transformBrushes(GradientMatrix.scale(scaleX, scaleY, pivotX, pivotY))
     }
 
     private fun translateGroup(group: MutableVectorGroup, translateX: Float, translateY: Float) {
@@ -117,6 +120,7 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
 
             path.pathData[i] = node.translate(translateX, translateY)
         }
+        path.transformBrushes(GradientMatrix.translate(translateX, translateY))
     }
 
     private fun rotatePath(path: MutableVectorPath, rotation: Float, pivotX: Float, pivotY: Float) {
@@ -129,6 +133,13 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
 
             path.pathData[i] = node.rotate(rotation, pivotX, pivotY)
         }
+        path.transformBrushes(GradientMatrix.rotate(rotation, pivotX, pivotY))
+    }
+
+    // Gradients live in path coordinates, so they follow every rewrite of the path data.
+    private fun MutableVectorPath.transformBrushes(transform: GradientMatrix) {
+        fill = fill.transformedBy(transform)
+        stroke = stroke.transformedBy(transform)
     }
 
     private fun roundAlpha(): ImageVectorDrawable {

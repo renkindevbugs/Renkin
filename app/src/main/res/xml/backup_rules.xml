@@ -2,10 +2,12 @@
 <!--
     Auto Backup rules for Android 11 (API 30) and below. Everything is backed up by default; we
     only exclude the local crash logs, which are transient diagnostics with no value once restored
-    onto another device. The generated-icon database, the user's uploaded images and the app
+    onto another device, and downloaded online icon sets, which can be downloaded again and would
+    otherwise fill the 25 MB backup quota. The generated-icon database, the user's uploaded images and the app
     settings are intentionally kept so they survive a reinstall / device switch.
     See https://developer.android.com/guide/topics/data/autobackup
 -->
 <full-backup-content>
     <exclude domain="file" path="crashes" />
+    <exclude domain="file" path="online-icon-sets" />
 </full-backup-content>

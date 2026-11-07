@@ -50,7 +50,9 @@ abstract class BaseVectorXml: XmlMemoryFile() {
         fillType: String,
         strokeLineCap: String,
         fillAlpha: Float,
-        strokeAlpha: Float
+        strokeAlpha: Float,
+        children: List<List<Pair<String, String>>> = emptyList(),
+        childTag: String = ""
     ) {
         startTag("path")
         attribute("pathData", pathData, androidNamespace)
@@ -62,6 +64,11 @@ abstract class BaseVectorXml: XmlMemoryFile() {
         attribute("strokeLineCap", strokeLineCap, androidNamespace)
         attribute("fillAlpha", fillAlpha.toString(), androidNamespace)
         attribute("strokeAlpha", strokeAlpha.toString(), androidNamespace)
+        for (child in children) {
+            startTag(childTag)
+            child.forEach { (name, value) -> attribute(name, value) }
+            endTag(childTag)
+        }
         endTag("path")
     }
 }

@@ -61,6 +61,8 @@
     <string name="aboutForkLink">View Alembicons on F-Droid</string>
     <string name="aboutGradients">The gradient gallery ships the uiGradients collection by Indrashish Ghosh, used under the MIT license.</string>
     <string name="aboutGradientsLink">View uiGradients on GitHub</string>
+    <string name="aboutTablerIcons">The built-in Tabler Icons set by Paweł Kuna is used under the MIT license.</string>
+    <string name="aboutTablerIconsLink">View Tabler Icons on GitHub</string>
     <string name="githubUrl" translatable="false">https://github.com/renkindevbugs/Renkin</string>
     <string name="viewOnGithub">View on GitHub</string>
     <string name="aboutFeedback">Got an idea or a suggestion? Feel free to share it on GitHub — open it with the “View on GitHub” link under the app name above (suggestions and bug reports go in the “Issues” tab).</string>
@@ -468,6 +470,19 @@
     <string name="paths">Paths</string>
     <string name="addPath">Add path</string>
     <string name="editPath">Edit path</string>
+    <string name="gradientMakeSolid">Make solid</string>
+    <plurals name="gradientSwatchDescription">
+        <item quantity="one">Gradient, %1$d colour</item>
+        <item quantity="other">Gradient, %1$d colours</item>
+    </plurals>
+    <plurals name="linearGradientColours">
+        <item quantity="one">Linear gradient · %1$d colour</item>
+        <item quantity="other">Linear gradient · %1$d colours</item>
+    </plurals>
+    <plurals name="radialGradientColours">
+        <item quantity="one">Radial gradient · %1$d colour</item>
+        <item quantity="other">Radial gradient · %1$d colours</item>
+    </plurals>
     <string name="pathData">SVG path data</string>
     <string name="noPathsYet">No paths yet — add one to start drawing</string>
     <string name="lineThickness">Line thickness</string>
@@ -857,6 +872,39 @@
     <string name="onlineSetCount">%1$d icons</string>
     <string name="onlinePoweredBy">Icon data by</string>
     <string name="onlineUnknownLicense">Unknown licence</string>
+    <string name="onlineSetBuiltIn">Built in</string>
+    <string name="onlineSetDownloaded">Downloaded</string>
+    <string name="onlineSetDownloadingBadge">%1$d%%</string>
+    <string name="onlineSetDownloadCta">Use this set offline</string>
+    <string name="onlineSetDownloadCtaHint">Download it once, then browse without the internet.</string>
+    <string name="onlineSetDownloadAction">Download</string>
+    <string name="onlineSetDownloadEyebrow">Download for offline use</string>
+    <string name="onlineSetDownloadBody">Downloaded once from cdn.jsdelivr.net. Its icons then load from this device, also without the internet.</string>
+    <string name="onlineSetDownloadSize">Size</string>
+    <string name="onlineSetDownloadIcons">Icons</string>
+    <string name="onlineSetDownloadVersion">Version</string>
+    <string name="onlineSetUpToDate">This set is already the newest version on this device.</string>
+    <string name="onlineSetDownloading">Downloading… %1$d%%</string>
+    <string name="onlineSetDownloadFailed">Couldn\'t download the set. Check the connection and try again.</string>
+    <string name="onlineSetIntegrityFailed">The download was damaged and was discarded. Try again.</string>
+    <string name="onlineSetNotDownloadable">This set can only be browsed online.</string>
+    <string name="onlineSetRetry">Retry</string>
+    <string name="onlineSetDownloadLatest">Download latest version</string>
+    <string name="onlineSetDelete">Remove download</string>
+    <string name="onlineSetDeleteTitle">Remove %1$s from this device?</string>
+    <string name="onlineSetDeleteBody">Icons you already used stay in your profiles. You can download the set again later.</string>
+    <string name="onlineFilterDownloaded">Downloaded</string>
+    <plurals name="onlineDownloadedSummary">
+        <item quantity="one">%1$d set · %2$s on this device</item>
+        <item quantity="other">%1$d sets · %2$s on this device</item>
+    </plurals>
+    <string name="onlineCategoryOther">Other</string>
+    <string name="onlineCategoryExpand">Expand</string>
+    <string name="onlineCategoryCollapse">Collapse</string>
+    <plurals name="onlineCategorySetCount">
+        <item quantity="one">%1$d set</item>
+        <item quantity="other">%1$d sets</item>
+    </plurals>
     <string name="onlineIconNotImportable">Preview only — this icon uses gradients or effects the vector editor can\'t import</string>
     <string name="onlineIconLoadFailed">Couldn\'t download this icon. Check your connection and try again.</string>
     <string name="onlineIconsRateLimited">The online service is limiting downloads. Next attempt in %1$d seconds. Cached icons remain available.</string>

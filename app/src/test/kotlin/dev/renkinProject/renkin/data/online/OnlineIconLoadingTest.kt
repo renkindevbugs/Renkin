@@ -36,6 +36,19 @@ class OnlineIconLoadingTest {
 
     private fun searchResponse() = HttpTextResponse(body = """{"icons":[]}""", status = 200)
 
+    private fun batchResponse(url: String, missing: Set<String> = emptySet()): HttpTextResponse {
+        val names = url.substringAfter("?icons=").split(',')
+        val icons = names.filterNot { it in missing }
+            .joinToString(",") { "\"$it\":{\"body\":\"$BODY\"}" }
+        val notFound = names.filter { it in missing }.joinToString(",") { "\"$it\"" }
+        return HttpTextResponse(
+            body = """{"prefix":"test","width":1,"height":1,"icons":{$icons},"not_found":[$notFound]}""",
+            status = 200
+        )
+    }
+
+    private fun isBatch(url: String) = url.contains(".json?icons=")
+
     @Test
     fun startsAreSpacedAcrossDifferentRequests() = runTest {
         val starts = mutableListOf<Long>()
@@ -95,13 +108,13 @@ class OnlineIconLoadingTest {
         val calls = mutableListOf<String>()
         val repository = testRepository { url, _ ->
             calls += url
-            if (url.endsWith("/available.svg")) HttpTextResponse(body = SVG, status = 200)
+            if (url.contains("/fast.json")) batchResponse(url)
             else HttpTextResponse(status = 503, retryable = true, retryAfterMs = 10_000)
         }
         val slow = (0 until 6).map {
-            backgroundScope.launch { repository.svg(OnlineIcon("test", "slow-$it")) }
+            backgroundScope.launch { repository.svg(OnlineIcon("slow-$it", "icon")) }
         }
-        val available = async { repository.svg(OnlineIcon("test", "available")) }
+        val available = async { repository.svg(OnlineIcon("fast", "available")) }
         advanceTimeBy(2_000)
         runCurrent()
         assertTrue(available.isCompleted)
@@ -118,18 +131,18 @@ class OnlineIconLoadingTest {
         val repository = testRepository { url, _ ->
             calls += url
             blocked.await()
-            HttpTextResponse(body = SVG, status = 200)
+            batchResponse(url)
         }
         val requests = (0 until 7).map {
-            backgroundScope.launch { repository.svg(OnlineIcon("test", "blocked-$it")) }
+            backgroundScope.launch { repository.svg(OnlineIcon("blocked-$it", "icon")) }
         }
-        advanceTimeBy(1_800)
+        advanceTimeBy(1_900)
         runCurrent()
         assertEquals(6, calls.size)
         requests.first().cancel()
         runCurrent()
         assertEquals(7, calls.size)
-        assertEquals(1, calls.count { it.endsWith("/blocked-0.svg") })
+        assertEquals(1, calls.count { it.contains("/blocked-0.json") })
         requests.forEach { it.cancel() }
         runCurrent()
     }
@@ -161,7 +174,7 @@ class OnlineIconLoadingTest {
         var calls = 0
         val repository = testRepository { url, _ ->
             calls++
-            if (url.endsWith(".svg")) HttpTextResponse(body = SVG, status = 200)
+            if (isBatch(url)) batchResponse(url)
             else HttpTextResponse(status = 429, retryable = true)
         }
         assertEquals(SVG, repository.svg(icon))
@@ -208,7 +221,52 @@ class OnlineIconLoadingTest {
         assertFalse(urls.single().contains("simplesvg"))
     }
 
+    @Test
+    fun iconsOfOneSetRequestedTogetherShareOneSortedBatch() = runTest {
+        val urls = mutableListOf<String>()
+        val repository = testRepository { url, _ ->
+            urls += url
+            batchResponse(url, missing = setOf("gone"))
+        }
+        val names = listOf("delta", "alpha", "gone", "charlie")
+        val results = names.map { name -> async { repository.svg(OnlineIcon("test", name)) } }
+        advanceUntilIdle()
+
+        assertEquals(listOf("https://api.iconify.design/test.json?icons=alpha,charlie,delta,gone"), urls)
+        assertEquals(listOf(SVG, SVG, null, SVG), results.map { it.await() })
+        val cold = testRepository { _, _ -> error("Batched icons must be cached per icon") }
+        assertEquals(SVG, cold.svg(OnlineIcon("test", "alpha"), cachedOnly = true))
+    }
+
+    @Test
+    fun namesQueuedDuringThrottleJoinTheNextBatchAndFailuresResolveToNull() = runTest {
+        val urls = mutableListOf<String>()
+        val repository = testRepository { url, _ ->
+            urls += url
+            if (url.contains("/broken.json")) HttpTextResponse(status = 403) else batchResponse(url)
+        }
+        val first = async { repository.svg(OnlineIcon("test", "first")) }
+        advanceTimeBy(60)
+        runCurrent()
+        val later = mutableListOf(async { repository.svg(OnlineIcon("test", "later-0")) })
+        // The next flight is now waiting for the 300 ms slot; names queued meanwhile still join it.
+        advanceTimeBy(140)
+        runCurrent()
+        later += (1 until 3).map { async { repository.svg(OnlineIcon("test", "later-$it")) } }
+        val broken = async { repository.svg(OnlineIcon("broken", "icon")) }
+        advanceUntilIdle()
+
+        assertEquals(SVG, first.await())
+        later.forEach { assertEquals(SVG, it.await()) }
+        assertNull(broken.await())
+        assertEquals(3, urls.size)
+        assertTrue(urls.contains("https://api.iconify.design/test.json?icons=later-0,later-1,later-2"))
+        assertEquals(1, urls.count { it.contains("/broken.json") })
+    }
+
     private companion object {
-        const val SVG = "<svg viewBox=\"0 0 1 1\"><path d=\"M0 0L1 1\"/></svg>"
+        const val BODY = "<path d=\\\"M0 0L1 1\\\"/>"
+        const val SVG = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1em\" height=\"1em\" " +
+            "viewBox=\"0 0 1 1\"><path d=\"M0 0L1 1\"/></svg>"
     }
 }

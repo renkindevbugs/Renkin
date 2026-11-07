@@ -18,4 +18,4 @@ Fork of <a href="https://codeberg.org/kaanelloed/Alembicons">Alembicons</a> by k
 
 <b>Optional online icons</b>
 
-Browsing online icons contacts api.iconify.design and its official backup servers api.simplesvg.com and api.unisvg.com to load collections, search results and SVG images. Search terms and requested icon names are sent to the selected server. Local editing and icon-pack building work offline.
+Browsing online icons contacts api.iconify.design and its official backup servers api.simplesvg.com and api.unisvg.com to load collections, search results and SVG images. Search terms and requested icon names are sent to the selected server. Downloading a whole icon set for offline use, only when you tap Download, contacts cdn.jsdelivr.net and data.jsdelivr.com and sends the set name and version. Local editing, the built-in Tabler icons and icon-pack building work offline.

@@ -3,6 +3,8 @@
 package dev.renkinProject.renkin.feature.online
 
 import android.os.SystemClock
+import android.text.format.Formatter
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -19,19 +22,29 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.EditOff
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -55,13 +68,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -74,15 +91,27 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.online.IconifyCollection
+import dev.renkinProject.renkin.data.online.DownloadedIconSet
 import dev.renkinProject.renkin.data.online.OnlineIcon
 import dev.renkinProject.renkin.ui.EmptyState
+import dev.renkinProject.renkin.ui.ConfirmDialog
+import dev.renkinProject.renkin.ui.DialogBadge
+import dev.renkinProject.renkin.ui.DialogCard
+import dev.renkinProject.renkin.ui.DialogFactRow
+import dev.renkinProject.renkin.ui.DialogPrimaryAction
+import dev.renkinProject.renkin.ui.DialogSecondaryAction
+import dev.renkinProject.renkin.ui.DialogTone
 import dev.renkinProject.renkin.ui.LinkText
 import dev.renkinProject.renkin.ui.LocalToaster
+import dev.renkinProject.renkin.ui.MessageDialog
 import dev.renkinProject.renkin.ui.RenkinAlertDialog
 import dev.renkinProject.renkin.ui.SearchField
+import dev.renkinProject.renkin.ui.WavyProgressBar
 import dev.renkinProject.renkin.ui.boldStringResource
 import dev.renkinProject.renkin.ui.drawVerticalScrollbar
 import dev.renkinProject.renkin.ui.theme.CardShape
+import dev.renkinProject.renkin.ui.theme.FieldShape
+import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.vector.ColorDecoder
@@ -165,6 +194,7 @@ internal fun OnlineIconBrowserDialog(
                     if (importing) {
                         LoadingIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
                     }
+                    viewModel.selectedCollection?.let { DownloadedSetMenu(it, viewModel) }
                 }
 
                 OnlineRateLimitNotice(rateLimitUntil)
@@ -186,6 +216,17 @@ internal fun OnlineIconBrowserDialog(
                 }
             }
         }
+    }
+
+    viewModel.downloadOffer?.let { DownloadSetDialog(it, viewModel) }
+    viewModel.pendingDelete?.let { set ->
+        ConfirmDialog(
+            title = stringResource(R.string.onlineSetDeleteTitle, set.name),
+            text = stringResource(R.string.onlineSetDeleteBody),
+            onConfirm = viewModel::confirmDelete,
+            onDismiss = viewModel::dismissDelete,
+            confirmLabel = stringResource(R.string.onlineSetDelete)
+        )
     }
 
     detailIcon?.let { icon ->
@@ -342,8 +383,9 @@ private fun CollectionList(
 ) {
     val collections = viewModel.collections
     val query = viewModel.collectionQuery
-    val category = viewModel.category
     val palette = viewModel.palette
+    val downloaded by viewModel.downloadedSets.collectAsStateWithLifecycle()
+    val downloadedOnly = viewModel.downloadedOnly
     val listState = rememberLazyListState(
         initialFirstVisibleItemIndex = viewModel.collectionListIndex,
         initialFirstVisibleItemScrollOffset = viewModel.collectionListOffset
@@ -353,18 +395,17 @@ private fun CollectionList(
         derivedStateOf { listState.layoutInfo.visibleItemsInfo.map { it.key }.toSet() }
     }
 
-    val categories = remember(collections) {
-        collections.orEmpty().mapNotNull { it.category.takeIf(String::isNotEmpty) }
-            .distinct().sorted()
-    }
-    val filtered = remember(collections, query, category, palette) {
+    val filtered = remember(collections, query, palette, downloadedOnly, downloaded) {
         val needle = query.trim().lowercase()
         collections.orEmpty().filter { set ->
             (needle.isEmpty() || needle in set.name.lowercase() || needle in set.prefix) &&
-                (category == null || set.category == category) &&
-                (palette == null || set.palette == palette)
+                (palette == null || set.palette == palette) &&
+                (!downloadedOnly || set.prefix in downloaded || viewModel.isBuiltIn(set))
         }
     }
+    // Categories and their sets keep the API order, as on icon-sets.iconify.design.
+    val groups = remember(filtered) { filtered.groupBy { it.category } }
+    val collapsed = viewModel.collapsedCategories
 
     Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
         SearchField(
@@ -382,8 +423,6 @@ private fun CollectionList(
         SearchResults(viewModel, enabled, onPick)
         return
     }
-    // Palette toggle + category chips in one horizontally scrolling row, like the site's
-    // filter bar. The palette chips sit first — they're the ones users reach for.
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -392,6 +431,11 @@ private fun CollectionList(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        FilterChip(
+            selected = downloadedOnly,
+            onClick = { viewModel.downloadedOnly = !downloadedOnly },
+            label = { Text(stringResource(R.string.onlineFilterDownloaded)) }
+        )
         FilterChip(
             selected = palette == true,
             onClick = { viewModel.palette = if (palette == true) null else true },
@@ -402,20 +446,6 @@ private fun CollectionList(
             onClick = { viewModel.palette = if (palette == false) null else false },
             label = { Text(stringResource(R.string.onlineFilterMono)) }
         )
-        if (categories.isNotEmpty()) {
-            Text(
-                text = "·",
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(horizontal = 2.dp)
-            )
-        }
-        categories.forEach { candidate ->
-            FilterChip(
-                selected = category == candidate,
-                onClick = { viewModel.category = if (category == candidate) null else candidate },
-                label = { Text(candidate) }
-            )
-        }
     }
     Row(
         modifier = Modifier
@@ -424,12 +454,27 @@ private fun CollectionList(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = stringResource(R.string.onlinePoweredBy),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        LinkText(text = "iconify.design", url = "https://iconify.design")
+        if (downloadedOnly && downloaded.isNotEmpty()) {
+            val context = LocalContext.current
+            val bytes = downloaded.values.sumOf { it.bytes }
+            Text(
+                text = pluralStringResource(
+                    R.plurals.onlineDownloadedSummary,
+                    downloaded.size,
+                    downloaded.size,
+                    remember(bytes) { Formatter.formatShortFileSize(context, bytes) }
+                ),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            Text(
+                text = stringResource(R.string.onlinePoweredBy),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            LinkText(text = "iconify.design", url = "https://iconify.design")
+        }
     }
     HorizontalDivider()
 
@@ -459,23 +504,41 @@ private fun CollectionList(
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxSize()
                     .drawVerticalScrollbar(listState)
             ) {
-                items(filtered, key = { it.prefix }) { set ->
-                    CollectionRow(
-                        set,
-                        viewModel,
-                        loadPreviews = set.prefix in visibleKeys && !listState.isScrollInProgress
-                    ) {
-                        viewModel.openCollection(
-                            set,
-                            listState.firstVisibleItemIndex,
-                            listState.firstVisibleItemScrollOffset,
-                            filterScrollState.value
+                // Each category reads as one card (like Advanced options), built from separate
+                // lazy items whose shapes join: the header carries the top corners, the last set
+                // the bottom ones.
+                groups.forEach { (category, sets) ->
+                    val expanded = category !in collapsed
+                    item(key = "category:$category", contentType = "categoryHeader") {
+                        CategoryHeader(
+                            title = category.ifEmpty { stringResource(R.string.onlineCategoryOther) },
+                            count = sets.size,
+                            expanded = expanded,
+                            onToggle = { viewModel.toggleCategory(category) },
+                            modifier = Modifier.animateItem()
                         )
+                    }
+                    if (expanded) itemsIndexed(sets, key = { _, set -> set.prefix }, contentType = { _, _ -> "set" }) { index, set ->
+                        CollectionRow(
+                            set,
+                            viewModel,
+                            loadPreviews = set.prefix in visibleKeys && !listState.isScrollInProgress,
+                            badge = setBadge(set, viewModel, downloaded),
+                            isFirst = index == 0,
+                            isLast = index == sets.lastIndex,
+                            modifier = Modifier.animateItem()
+                        ) {
+                            viewModel.openCollection(
+                                set,
+                                listState.firstVisibleItemIndex,
+                                listState.firstVisibleItemScrollOffset,
+                                filterScrollState.value
+                            )
+                        }
                     }
                 }
             }
@@ -548,58 +611,328 @@ private fun SearchResults(
     }
 }
 
-/** One set row: name, size + licence line, and up to three live sample previews. */
+/** One set row inside its category card: name, size + licence line, and up to three live sample previews. */
 @Composable
 private fun CollectionRow(
     set: IconifyCollection,
     viewModel: OnlineIconBrowserViewModel,
     loadPreviews: Boolean,
+    badge: String?,
+    isFirst: Boolean,
+    isLast: Boolean,
+    modifier: Modifier = Modifier,
     onOpen: () -> Unit
 ) {
     Surface(
-        shape = CardShape,
+        shape = if (isLast) CategoryBottomShape else RectangleShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = if (isLast) CATEGORY_GAP else 0.dp)
+    ) {
+        Column {
+            if (!isFirst) {
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(role = Role.Button, onClick = onOpen)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                set.samples.take(3).forEach { sample ->
+                    SamplePreview(OnlineIcon(set.prefix, sample), viewModel, loadPreviews)
+                }
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .padding(start = 6.dp, end = 4.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = set.name,
+                            style = MaterialTheme.typography.titleSmallEmphasized,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        badge?.let { SetSourceBadge(it) }
+                    }
+                    Text(
+                        text = stringResource(R.string.onlineSetCount, set.total) + " · " +
+                            set.license.ifEmpty { stringResource(R.string.onlineUnknownLicense) },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (set.license.isEmpty()) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+/** The first row of a category card, like the Advanced options header; tapping folds the sets away. */
+@Composable
+private fun CategoryHeader(
+    title: String,
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+        label = "categoryChevron"
+    )
+    // 0 = joined to its sets, 1 = a standalone card: the corners and the gap below morph together.
+    val collapseProgress by animateFloatAsState(
+        targetValue = if (expanded) 0f else 1f,
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+        label = "categoryCollapse"
+    )
+    // The expressive spring overshoots; a negative gap or corner would crash.
+    val collapse = collapseProgress.coerceIn(0f, 1f)
+    Surface(
+        shape = CardShape.copy(
+            bottomStart = CornerSize(CATEGORY_CORNER * collapse),
+            bottomEnd = CornerSize(CATEGORY_CORNER * collapse)
+        ),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = CATEGORY_GAP * collapse)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(role = Role.Button, onClick = onOpen)
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = stringResource(
+                        if (expanded) R.string.onlineCategoryCollapse else R.string.onlineCategoryExpand
+                    ),
+                    onClick = onToggle
+                )
+                .padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            set.samples.take(3).forEach { sample ->
-                SamplePreview(OnlineIcon(set.prefix, sample), viewModel, loadPreviews)
-            }
-            Column(
-                Modifier
-                    .weight(1f)
-                    .padding(start = 6.dp, end = 4.dp)
-            ) {
-                Text(
-                    text = set.name,
-                    style = MaterialTheme.typography.titleSmallEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = stringResource(R.string.onlineSetCount, set.total) + " · " +
-                        set.license.ifEmpty { stringResource(R.string.onlineUnknownLicense) },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (set.license.isEmpty()) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            // Only the spacer takes weight: a weighted title would split the free width with it
+            // and leave the chevron short of the set rows' chevrons.
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMediumEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = pluralStringResource(R.plurals.onlineCategorySetCount, count, count),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            Spacer(Modifier.weight(1f))
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                imageVector = Icons.Filled.KeyboardArrowDown,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.rotate(chevronRotation)
             )
         }
+    }
+}
+
+private val CATEGORY_CORNER = 20.dp // CardShape radius; the header morphs its bottom corners to it
+private val CategoryBottomShape = CardShape.copy(topStart = CornerSize(0.dp), topEnd = CornerSize(0.dp))
+private val CATEGORY_GAP = 12.dp
+
+/** Overflow actions of an opened downloaded set: replace it with the newest release, or remove it. */
+@Composable
+private fun DownloadedSetMenu(set: IconifyCollection, viewModel: OnlineIconBrowserViewModel) {
+    val downloaded by viewModel.downloadedSets.collectAsStateWithLifecycle()
+    if (set.prefix !in downloaded) return
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Filled.MoreVert, stringResource(R.string.moreOptions))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.onlineSetDownloadLatest)) },
+                leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
+                onClick = {
+                    open = false
+                    viewModel.offerDownload(set)
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.onlineSetDelete), color = MaterialTheme.colorScheme.error) },
+                leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                onClick = {
+                    open = false
+                    viewModel.requestDelete(set)
+                }
+            )
+        }
+    }
+}
+
+/** Confirms a download with the real size, icon count and source host before anything is fetched. */
+@Composable
+private fun DownloadSetDialog(offer: SetDownloadOffer, viewModel: OnlineIconBrowserViewModel) {
+    val context = LocalContext.current
+    MessageDialog(
+        onDismissRequest = viewModel::dismissDownloadOffer,
+        badge = { DialogBadge(Icons.Filled.DownloadForOffline, DialogTone.Accent) },
+        eyebrow = stringResource(R.string.onlineSetDownloadEyebrow),
+        title = offer.set.name,
+        supporting = stringResource(if (offer.upToDate) R.string.onlineSetUpToDate else R.string.onlineSetDownloadBody),
+        actions = {
+            if (!offer.upToDate) {
+                DialogPrimaryAction(stringResource(R.string.onlineSetDownloadAction), viewModel::confirmDownload)
+            }
+            DialogSecondaryAction(stringResource(R.string.dismiss), viewModel::dismissDownloadOffer)
+        }
+    ) {
+        DialogCard {
+            DialogFactRow(
+                stringResource(R.string.onlineSetDownloadSize),
+                remember(offer) { Formatter.formatShortFileSize(context, offer.release.iconsBytes) }
+            )
+            DialogFactRow(stringResource(R.string.onlineSetDownloadIcons), offer.set.total.toString())
+            DialogFactRow(stringResource(R.string.onlineSetDownloadVersion), offer.release.version)
+        }
+    }
+}
+
+/**
+ * Offers an opened online set for offline use, then shows the download progress or why it failed.
+ * Hidden once the set is local.
+ */
+@Composable
+private fun OfflineSetCard(set: IconifyCollection, state: SetDownloadState?, viewModel: OnlineIconBrowserViewModel) {
+    val failed = state as? SetDownloadState.Failed
+    Surface(
+        shape = InnerShape,
+        color = if (failed != null) MaterialTheme.colorScheme.errorContainer
+            else MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = if (failed != null) MaterialTheme.colorScheme.onErrorContainer
+            else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = if (failed != null) Icons.Filled.CloudOff else Icons.Filled.DownloadForOffline,
+                contentDescription = null,
+                tint = if (failed != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
+            Column(Modifier.weight(1f)) {
+                when (state) {
+                    is SetDownloadState.Downloading -> {
+                        Text(
+                            text = stringResource(R.string.onlineSetDownloading, (state.progress * 100).toInt()),
+                            style = MaterialTheme.typography.titleSmallEmphasized
+                        )
+                        WavyProgressBar(state.progress, Modifier.fillMaxWidth().padding(top = 6.dp))
+                    }
+                    is SetDownloadState.Failed -> Text(
+                        text = stringResource(
+                            when (state.reason) {
+                                SetDownloadFailure.Network -> R.string.onlineSetDownloadFailed
+                                SetDownloadFailure.Damaged -> R.string.onlineSetIntegrityFailed
+                                SetDownloadFailure.NotAvailable -> R.string.onlineSetNotDownloadable
+                            }
+                        ),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    else -> {
+                        Text(
+                            text = stringResource(R.string.onlineSetDownloadCta),
+                            style = MaterialTheme.typography.titleSmallEmphasized
+                        )
+                        Text(
+                            text = stringResource(R.string.onlineSetDownloadCtaHint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            when (state) {
+                SetDownloadState.Preparing -> LoadingIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(40.dp)
+                )
+                is SetDownloadState.Downloading -> TextButton(onClick = { viewModel.cancelDownload(set.prefix) }) {
+                    Text(stringResource(R.string.colorizeCancel))
+                }
+                // A set without a downloadable package keeps its explanation for the session.
+                is SetDownloadState.Failed -> if (state.reason != SetDownloadFailure.NotAvailable) {
+                    TextButton(onClick = { viewModel.offerDownload(set) }) {
+                        Text(stringResource(R.string.onlineSetRetry))
+                    }
+                }
+                null -> FilledTonalButton(onClick = { viewModel.offerDownload(set) }, shape = FieldShape) {
+                    Text(stringResource(R.string.onlineSetDownloadAction))
+                }
+            }
+        }
+    }
+}
+
+/** The quiet source badge of a set row: progress while downloading, else Built in / Downloaded. */
+@Composable
+private fun setBadge(
+    set: IconifyCollection,
+    viewModel: OnlineIconBrowserViewModel,
+    downloaded: Map<String, DownloadedIconSet>
+): String? {
+    (viewModel.downloadStates[set.prefix] as? SetDownloadState.Downloading)?.let {
+        return stringResource(R.string.onlineSetDownloadingBadge, (it.progress * 100).toInt())
+    }
+    return when {
+        viewModel.isBuiltIn(set) -> stringResource(R.string.onlineSetBuiltIn)
+        set.prefix in downloaded -> stringResource(R.string.onlineSetDownloaded)
+        else -> null
+    }
+}
+
+@Composable
+private fun SetSourceBadge(label: String) {
+    Surface(
+        shape = SwatchShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+        )
     }
 }
 
@@ -644,6 +977,13 @@ private fun CollectionGrid(
             modifier = Modifier.fillMaxWidth(),
             placeholder = stringResource(R.string.searchIcons)
         )
+    }
+    val downloaded by viewModel.downloadedSets.collectAsStateWithLifecycle()
+    viewModel.selectedCollection?.let { set ->
+        val state = viewModel.downloadStates[set.prefix]
+        if (state != null || (!viewModel.isBuiltIn(set) && set.prefix !in downloaded)) {
+            OfflineSetCard(set, state, viewModel)
+        }
     }
     HorizontalDivider()
 
@@ -894,12 +1234,7 @@ private fun SvgVectorImporter.ImportedSvg.toPreviewVector(
     )
     for (path in paths) {
         val nodes = PathParser().parsePathString(path.pathData).toNodes()
-        val solid = SolidColor(
-            path.color?.let { raw ->
-                ColorDecoder.decodeSvgCss(raw).takeIf { it.isSpecified }
-            }?.let { it.copy(alpha = it.alpha * path.alpha) }
-                ?: tint.copy(alpha = tint.alpha * path.alpha)
-        )
+        val solid = with(SvgVectorImporter) { path.brush(tint) }
         if (path.filled) {
             builder.addPath(nodes, pathFillType = path.fillType, fill = solid)
         } else {

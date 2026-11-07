@@ -12,6 +12,8 @@ import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.vector.brush.ReferenceBrush
 import dev.renkinProject.renkin.vector.brush.SolidColorShader
 import java.nio.ByteBuffer
+import dev.renkinProject.renkin.data.editor.toEditorGradient
+import dev.renkinProject.renkin.vector.brush.VectorGradientBrush
 
 /** Copy on the editor's owning thread; encode only the detached result off Main. */
 @MainThread
@@ -77,6 +79,7 @@ private fun captureBrush(brush: Brush?): EditorVectorBrush? = when (brush) {
         val fallback = brush.shaderBrush as? SolidColorShader ?: throw IllegalArgumentException("Unsupported reference shader")
         EditorVectorBrush(fallback.color.value.toLong(), brush.reference)
     }
+    is VectorGradientBrush -> EditorVectorBrush(brush.fallbackColor().value.toLong(), gradient = brush.toEditorGradient())
     else -> throw IllegalArgumentException("Unsupported editor vector brush")
 }
 

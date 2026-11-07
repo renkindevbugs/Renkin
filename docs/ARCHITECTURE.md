@@ -1156,6 +1156,77 @@ comparisons; compileDebugKotlin and assembleDebug pass with the existing local t
 Logs are under build/verify-7d3-{compile,targeted,full}.log. No new production dependency, Gradle
 module or persistence format is introduced.
 
+**Online icon batching (verified)** replaces one HTTP request
+per previewed icon with one `/{prefix}.json?icons=a,b,c` request per set. Names that miss the cache
+queue per prefix; a single flight per prefix waits 50 ms for tiles unlocked in the same frame, then
+for the normal throttle slot, and freezes its names (sorted, URL up to 480 characters) only when the
+slot is granted, so the 300 ms spacing, the shared 429 deadline, mirrors and the six permits apply
+per batch. The repository rebuilds the exact API SVG (height 1em, width rounded up to 1/100 em,
+viewBox from left/top/width/height) and writes it to the unchanged per-icon cache path, so old
+caches and canonical `svgUrl`/attribution stay valid. Names in `not_found` resolve to null;
+rotated/flipped icons, aliases with overrides and names outside the Iconify name pattern use the
+old per-icon `.svg` request. When the last waiter of a flight is cancelled, the flight is cancelled
+and disconnects. Requests no longer force `Accept-Encoding: identity`, so responses arrive gzipped
+and size limits apply to inflated bytes. Search results use the shared 7-day disk cache.
+
+**Built-in Tabler set (verified)** ships the unmodified
+`@iconify-json/tabler@1.2.43` `icons.json` and `info.json` in `assets/online-icons/` (about 0.34 MB
+deflated; SHA-256 checked against `data.jsdelivr.com`; refresh only with app releases from the
+pinned jsDelivr URLs). `LocalIconSets` parses it once with a streaming `JsonReader` into
+`IconifySet` (bodies kept as UTF-8 bytes); the same `IconifyJson` parser reads API batch responses.
+The repository treats a local set as cache: its index and SVGs need no network and render while
+scrolling, offline and during a 429 pause. When the online set list is unavailable, the browser
+lists only the local sets (from `info.json`) instead of failing; no snapshot of all sets is bundled.
+Built-in sets show a quiet "Built in" badge. Imported icons keep the canonical Iconify `svgUrl`, so
+attribution and stored rows are unchanged. The MIT notice ships as `LICENSE-tabler.txt` and the
+About dialog credits the set.
+
+**Set list categories (verified)** groups the online set
+list into one collapsible card per category (styled like Advanced options: header row with the
+chevron at the far right, sets as rows of the same card split by hairlines) instead of category
+filter chips. Each card is built from separate lazy items whose corner shapes join. Categories and
+the sets inside them keep the `/collections` API order (as on icon-sets.iconify.design); sets
+without a category appear under "Other". All categories start expanded; `CollapsedSetCategories`
+keeps the collapsed ones in a device-local SharedPreferences file (`online_icon_browser`), outside
+profile snapshots and Renkin backups. The name filter and Colour/Monochrome chips hide empty
+categories and recount the rest. Headers and rows animate with `animateItem()`; the header's chevron,
+bottom corners and gap morph with `motionScheme.fastSpatialSpec()` (clamped against overshoot).
+
+**Downloadable icon sets (verified)** let the user keep
+any Iconify set offline. An opened online set shows a "Use this set offline" card; Download first
+asks data.jsdelivr.com for the newest `@iconify-json/<prefix>` version and its file listing, then a
+confirmation shows size, icon count and version. `DownloadedIconSets` streams the pinned
+`cdn.jsdelivr.net/npm/@iconify-json/<prefix>@<version>/icons.json` into
+`filesDir/online-icon-sets/<prefix>/icons-<version>.json.part`, checks size and the listed SHA-256
+(protection against damaged transfers, not authenticity), parses it, renames it, and writes
+`manifest.json` last; a folder without a valid manifest and files it does not name are deleted on the
+next scan, so a process death never mixes versions. `info.json` is copied too so the set appears in
+the offline set list. Sets over 16 MiB raw or without an npm package are offered as browse-only.
+At most one download runs; it belongs to the browser session, so closing the browser cancels it and
+removes the partial file. Only one downloaded set stays parsed in memory besides the bundled one,
+and SVG lookups check the disk cache before the local set to avoid re-parsing sets in turn. The set
+list shows Downloaded/percent badges and an always-visible first "Downloaded" chip (downloaded plus built-in sets; count and
+size summary when downloads exist). A downloaded set's overflow menu offers "Download latest version" (manual; there is
+no background update check) and "Remove download". The folder is excluded from Auto Backup in both
+rule files and is not part of Renkin backups. Imported icons keep the canonical Iconify `svgUrl`.
+
+**SVG gradients (device-verified 2026-11-07)** let colourful SVG icons import
+as editable vectors. `SvgGradients` resolves `url(#id)` paints (linear/radial, href chains, both
+gradientUnits with tight geometry bounds, any gradientTransform, spreadMethod, stop-opacity times
+the path, element and group opacity) into `VectorGradientBrush` (`vector/brush`), a value-equality
+`ShaderBrush` that keeps authored coordinates plus a 6-value matrix, so ellipses and skew are
+exact. Focal radials, `currentColor` stops, broken references, element transforms, `<use>`, clips
+and masks still reject the document. `VectorEditor`'s scale/translate/rotate primitives map the
+matrix together with the path data; `VectorRenderer` paints it as a shader (with the current
+matrix in non-scaling-stroke mode), which covers every bitmap. Stored vector XML keeps a solid
+fallback colour attribute (offset-weighted mean of the stops, never transparent) plus one
+`<renkin-gradient>` child per painted slot with every value as an attribute and no grandchildren,
+because releases before v2026.11.01 rebuild deeper trees wrongly; older builds paint the fallback.
+No Room, backup or journal change: the gradient lives in the opaque payload. APK export never
+writes the child; a non-themed inset icon with a gradient is rasterised from the same
+0.666-scaled copy, and themed export flattens to `@color/icon_color`. The Paths list marks
+gradient paths with a corner swatch; Edit path shows the stops read-only and offers Make solid.
+
 **7D4 (verified)** groups the help presentation in `feature.help`:
 `IntroShowcase`, `InfoDialog` and `WhatsNewDialog` (including the full history screen).
 The guided-tour targets, composition local and placement helper move with the tour. MainScreen

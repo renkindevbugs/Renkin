@@ -12,7 +12,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathData
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.vector.VectorRenderer.Companion.renderToCanvas
+import dev.renkinProject.renkin.vector.brush.GradientMatrix
+import dev.renkinProject.renkin.vector.brush.GradientType
 import dev.renkinProject.renkin.vector.brush.ReferenceBrush
+import dev.renkinProject.renkin.vector.brush.VectorGradientBrush
+import androidx.compose.ui.graphics.TileMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -173,5 +177,37 @@ class VectorRendererTest {
         assertBothPathsMatchTheFramework(
             RectF(30f, 40f, 78f, 50f), scale = 0.75f, rotation = 90f, pivotX = 40f, pivotY = 60f, translationX = 6f
         )
+    }
+
+    @Test
+    fun linearGradientFillShadesAcrossThePath() {
+        val gradient = VectorGradientBrush.of(GradientType.LINEAR, listOf(Color.Red, Color.Blue), listOf(0f, 1f),
+            4f, 0f, 20f, 0f, 0f, TileMode.Clamp, GradientMatrix.IDENTITY)
+        val vector = ImageVector.Builder("test", 24.dp, 24.dp, 24f, 24f)
+            .addPath(PathData { moveTo(4f, 4f); horizontalLineTo(20f); verticalLineTo(20f); horizontalLineTo(4f); close() },
+                fill = gradient)
+            .build()
+        val bitmap = render(vector)
+        val left = bitmap.getPixel(14, 32)
+        val right = bitmap.getPixel(50, 32)
+
+        assertTrue(android.graphics.Color.red(left) > android.graphics.Color.blue(left))
+        assertTrue(android.graphics.Color.blue(right) > android.graphics.Color.red(right))
+    }
+
+    @Test
+    fun radialGradientWithAnEllipticalMatrixDiffersAlongItsAxes() {
+        val gradient = VectorGradientBrush.of(GradientType.RADIAL, listOf(Color.Red, Color.Blue), listOf(0f, 1f),
+            0f, 0f, 0f, 0f, 1f, TileMode.Clamp, GradientMatrix(8f, 0f, 0f, 2f, 12f, 12f))
+        val vector = ImageVector.Builder("test", 24.dp, 24.dp, 24f, 24f)
+            .addPath(PathData { moveTo(0f, 0f); horizontalLineTo(24f); verticalLineTo(24f); horizontalLineTo(0f); close() },
+                fill = gradient)
+            .build()
+        val bitmap = render(vector)
+        // 4 viewport units right of centre is inside the wide axis, 4 units below is past the short one.
+        val alongWide = bitmap.getPixel(32 + 10, 32)
+        val alongShort = bitmap.getPixel(32, 32 + 10)
+
+        assertTrue(android.graphics.Color.red(alongWide) > android.graphics.Color.red(alongShort))
     }
 }

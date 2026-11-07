@@ -1,6 +1,11 @@
 package dev.renkinProject.renkin.data.editor
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.vector.PathNode
+import dev.renkinProject.renkin.vector.brush.GradientMatrix
+import dev.renkinProject.renkin.vector.brush.GradientType
+import dev.renkinProject.renkin.vector.brush.VectorGradientBrush
 
 internal fun EditorArtworkWriter.vectorNode(value: EditorVectorNode, depth: Int = 0) {
     budget.node(depth)
@@ -35,9 +40,59 @@ internal fun EditorArtworkReader.vectorNode(depth: Int = 0): EditorVectorNode {
 }
 
 private fun EditorArtworkWriter.brush(value: EditorVectorBrush?) {
-    boolean(value != null); value?.let { output.writeLong(it.colorBits); optionalText(it.reference) }
+    boolean(value != null)
+    if (value == null) return
+    output.writeLong(value.colorBits); optionalText(value.reference)
+    if (!gradients) {
+        require(value.gradient == null) { "Gradient needs editor artwork version 2" }
+        return
+    }
+    boolean(value.gradient != null)
+    value.gradient?.let { gradient ->
+        validateGradient(gradient)
+        budget.stops(gradient.colorBits.size)
+        boolean(gradient.radial); output.writeInt(gradient.colorBits.size)
+        gradient.colorBits.forEach(output::writeLong); gradient.offsets.forEach(::number)
+        listOf(gradient.x0, gradient.y0, gradient.x1, gradient.y1, gradient.radius).forEach(::number)
+        output.writeByte(gradient.tileMode); gradient.matrix.forEach(::number)
+    }
 }
-private fun EditorArtworkReader.brush(): EditorVectorBrush? = if (boolean()) EditorVectorBrush(input.readLong(), optionalText()) else null
+private fun EditorArtworkReader.brush(): EditorVectorBrush? {
+    if (!boolean()) return null
+    val colorBits = input.readLong(); val reference = optionalText()
+    val gradient = if (gradients && boolean()) {
+        val radial = boolean()
+        val stops = count(VectorGradientBrush.MAX_STOPS, minimumBytes = 12).also(budget::stops)
+        val colors = List(stops) { input.readLong() }; val offsets = List(stops) { number() }
+        val geometry = List(5) { number() }; val tileMode = input.readUnsignedByte(); val matrix = List(6) { number() }
+        EditorVectorGradient(radial, colors, offsets, geometry[0], geometry[1], geometry[2], geometry[3], geometry[4], tileMode, matrix)
+            .also(::validateGradient)
+    } else null
+    return EditorVectorBrush(colorBits, reference, gradient)
+}
+
+/** The rules VectorGradientBrush.of enforces, so a decoded draft always rebinds to a real gradient. */
+internal fun validateGradient(value: EditorVectorGradient) {
+    require(value.tileMode in 0..2 && value.colorBits.size >= 2 && value.colorBits.size == value.offsets.size) { "Invalid editor gradient" }
+    require(value.toBrush() is VectorGradientBrush) { "Invalid editor gradient" }
+}
+
+internal fun EditorVectorGradient.toBrush() = VectorGradientBrush.of(
+    if (radial) GradientType.RADIAL else GradientType.LINEAR,
+    colorBits.map { Color(it.toULong()) }, offsets, x0, y0, x1, y1, radius,
+    when (tileMode) { 1 -> TileMode.Mirror; 2 -> TileMode.Repeated; else -> TileMode.Clamp },
+    GradientMatrix.of(matrix) ?: GradientMatrix(Float.NaN, 0f, 0f, 0f, 0f, 0f)
+)
+
+internal fun VectorGradientBrush.toEditorGradient() = EditorVectorGradient(
+    type == GradientType.RADIAL, colors.map { it.value.toLong() }, offsets, x0, y0, x1, y1, radius,
+    when (tileMode) { TileMode.Mirror -> 1; TileMode.Repeated -> 2; else -> 0 }, matrix.values()
+)
+
+internal fun EditorVectorNode.hasGradient(): Boolean = when (this) {
+    is EditorVectorGroup -> children.any { it.hasGradient() }
+    is EditorVectorPath -> fill?.gradient != null || stroke?.gradient != null
+}
 
 private fun EditorArtworkWriter.commands(values: List<PathNode>) {
     budget.commands(values.size); output.writeInt(values.size)

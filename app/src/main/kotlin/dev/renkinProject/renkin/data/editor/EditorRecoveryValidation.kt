@@ -136,7 +136,10 @@ internal object EditorRecoveryValidation {
         require(value.strokeWidth.isFinite() && value.strokeWidth >= 0f && value.miter.isFinite() && value.miter >= 0f) { "Invalid editor vector stroke" }
         require(value.cap in setOf("Butt", "Round", "Square") && value.join in setOf("Miter", "Round", "Bevel")) { "Invalid editor vector stroke mode" }
         range(value.trimStart, 0f..1f); range(value.trimEnd, 0f..1f)
-        value.fill?.let { color(it.colorBits) }; value.stroke?.let { color(it.colorBits) }
+        listOfNotNull(value.fill, value.stroke).forEach { brush ->
+            color(brush.colorBits)
+            brush.gradient?.let { gradient -> gradient.colorBits.forEach { color(it) }; validateGradient(gradient) }
+        }
     }
 
     private fun color(bits: Long, allowUnspecified: Boolean = false) {
