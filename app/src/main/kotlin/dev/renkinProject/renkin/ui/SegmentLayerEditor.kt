@@ -47,6 +47,7 @@ import dev.renkinProject.renkin.icon.creator.SegmentLayer
 import dev.renkinProject.renkin.icon.creator.applySegmentLayers
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
@@ -96,11 +97,15 @@ internal fun SegmentLayerEditor(
             // Match against what the existing layers already painted, like every layer's picker;
             // the untouched artwork would target white again after it has been recoloured.
             val painted = remember(layers) { layers.filter { it.targets.isNotEmpty() } }
-            val matchSource by produceState(source, source, painted) {
-                value = if (painted.isEmpty()) source
-                    else withContext(Dispatchers.Default) { applySegmentLayers(source, painted) }
+            val match = remember(source, painted, appBackground) { mutableStateOf<AppColorMatch?>(null) }
+            LaunchedEffect(source, painted, appBackground) {
+                delay(150)
+                match.value = withContext(Dispatchers.Default) {
+                    val matchSource = if (painted.isEmpty()) source else applySegmentLayers(source, painted)
+                    matchAppColor(matchSource, appBackground)
+                }
             }
-            MatchAppColorButton(matchSource, appBackground) { match ->
+            MatchAppColorButton(match.value) { match ->
                 val result = addMatchedLayer(layers, match)
                 onLayersChange(result.layers)
                 selected = result.selectedIndex
@@ -219,13 +224,9 @@ internal fun SegmentLayerEditor(
 
 @Composable
 private fun MatchAppColorButton(
-    source: Bitmap,
-    appBackground: AppBackgroundColor,
+    match: AppColorMatch?,
     onMatch: (List<SegmentLayer>) -> Unit
 ) {
-    val match by produceState<AppColorMatch?>(null, source, appBackground) {
-        value = withContext(Dispatchers.Default) { matchAppColor(source, appBackground) }
-    }
     val available = match as? AppColorMatch.Available
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         OutlinedButton(

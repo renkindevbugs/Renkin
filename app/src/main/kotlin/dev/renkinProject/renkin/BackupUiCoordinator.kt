@@ -229,14 +229,21 @@ internal class BackupUiCoordinator(
             }
             BackupManager.ImportKind.PROFILE -> notify(R.string.profileImported)
         }
-        val verdictsUpdated = try {
-            provider.verifyPendingVerdicts()
+        scope.launch { verifyImportedVerdicts(result.kind) }
+    }
+
+    // Quiet best effort like the startup check: store lookups run after the import has released the
+    // overlay and the profile lock; only a decisive verdict takes the lock again for its reload.
+    private suspend fun verifyImportedVerdicts(kind: BackupManager.ImportKind) {
+        try {
+            if (provider.verifyPendingVerdicts()) profileSessionOperations.withLock {
+                if (!closed) onVerdictsUpdated(kind)
+            }
         } catch (error: CancellationException) {
             throw error
-        } catch (_: Exception) {
-            false
+        } catch (error: Exception) {
+            Log.error("BackupUiCoordinator", "Could not refresh imported pack verdicts", error)
         }
-        if (verdictsUpdated) onVerdictsUpdated(result.kind)
     }
 
     fun close() {

@@ -7,6 +7,7 @@ import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.IconPackFallback
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawCalendar
+import dev.renkinProject.renkin.data.RawDynamicClock
 import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
@@ -37,6 +38,10 @@ class AppFilterIndex internal constructor(
 ) {
     internal val drawableNamesByPackage: Map<String, Map<String, String>> =
         elementsByPackage.mapValues { (_, elements) -> indexAppDrawableNames(elements) }
+    private val components = applications.mapTo(mutableSetOf()) { it.toComponentInfo() }
+
+    internal fun elementsFor(packageName: String, requestedApps: List<InstalledApplication>): List<RawElement>? =
+        elementsByPackage[packageName]?.takeIf { requestedApps.all { it.toComponentInfo() in components } }
 }
 
 /** Packs and the index built from them are published together, so no reader can pair them across loads. */
@@ -316,6 +321,22 @@ class IconPackRepository(
             CalendarSelection(app, iconPackageName, prefix)
         }
     }
+
+    // An empty mapping is conclusive only when the index covered every requested component.
+    internal fun indexedElements(iconPackageName: String, applications: List<InstalledApplication>): List<RawElement>? =
+        state.value.index.elementsFor(iconPackageName, applications)
+
+    internal fun captureIndexedElements(): (String, List<InstalledApplication>) -> List<RawElement>? {
+        val index = state.value.index
+        return index::elementsFor
+    }
+
+    /** `<dynamic-clock>` drawables of an indexed pack, from the parsed index; null when it is not indexed. */
+    fun indexedDynamicClockDrawables(iconPackageName: String): Set<String>? =
+        state.value.index.elementsByPackage[iconPackageName]
+            ?.filterIsInstance<RawDynamicClock>()
+            ?.map { it.drawableLink }
+            ?.toSet()
 
     /**
      * Distinct calendar-day prefixes [iconPackageName] declares in its appfilter (`<calendar>`

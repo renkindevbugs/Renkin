@@ -28,6 +28,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.IdentityHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -76,6 +77,7 @@ class UnsavedSessionMonitor internal constructor(
     private val journalWrites = Mutex()
     @Volatile private var pendingJournal: JournalSnapshot? = null
     private var writtenJournal: JournalSnapshot? = null
+    private var encodedRows = IdentityHashMap<PackageInfoStruct, DbApplication?>()
 
     fun start() {
         if (!started.compareAndSet(false, true)) return
@@ -137,17 +139,38 @@ class UnsavedSessionMonitor internal constructor(
         journalWrites.withLock {
             if (writtenJournal?.sameAs(snapshot) == true) return@withLock
             try {
-                val rows = encode(snapshot.owner.profileId, snapshot.apps)
+                val previous = encodedRows.takeIf { writtenJournal?.owner == snapshot.owner }
+                val changed = snapshot.apps.filter { previous?.containsKey(it) != true }
+                val changedRows = if (changed.isEmpty()) emptyList() else encode(snapshot.owner.profileId, changed)
+                check(changedRows.size == changed.size) { "Journal encoder returned a different row count" }
+                val next = IdentityHashMap<PackageInfoStruct, DbApplication?>()
+                changed.forEachIndexed { index, app -> next[app] = changedRows[index] }
+                snapshot.apps.forEach { app ->
+                    if (!next.containsKey(app)) next[app] = previous?.get(app)
+                }
                 journal.writeCurrent(
                     UnsavedIconJournal(
                         snapshot.owner.providerInstanceId,
                         snapshot.owner.profileId,
-                        snapshot.apps.zip(rows) { app, row -> UnsavedIconJournalEntry(app.key, row) }
+                        snapshot.apps.map { app -> UnsavedIconJournalEntry(app.key, next[app]) }
                     )
                 )
                 writtenJournal = snapshot
+                var cachedChars = 0L
+                for (app in snapshot.apps) {
+                    val row = next[app]
+                    val chars = row?.let {
+                        it.drawable.length.toLong() + it.baseDrawable.length + it.modifierInput.length
+                    } ?: 0L
+                    if (chars > MAX_ENCODED_CACHE_CHARS - cachedChars) next.remove(app)
+                    else cachedChars += chars
+                }
+                encodedRows = next
             } catch (error: Exception) {
                 Log.error(TAG, "Could not journal unsaved icons", error)
+            } catch (error: OutOfMemoryError) {
+                encodedRows.clear()
+                Log.error(TAG, "Unsaved icon journal exceeded available memory", error)
             }
         }
     }
@@ -155,6 +178,7 @@ class UnsavedSessionMonitor internal constructor(
     private companion object {
         const val TAG = "UnsavedSessionMonitor"
         const val JOURNAL_DELAY_MS = 1_000L
+        const val MAX_ENCODED_CACHE_CHARS = 8L * 1024 * 1024
     }
 }
 

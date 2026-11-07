@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -84,6 +85,8 @@ private fun Bitmap.scaledPreview(max: Int = PREVIEW_PX): Bitmap {
  */
 internal class PackBrowserPreviews(
     private val appMan: PackBrowserDataSource,
+    // The startup appfilter index; a pack or component missing from it falls back to a parse.
+    private val indexedElements: (String, List<InstalledApplication>) -> List<RawElement>? = { _, _ -> null },
     private val buildPackIcons: suspend (String, GenerationOptions, List<ResourceDrawable>) -> Map<ResourceDrawable, IconPackDrawable?>
 ) {
     // Generating a pack row's preview bitmaps is expensive. Without a cache each row regenerated
@@ -196,7 +199,8 @@ internal class PackBrowserPreviews(
         component: InstalledApplication
     ): List<String> {
         val componentInfo = component.toComponentInfo()
-        return appMan.getAppFilterRawElements(packageName, listOf(component))
+        val indexed = indexedElements(packageName, listOf(component))
+        return (indexed ?: appMan.getAppFilterRawElements(packageName, listOf(component)))
             .filterIsInstance<RawItem>()
             .filter { it.component == componentInfo }
             .mapNotNull { it.drawableLink }

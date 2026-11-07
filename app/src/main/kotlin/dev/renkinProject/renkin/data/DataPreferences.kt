@@ -261,6 +261,9 @@ val LastWatchCheckAtKey = longPreferencesKey(LAST_WATCH_CHECK_AT_NAME)
 val AutoBackupIntervalKey = intPreferencesKey(AUTO_BACKUP_INTERVAL_NAME)
 val AutoBackupTreeUriKey = stringPreferencesKey(AUTO_BACKUP_TREE_URI_NAME)
 val LastAutoBackupAtKey = longPreferencesKey(LAST_AUTO_BACKUP_AT_NAME)
+// Content digest of the newest automatic backup, so an unchanged period writes nothing.
+val LastAutoBackupDigestKey = stringPreferencesKey("LAST_AUTO_BACKUP_DIGEST")
+val LastAutoBackupDocumentUriKey = stringPreferencesKey("LAST_AUTO_BACKUP_DOCUMENT_URI")
 
 // Which profile's icons/preferences are active. Profiles snapshot/restore the keys below.
 val ActiveProfileIdKey = longPreferencesKey("ACTIVE_PROFILE_ID")
@@ -342,7 +345,9 @@ private val persistedPreferenceTypes: Map<String, (Any) -> Boolean> = buildMap {
         DarkModeKey, InstallMethodKey, AppSortOrderKey, WatchCheckIntervalKey,
         AutoBackupIntervalKey, LastSeenWhatsNewVersionKey
     )) put(key.name) { it is Int }
-    for (key in ProfileStringPrefKeys + listOf(ExternalInstallerComponentKey, AutoBackupTreeUriKey)) {
+    for (key in ProfileStringPrefKeys + listOf(
+        ExternalInstallerComponentKey, AutoBackupTreeUriKey, LastAutoBackupDigestKey, LastAutoBackupDocumentUriKey
+    )) {
         put(key.name) { it is String }
     }
     for (key in listOf(ActiveProfileIdKey, LastWatchCheckAtKey, LastAutoBackupAtKey)) put(key.name) { it is Long }

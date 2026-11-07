@@ -103,6 +103,8 @@ class OnlineIconRepository internal constructor(
     @Volatile private var memoryCollections: List<IconifyCollection>? = null
     private val memoryIndexes = ConcurrentHashMap<String, List<OnlineIcon>>()
     private val indexLocks = ConcurrentHashMap<String, Mutex>()
+    private val indexCacheLocks = ConcurrentHashMap<String, Mutex>()
+    private val indexRefreshLocks = ConcurrentHashMap<String, Mutex>()
     private val svgLocks = ConcurrentHashMap<String, Mutex>()
     private val svgFetchPermits = Semaphore(SVG_FETCH_CONCURRENCY)
     private val requestTimingMutex = Mutex()
@@ -133,8 +135,11 @@ class OnlineIconRepository internal constructor(
             memoryCollections ?: cachedOrFetch(
                 cache = File(cacheRoot, "iconify-collections.json"),
                 url = "https://api.iconify.design/collections",
-                parses = { parseCollections(it) != null }
-            )?.let(::parseCollections)?.also { memoryCollections = it }
+                parse = ::parseCollections,
+                onRefreshed = { refreshed ->
+                    indexLocks.getValue("collections").withLock { memoryCollections = refreshed }
+                }
+            )?.also { memoryCollections = it }
         } ?: localSets?.collections()?.takeIf { it.isNotEmpty() }
     }
 
@@ -149,8 +154,13 @@ class OnlineIconRepository internal constructor(
                 cache = File(cacheRoot, "iconify-set-${cacheKey(collection.prefix)}.json"),
                 url = "https://api.iconify.design/collection?prefix=" +
                     URLEncoder.encode(collection.prefix, "UTF-8"),
-                parses = { parseCollection(it) != null }
-            )?.let(::parseCollection)?.also { memoryIndexes[collection.prefix] = it }
+                parse = ::parseCollection,
+                onRefreshed = { refreshed ->
+                    indexLocks.getValue("set:${collection.prefix}").withLock {
+                        memoryIndexes[collection.prefix] = refreshed
+                    }
+                }
+            )?.also { memoryIndexes[collection.prefix] = it }
         }
     }
 
@@ -162,13 +172,16 @@ class OnlineIconRepository internal constructor(
     suspend fun search(query: String): List<OnlineIcon>? = withContext(ioDispatcher) {
         val key = query.trim().lowercase()
         searchMemory.get(key)?.let { return@withContext it }
-        val json = cachedOrFetch(
-            cache = File(cacheRoot, "iconify-search-${cacheKey(key)}.json"),
-            url = "https://api.iconify.design/search?query=" +
-                URLEncoder.encode(key, "UTF-8") + "&limit=$SEARCH_LIMIT",
-            parses = { parseSearch(it) != null }
-        ) ?: return@withContext null
-        parseSearch(json)?.also { searchMemory.put(key, it) }
+        val lock = indexLocks.getOrPut("search:$key") { Mutex() }
+        lock.withLock {
+            searchMemory.get(key) ?: cachedOrFetch(
+                cache = File(cacheRoot, "iconify-search-${cacheKey(key)}.json"),
+                url = "https://api.iconify.design/search?query=" +
+                    URLEncoder.encode(key, "UTF-8") + "&limit=$SEARCH_LIMIT",
+                parse = ::parseSearch,
+                onRefreshed = { refreshed -> lock.withLock { searchMemory.put(key, refreshed) } }
+            )?.also { searchMemory.put(key, it) }
+        }
     }
 
     suspend fun svg(icon: OnlineIcon, cachedOnly: Boolean = false): String? = withContext(ioDispatcher) {
@@ -332,26 +345,42 @@ class OnlineIconRepository internal constructor(
         batch
     }
 
-    /**
-     * Shared cache policy: serve a fresh fetch when the cache is missing or older than
-     * [INDEX_TTL_MS], otherwise the cached copy; a fetch that fails [parses] must never
-     * clobber a still-parsable cache.
-     */
-    private suspend fun cachedOrFetch(
+    /** Valid stale data is usable immediately; only a validated refresh replaces it. */
+    private suspend fun <T : Any> cachedOrFetch(
         cache: File,
         url: String,
-        parses: (String) -> Boolean
-    ): String? {
-        val cached = cache.takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }
-            ?.takeIf(parses)
-        val fresh = if (cached == null || cache.ageMs() > INDEX_TTL_MS) {
-            httpGetText(url, MAX_INDEX_BYTES)
-        } else null
-        if (fresh != null && parses(fresh)) {
-            writeAtomically(cache, fresh)
-            return fresh
+        parse: (String) -> T?,
+        onRefreshed: suspend (T) -> Unit
+    ): T? {
+        val cacheLock = indexCacheLocks.getOrPut(cache.path) { Mutex() }
+        val refreshLock = indexRefreshLocks.getOrPut(cache.path) { Mutex() }
+        suspend fun readCached(): Pair<T, Boolean>? = cacheLock.withLock {
+            cache.takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }
+                ?.let(parse)?.let { it to (cache.ageMs() > INDEX_TTL_MS) }
         }
-        return cached
+        suspend fun fetch(): T? {
+            val text = httpGetText(url, MAX_INDEX_BYTES) ?: return null
+            val parsed = parse(text) ?: return null
+            cacheLock.withLock { writeAtomically(cache, text) }
+            return parsed
+        }
+        val cached = readCached()
+        if (cached != null) {
+            if (cached.second && refreshLock.tryLock()) {
+                batchScope.launch {
+                    try {
+                        val refreshed = try { fetch() } finally { refreshLock.unlock() }
+                        refreshed?.let { onRefreshed(it) }
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        Log.error("OnlineIcons", "Could not refresh cached index", error)
+                    }
+                }
+            }
+            return cached.first
+        }
+        return refreshLock.withLock { readCached()?.first ?: fetch() }
     }
 
     private fun writeAtomically(file: File, content: String) {

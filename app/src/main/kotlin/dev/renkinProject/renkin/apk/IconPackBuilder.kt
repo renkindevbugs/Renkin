@@ -16,6 +16,7 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.constants.SuppressDeprecation
 import dev.renkinProject.renkin.constants.SuppressSameParameterValue
 import dev.renkinProject.renkin.data.InstalledApplication
+import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
@@ -90,6 +91,7 @@ class IconPackBuilder(
     private val packIcon: IconPackDrawable? = null,
     private val packIconSource: String? = null,
     private val profileName: String = "",
+    private val clockElements: (String, List<InstalledApplication>) -> List<RawElement>? = { _, _ -> null },
     // Candidate stages for a modified live clock; see storedStageChains.
     private val clockStageChains: (PackageInfoStruct) -> List<List<GenerationOptions>> = { emptyList() }
 ) {
@@ -259,7 +261,7 @@ class IconPackBuilder(
         val totalIcons = apps.count { it.createdIcon != null }
         val appFileNames = uniqueDrawableFileNames(apps)
         val ambiguousClasses = ambiguousActivityClasses(apps)
-        val clockExporter = DynamicClockExporter(ctx, apps.map { it.toInstalledApplication() }, clockStageChains)
+        val clockExporter = DynamicClockExporter(ctx, apps.map { it.toInstalledApplication() }, clockStageChains, clockElements)
         var doneIcons = 0
         for (app in apps) {
             checkActive()

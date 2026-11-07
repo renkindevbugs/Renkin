@@ -22,6 +22,8 @@ import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
+import dev.renkinProject.renkin.data.LastAutoBackupDigestKey
+import dev.renkinProject.renkin.data.LastAutoBackupDocumentUriKey
 import dev.renkinProject.renkin.data.ColorPreset
 import dev.renkinProject.renkin.data.ModifierPreset
 import dev.renkinProject.renkin.data.PackVerdict
@@ -42,6 +44,8 @@ import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchRuleImport
 import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.appFilterDrawableNames
+import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.service.WatchChecker
 import dev.renkinProject.renkin.service.RenkinNotifications
@@ -57,6 +61,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.Closeable
 import java.io.File
+import java.security.MessageDigest
+import java.util.zip.ZipInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -210,6 +216,28 @@ class BackupManager(
         internal var closed = false
     }
 
+    /** SHA-256 over every archive entry except the manifest, whose export timestamp changes each run. */
+    suspend fun contentDigest(prepared: PreparedExport): String = withContext(Dispatchers.IO) {
+        check(!prepared.closed) { "Prepared export has expired" }
+        val digest = MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        ZipInputStream(prepared.archive.inputStream().buffered()).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                if (entry.name == MANIFEST_ENTRY) continue
+                digest.update(entry.name.toByteArray(Charsets.UTF_8))
+                digest.update(0)
+                while (true) {
+                    currentCoroutineContext().ensureActive()
+                    val count = zip.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+            }
+        }
+        digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
     private suspend fun prepareExport(operation: suspend () -> PreparedExport): PreparedExport {
         var prepared: PreparedExport? = null
         try {
@@ -335,21 +363,25 @@ class BackupManager(
         )
 
         val metadata = BackupValidator.prepare(data, ImportKind.PROFILE, BackupCodec.FORMAT_VERSION)
+        // One appfilter parse per source pack for the whole export, not one per icon.
+        val packMappings = mutableMapOf<String, Map<String, String>>()
         exportArchive(KIND_PROFILE, metadata) { writer ->
             packRepo.readExportIcons { rows ->
                 writeBackupExport(metadata, writer, BackupCodec.FORMAT_VERSION) { id, consume ->
-                    rows.visit(id) { consume(sharedIcon(it)) }
+                    rows.visit(id) { consume(sharedIcon(it, packMappings)) }
                 }
             }
         }
     }
 
-    private fun sharedIcon(saved: DbApplication): DbApplication {
+    private fun sharedIcon(saved: DbApplication, packMappings: MutableMap<String, Map<String, String>>): DbApplication {
         // Sharing carries the reviewed image, never a hidden pre-edit upload/source.
         val icon = saved.copy(modifierInput = "")
         return if (icon.sourcePackName.isNotEmpty() && icon.sourceDrawableName.isEmpty()) {
             // Existing bulk-refresh fallback: hand-picked alternates degrade to the pack default.
-            icon.copy(sourceDrawableName = appFilterDrawableName(icon.sourcePackName, icon.packageName, icon.activityName) ?: "")
+            val mapping = packMappings.getOrPut(icon.sourcePackName) { appFilterMapping(icon.sourcePackName) }
+            val component = InstalledApplication(icon.packageName, icon.activityName, 0).toComponentInfo()
+            icon.copy(sourceDrawableName = mapping[component].orEmpty())
         } else icon
     }
 
@@ -1040,10 +1072,8 @@ class BackupManager(
     }
 
     /** The drawable name [packPackage]'s appfilter maps to the app's component, if any. */
-    private fun appFilterDrawableName(packPackage: String, packageName: String, activityName: String): String? =
-        runCatching {
-            appManager.appFilterDrawableName(packPackage, InstalledApplication(packageName, activityName, 0))
-        }.getOrNull()
+    private fun appFilterMapping(packPackage: String): Map<String, String> =
+        runCatching { appFilterDrawableNames(appManager.allAppFilterItems(packPackage)) }.getOrDefault(emptyMap())
 
     private suspend fun restorePrefs(prefs: Map<String, BackupPref>, preserveDeviceLocal: Boolean = true) {
         context.dataStore.edit { store ->
@@ -1082,7 +1112,9 @@ class BackupManager(
             LastWatchCheckAtKey.name,
             AutoBackupIntervalKey.name,
             AutoBackupTreeUriKey.name,
-            LastAutoBackupAtKey.name
+            LastAutoBackupAtKey.name,
+            LastAutoBackupDigestKey.name,
+            LastAutoBackupDocumentUriKey.name
         )
         private const val MANIFEST_ENTRY = "manifest.json"
         private const val DATA_ENTRY = "data.json"

@@ -134,6 +134,7 @@ class WatchChecker(
                 .filter { !it.rule.completed || refreshCompletedSuggestions }
                 .map { snapshot(it) }
         }
+        if (rules.isEmpty()) return@withContext CheckResult(emptyList(), epoch)
         // Package parsing and bitmap hashes never own the global storage gate.
         val installedPacks = watchablePacks()
         val installedApps = installedAppCatalog.getAllInstalledApplications().groupBy { it.packageName }

@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.apk
 import android.content.Context
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawDynamicClock
+import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
@@ -46,7 +47,11 @@ data class DynamicClockSource(val packPackageName: String, val drawableName: Str
  * Renders a `<dynamic-clock>` icon at a chosen time the way a launcher does, so the editor can
  * show how the hands sit at awkward times before building.
  */
-class DynamicClockPreview(private val context: Context) {
+class DynamicClockPreview(
+    private val context: Context,
+    // The startup appfilter index; a pack or component missing from it falls back to a parse.
+    private val indexedElements: (String, List<InstalledApplication>) -> List<RawElement>? = { _, _ -> null }
+) {
     private val resourceResolver = PackageResourceResolver(context)
     private val appManager = ApplicationManager(context, resourceResolver)
     private val resources = context.resources
@@ -70,14 +75,16 @@ class DynamicClockPreview(private val context: Context) {
         val pack = app.sourcePackName?.takeIf { it.isNotEmpty() } ?: return null
         val icon = app.createdIcon ?: return null
         val installed = app.toInstalledApplication()
-        DynamicClockExporter(context, listOf(installed), stageChains).clockIconFor(app, pack, icon) ?: return null
+        DynamicClockExporter(context, listOf(installed), stageChains, indexedElements)
+            .clockIconFor(app, pack, icon) ?: return null
         return mappedClock(installed, pack)
     }
 
     private fun mappedClock(app: InstalledApplication, packPackageName: String): DynamicClockSource? {
-        val elements = runCatching { appManager.getAppFilterRawElements(packPackageName, listOf(app)) }
-            .getOrDefault(emptyList())
-        val drawableName = appFilterDrawableName(elements, app.toComponentInfo()) ?: return null
+        val component = app.toComponentInfo()
+        val elements = indexedElements(packPackageName, listOf(app))
+            ?: runCatching { appManager.getAppFilterRawElements(packPackageName, listOf(app)) }.getOrDefault(emptyList())
+        val drawableName = appFilterDrawableName(elements, component) ?: return null
         val meta = elements.filterIsInstance<RawDynamicClock>().firstOrNull { it.drawableLink == drawableName }
             ?: return null
         return DynamicClockSource(packPackageName, drawableName, meta)
