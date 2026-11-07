@@ -41,7 +41,8 @@ class DynamicClockExporter(
     private val context: Context,
     // Every buildable app up front, so a pack's appfilter is parsed once, not per app.
     private val allApps: List<InstalledApplication>,
-    private val stageChains: (PackageInfoStruct) -> List<List<GenerationOptions>> = { emptyList() }
+    private val stageChains: (PackageInfoStruct) -> List<List<GenerationOptions>> = { emptyList() },
+    private val indexedElements: (String, List<InstalledApplication>) -> List<RawElement>? = { _, _ -> null }
 ) {
     private val resourceResolver by lazy { PackageResourceResolver(context) }
     private val appManager by lazy { ApplicationManager(context, resourceResolver) }
@@ -95,7 +96,8 @@ class DynamicClockExporter(
      */
     fun clockIconFor(app: PackageInfoStruct, sourcePack: String, bakedIcon: IconPackDrawable): ClockIcon? {
         val elements = packElements.getOrPut(sourcePack) {
-            runCatching { appManager.getAppFilterRawElements(sourcePack, allApps) }.getOrDefault(emptyList())
+            indexedElements(sourcePack, allApps)
+                ?: runCatching { appManager.getAppFilterRawElements(sourcePack, allApps) }.getOrDefault(emptyList())
         }
         val clocks = elements.filterIsInstance<RawDynamicClock>()
         if (clocks.isEmpty()) return null

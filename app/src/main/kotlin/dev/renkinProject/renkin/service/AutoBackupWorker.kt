@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.service
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import androidx.datastore.preferences.core.edit
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -16,16 +17,19 @@ import dagger.hilt.android.EntryPointAccessors
 import dev.renkinProject.renkin.data.AUTO_BACKUP_INTERVAL_OFF
 import dev.renkinProject.renkin.data.AutoBackupTreeUriKey
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
+import dev.renkinProject.renkin.data.LastAutoBackupDigestKey
+import dev.renkinProject.renkin.data.LastAutoBackupDocumentUriKey
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.normalizeAutoBackupInterval
-import dev.renkinProject.renkin.data.setLongValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.data.transfer.BackupManagerEntryPoint
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.IOException
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -34,25 +38,57 @@ import java.util.concurrent.TimeUnit
 class AutoBackupWorker(appContext: Context, params: WorkerParameters) :
     CoroutineWorker(appContext, params) {
 
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): Result = backupRuns.withLock { performBackup() }
+
+    private suspend fun performBackup(): Result {
         var outputUri: Uri? = null
         return try {
             StorageOperationGate.run { }
-            val treeUri = applicationContext.dataStore.getPreferencesAfterPendingWrites()
-                .getStringValue(AutoBackupTreeUriKey)
+            val prefs = applicationContext.dataStore.getPreferencesAfterPendingWrites()
+            val treeUri = prefs.getStringValue(AutoBackupTreeUriKey)
                 .takeIf(String::isNotEmpty)
                 ?.let(Uri::parse)
                 ?: return Result.failure()
-            EntryPointAccessors.fromApplication(applicationContext, BackupManagerEntryPoint::class.java)
-                .backupManager().exportBackup {
-                    val createdUri = createBackupDocument(treeUri)
-                    outputUri = createdUri
-                    applicationContext.contentResolver.openOutputStream(createdUri)
-                        ?: throw IOException("Cannot open automatic backup for writing")
+            val backupManager = EntryPointAccessors.fromApplication(applicationContext, BackupManagerEntryPoint::class.java)
+                .backupManager()
+            val prepared = backupManager.prepareBackupExport()
+            try {
+                val digest = backupManager.contentDigest(prepared)
+                val previousDocument = prefs.getStringValue(LastAutoBackupDocumentUriKey)
+                val unchanged = digest == prefs.getStringValue(LastAutoBackupDigestKey) &&
+                    previousDocument.isNotEmpty() &&
+                    existingBackups(treeUri).any { it.first.toString() == previousDocument }
+                if (!unchanged) {
+                    backupManager.writePreparedExport(prepared) {
+                        val createdUri = createBackupDocument(treeUri)
+                        outputUri = createdUri
+                        applicationContext.contentResolver.openOutputStream(createdUri)
+                            ?: throw IOException("Cannot open automatic backup for writing")
+                    }
                 }
-            runCatching { deleteExpiredBackups(treeUri) }
-                .onFailure { Log.error("AutoBackupWorker", "Could not prune old backups", it) }
-            applicationContext.dataStore.setLongValue(LastAutoBackupAtKey, System.currentTimeMillis())
+                StorageOperationGate.run {
+                    applicationContext.dataStore.edit { current ->
+                        if (current[AutoBackupTreeUriKey] == treeUri.toString()) {
+                            current[LastAutoBackupDigestKey] = digest
+                            current[LastAutoBackupDocumentUriKey] = outputUri?.toString() ?: previousDocument
+                            current[LastAutoBackupAtKey] = System.currentTimeMillis()
+                        }
+                    }
+                }
+                // A completed backup must survive cancellation or a failed retention scan.
+                outputUri = null
+                if (!unchanged) {
+                    try {
+                        deleteExpiredBackups(treeUri)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        Log.error("AutoBackupWorker", "Could not prune old backups", error)
+                    }
+                }
+            } finally {
+                backupManager.discardExport(prepared)
+            }
             Result.success()
         } catch (e: CancellationException) {
             outputUri?.let(::deleteDocument)
@@ -80,12 +116,18 @@ class AutoBackupWorker(appContext: Context, params: WorkerParameters) :
     }
 
     private fun deleteExpiredBackups(treeUri: Uri) {
+        existingBackups(treeUri).sortedByDescending { it.second }
+            .drop(MAX_BACKUPS)
+            .forEach { deleteDocument(it.first) }
+    }
+
+    private fun existingBackups(treeUri: Uri): List<Pair<Uri, String>> {
         val resolver = applicationContext.contentResolver
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(
             treeUri,
             DocumentsContract.getTreeDocumentId(treeUri)
         )
-        val documents = buildList {
+        return buildList {
             resolver.query(
                 children,
                 arrayOf(
@@ -109,9 +151,6 @@ class AutoBackupWorker(appContext: Context, params: WorkerParameters) :
                 }
             }
         }
-        documents.sortedByDescending { it.second }
-            .drop(MAX_BACKUPS)
-            .forEach { deleteDocument(it.first) }
     }
 
     private fun deleteDocument(uri: Uri) {
@@ -119,6 +158,7 @@ class AutoBackupWorker(appContext: Context, params: WorkerParameters) :
     }
 
     companion object {
+        private val backupRuns = Mutex()
         private const val WORK_NAME = "automatic_backup"
         private const val IMMEDIATE_WORK_NAME = "automatic_backup_now"
         private const val BACKUP_MIME_TYPE = "application/octet-stream"

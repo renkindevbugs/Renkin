@@ -13,6 +13,8 @@ import dev.renkinProject.renkin.data.ActiveProfileIdKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
+import dev.renkinProject.renkin.data.LastAutoBackupDigestKey
+import dev.renkinProject.renkin.data.LastAutoBackupDocumentUriKey
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.Profile
@@ -102,6 +104,27 @@ class BackupManagerTest {
 
     private fun inMemoryWatchDb() = Room.inMemoryDatabaseBuilder(context, WatchDatabase::class.java)
         .allowMainThreadQueries().build()
+
+    @Test fun automaticBackupDigestIgnoresExportTimeAndDeviceLocalBookkeepingButDetectsContentChanges() = runBlocking {
+        val pack = RenkinPackRepository(srcPackDb)
+        pack.replaceEverything(listOf(Profile(id = 1, name = "Saved")), emptyList())
+        val manager = sourceManager(pack, WatchRepository(srcWatchDb))
+        suspend fun digest(): String {
+            val prepared = manager.prepareBackupExport()
+            return try { manager.contentDigest(prepared) } finally { manager.discardExport(prepared) }
+        }
+        val original = digest()
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(1))
+        context.dataStore.edit {
+            it[LastAutoBackupAtKey] = 1234L
+            it[LastAutoBackupDigestKey] = original
+            it[LastAutoBackupDocumentUriKey] = "content://backup.test/document/last"
+        }
+        assertEquals(original, digest())
+
+        pack.updateProfile(pack.profile(1)!!.copy(name = "Changed"))
+        assertFalse(original == digest())
+    }
 
     @Test
     fun iconPackStudioChecks_distinguishProfilesAndExcludeTheActiveProfile() = runBlocking {

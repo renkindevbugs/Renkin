@@ -4,18 +4,20 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
+import androidx.datastore.preferences.core.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.renkinProject.renkin.data.AUTO_BACKUP_INTERVAL_OFF
 import dev.renkinProject.renkin.data.AutoBackupIntervalKey
 import dev.renkinProject.renkin.data.AutoBackupTreeUriKey
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
+import dev.renkinProject.renkin.data.LastAutoBackupDigestKey
+import dev.renkinProject.renkin.data.LastAutoBackupDocumentUriKey
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getLongValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeAutoBackupInterval
 import dev.renkinProject.renkin.data.setIntValue
-import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.data.observePreferences
 import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.service.AutoBackupWorker
@@ -53,7 +55,13 @@ class AutoBackupManager @Inject constructor(
             uri,
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         )
-        context.dataStore.setStringValue(AutoBackupTreeUriKey, uri.toString())
+        context.dataStore.edit { preferences ->
+            if (preferences[AutoBackupTreeUriKey] != uri.toString()) {
+                preferences.remove(LastAutoBackupDigestKey)
+                preferences.remove(LastAutoBackupDocumentUriKey)
+            }
+            preferences[AutoBackupTreeUriKey] = uri.toString()
+        }
         setInterval(intervalHours)
         AutoBackupWorker.runNow(context)
     }

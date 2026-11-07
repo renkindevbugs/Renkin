@@ -58,7 +58,7 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
     internal suspend fun editorBaseline(profileId: Long, packageName: String, activityName: String): DbApplication? = access {
         consistentRead {
             dao.editorBaselineInline(profileId, packageName, activityName)?.let { row ->
-                withFullArtwork(listOf(row), dao.oversizedArtwork(profileId)).single()
+                withFullArtwork(listOf(row), dao.oversizedArtworkOf(profileId, packageName, activityName)).single()
             }
         }
     }

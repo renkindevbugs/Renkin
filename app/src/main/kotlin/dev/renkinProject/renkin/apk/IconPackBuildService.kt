@@ -163,6 +163,7 @@ class IconPackBuildService internal constructor(
                         packPackageName = prepared.packageName, packLabel = prepared.label,
                         iconPackCatalog = iconPackCatalog, apkDir = directory, packIcon = prepared.packIcon,
                         packIconSource = prepared.packIconSource, profileName = prepared.profileName,
+                        clockElements = iconPackRepository.captureIndexedElements(),
                         clockStageChains = { storedStageChains(it, preferences, context) }
                     )
                     val buildContext = currentCoroutineContext()

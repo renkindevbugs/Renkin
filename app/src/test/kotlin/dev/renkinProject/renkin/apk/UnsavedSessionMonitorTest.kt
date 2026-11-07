@@ -8,6 +8,7 @@ import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.UnsavedIconJournal
 import dev.renkinProject.renkin.data.UnsavedIconJournalEntry
 import dev.renkinProject.renkin.data.UnsavedIconJournalStore
+import dev.renkinProject.renkin.data.UnsavedIconJournalCodec
 import dev.renkinProject.renkin.data.UnsavedSessionMarker
 import dev.renkinProject.renkin.data.UnsavedSessionMarkerStore
 import dev.renkinProject.renkin.data.transfer.BackupOsShadow
@@ -33,6 +34,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.io.File
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
@@ -154,6 +157,46 @@ class UnsavedSessionMonitorTest {
     }
 
     private val currentJournal get() = File(context.noBackupFilesDir, "unsaved-journal/current.json")
+
+    @Test fun unchangedRowsAreReusedButANewSessionReencodesThem() = runBlocking {
+        val first = app("first")
+        val second = app("second")
+        val states = MutableStateFlow(state("same", listOf(first), setOf(first.key)))
+        val calls = CopyOnWriteArrayList<List<String>>()
+        UnsavedSessionMonitor(store, journal, { "same" }, states, { _, apps ->
+            calls += apps.map { it.key }
+            apps.map(::row)
+        }, scope, journalDelayMs = 0).start()
+        withTimeout(5_000) { while (!currentJournal.exists()) delay(10) }
+
+        states.value = state("same", listOf(first, second), setOf(first.key, second.key))
+        withTimeout(5_000) {
+            while (runCatching { UnsavedIconJournalCodec.decode(currentJournal.readText()).entries.size }.getOrNull() != 2) delay(10)
+        }
+        assertEquals(listOf(listOf(first.key), listOf(second.key)), calls.toList())
+
+        val next = state("same", listOf(first, second), setOf(first.key, second.key))
+        states.value = next.copy(sessionToken = next.sessionToken!!.copy(revision = 1))
+        withTimeout(5_000) { while (calls.size < 3) delay(10) }
+        assertEquals(listOf(first.key, second.key), calls.last())
+    }
+
+    @Test fun encodingOomDoesNotKillLaterJournalWrites() = runBlocking {
+        val first = app("first")
+        val states = MutableStateFlow(state("same", listOf(first), setOf(first.key)))
+        val calls = AtomicInteger()
+        UnsavedSessionMonitor(store, journal, { "same" }, states, { _, apps ->
+            if (calls.incrementAndGet() == 1) throw OutOfMemoryError("Simulated journal pressure")
+            apps.map(::row)
+        }, scope, journalDelayMs = 0).start()
+        withTimeout(5_000) { while (calls.get() < 1) delay(10) }
+
+        val second = app("second")
+        states.value = state("same", listOf(second), setOf(second.key))
+        withTimeout(5_000) { while (!currentJournal.exists()) delay(10) }
+        assertEquals(listOf(second.key), UnsavedIconJournalCodec.decode(currentJournal.readText()).entries.map { it.key })
+        assertEquals(2, calls.get())
+    }
 
     @Test fun handMadeRowsAreJournaledButRefreshOutputIsNot() = runBlocking {
         val picked = app("picked")

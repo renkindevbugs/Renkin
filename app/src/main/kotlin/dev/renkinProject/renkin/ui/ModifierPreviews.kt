@@ -12,6 +12,8 @@ import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.BackgroundBrushOperation
+import dev.renkinProject.renkin.icon.creator.BackgroundRemovalModifier
+import dev.renkinProject.renkin.icon.creator.EdgeModifier
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.withModifiers
 import dev.renkinProject.renkin.icon.creator.withExport
@@ -78,13 +80,16 @@ internal fun rememberModifierPreviews(
     }
     var colorizeBase by remember { mutableStateOf<Bitmap?>(null) }
 
-    // Colourize runs before every modifier below. Sanitising the key also prevents background
-    // strokes from needlessly regenerating this untouched source after every brush gesture.
+    // Colourize runs before every modifier below. With no image edit, edges, segments and
+    // background removal never touch these pixels, so they stay out of the key: otherwise every
+    // brush gesture and slider step re-renders this untouched source and restarts the pickers.
     val colorizeBaseOptions = options.withModifiers {
         copy(
             effect = effect.copy(
                 imageEdit = ImageEdit.NONE,
-                backgroundRemoval = effect.backgroundRemoval.copy(brushOperations = emptyList())
+                edges = EdgeModifier(),
+                backgroundRemoval = BackgroundRemovalModifier(),
+                segments = emptyList()
             ),
             transform = TransformModifier(), shape = null, outline = null, shadow = null
         )

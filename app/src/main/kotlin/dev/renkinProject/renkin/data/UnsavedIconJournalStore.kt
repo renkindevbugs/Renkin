@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -100,6 +101,8 @@ class UnsavedIconJournalStore @Inject constructor(@param:ApplicationContext priv
             Log.error(TAG, "Unsaved icon journal is unreadable", error)
             file.delete()
             null
+        } catch (error: OutOfMemoryError) {
+            throw IOException("Unsaved icon journal exceeded available memory while reading", error)
         }
     }
 

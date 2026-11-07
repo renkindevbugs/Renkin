@@ -1667,7 +1667,7 @@ class ApplicationProvider internal constructor(
         iconGenService.getIconPackIcons(iconPackName, options, drawables)
 
     internal fun packBrowserPreviews(): PackBrowserPreviews =
-        PackBrowserPreviews(appManager, ::getIconPackIcons)
+        PackBrowserPreviews(appManager, iconPackRepo::indexedElements, ::getIconPackIcons)
 
     suspend fun getIconPackDropdownIcons(): Map<String, ResourceDrawable> = iconPackRepo.getDropdownIcons()
 
@@ -2220,6 +2220,7 @@ class ApplicationProvider internal constructor(
      */
     suspend fun dynamicClockDrawables(packPackageName: String): Set<String> =
         withContext(Dispatchers.Default) {
+            iconPackRepo.indexedDynamicClockDrawables(packPackageName)?.let { return@withContext it }
             runCatching { appManager.getAppFilterRawElements(packPackageName, emptyList()) }
                 .getOrDefault(emptyList())
                 .filterIsInstance<dev.renkinProject.renkin.data.RawDynamicClock>()
@@ -2233,7 +2234,7 @@ class ApplicationProvider internal constructor(
     internal suspend fun appCalendarDay(source: CalendarSource.App, resourceId: Int): Int? =
         withContext(Dispatchers.Default) { iconPackRepo.appCalendarDay(source, resourceId) }
 
-    private val dynamicClockPreview by lazy { DynamicClockPreview(context) }
+    private val dynamicClockPreview by lazy { DynamicClockPreview(context, iconPackRepo::indexedElements) }
 
     suspend fun dynamicClockSource(app: PackageInfoStruct, packPackageName: String, resourceId: Int): DynamicClockSource? =
         withContext(Dispatchers.Default) {

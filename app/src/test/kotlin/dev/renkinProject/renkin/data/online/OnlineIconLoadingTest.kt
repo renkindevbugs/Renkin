@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.data.online
 import android.app.Application
 import dev.renkinProject.renkin.data.online.OnlineIconRepository.Companion.HttpTextResponse
 import java.io.IOException
+import java.io.File
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -48,6 +49,55 @@ class OnlineIconLoadingTest {
     }
 
     private fun isBatch(url: String) = url.contains(".json?icons=")
+
+    private fun staleCollections(): File = File(
+        RuntimeEnvironment.getApplication().cacheDir, "online-icons/iconify-collections.json"
+    ).apply {
+        parentFile!!.mkdirs()
+        writeText(collectionsJson("Old"))
+        assertTrue(setLastModified(System.currentTimeMillis() - 8L * 24 * 60 * 60 * 1000))
+    }
+
+    private fun collectionsJson(name: String) =
+        """{"test":{"name":"$name","total":1,"license":{"title":"MIT"},"samples":["icon"]}}"""
+
+    @Test
+    fun staleIndexReturnsWhileRefreshIsBlockedAndThenUpdatesMemoryAndDisk() = runTest {
+        val cache = staleCollections()
+        val response = CompletableDeferred<HttpTextResponse>()
+        var calls = 0
+        val repository = testRepository { _, _ -> calls++; response.await() }
+
+        val first = async { repository.collections() }
+        runCurrent()
+        assertTrue(first.isCompleted)
+        assertEquals("Old", first.await()!!.single().name)
+        assertEquals("Old", repository.collections()!!.single().name)
+        assertEquals(1, calls)
+
+        response.complete(HttpTextResponse(body = collectionsJson("New"), status = 200))
+        advanceUntilIdle()
+        assertEquals("New", repository.collections()!!.single().name)
+        assertEquals(collectionsJson("New"), cache.readText())
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun malformedBackgroundRefreshKeepsTheUsableStaleIndex() = runTest {
+        val cache = staleCollections()
+        val original = cache.readText()
+        var calls = 0
+        val repository = testRepository { _, _ ->
+            calls++
+            HttpTextResponse(body = "not-json", status = 200)
+        }
+
+        assertEquals("Old", repository.collections()!!.single().name)
+        advanceUntilIdle()
+        assertEquals("Old", repository.collections()!!.single().name)
+        assertEquals(original, cache.readText())
+        assertEquals(1, calls)
+    }
 
     @Test
     fun startsAreSpacedAcrossDifferentRequests() = runTest {

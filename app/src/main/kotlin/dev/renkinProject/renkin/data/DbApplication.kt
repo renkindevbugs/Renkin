@@ -279,6 +279,10 @@ interface RenkinPackDao {
     @Query("SELECT $OVERSIZED_ARTWORK_COLUMNS FROM DbApplication WHERE $OVERSIZED_ARTWORK_FILTER")
     fun oversizedArtworkAllProfiles(): List<OversizedIconArtwork>
 
+    // Primary-key lookup: the per-profile variant measures every row's artwork to find one.
+    @Query("SELECT $OVERSIZED_ARTWORK_COLUMNS FROM DbApplication WHERE profileId = :profileId AND packageName = :packageName AND activityName = :activityName AND $OVERSIZED_ARTWORK_FILTER")
+    fun oversizedArtworkOf(profileId: Long, packageName: String, activityName: String): List<OversizedIconArtwork>
+
     @Query("SELECT substr(drawable, :start, :count) FROM DbApplication WHERE profileId = :profileId AND packageName = :packageName AND activityName = :activityName")
     fun drawableChunk(profileId: Long, packageName: String, activityName: String, start: Int, count: Int): String?
 
