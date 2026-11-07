@@ -167,6 +167,18 @@ class IconPackBuilder(
             }
             return names
         }
+
+        /**
+         * Activity classes that `appmap.xml` must not list. That schema keys icons by class name
+         * alone, so a class shared by several packages would hand one app's icon to every app
+         * using it — most visibly every profile pack, which all run [MAIN_ACTIVITY]. Those apps
+         * keep their exact ComponentInfo mapping in appfilter.xml and theme_resources.xml.
+         */
+        @VisibleForTesting
+        internal fun ambiguousActivityClasses(apps: List<PackageInfoStruct>): Set<String> =
+            apps.groupBy { it.activityName }
+                .filterValues { sharing -> sharing.map { it.packageName }.distinct().size > 1 }
+                .keys + MAIN_ACTIVITY
     }
     private val newInternalVersionCode = 0
     private val frameworkVersion = 34
@@ -246,6 +258,7 @@ class IconPackBuilder(
 
         val totalIcons = apps.count { it.createdIcon != null }
         val appFileNames = uniqueDrawableFileNames(apps)
+        val ambiguousClasses = ambiguousActivityClasses(apps)
         val clockExporter = DynamicClockExporter(ctx, apps.map { it.toInstalledApplication() }, clockStageChains)
         var doneIcons = 0
         for (app in apps) {
@@ -365,7 +378,7 @@ class IconPackBuilder(
                 // <calendar> entry below; only launchers that prefer <item> over <calendar> (e.g.
                 // Smart Launcher) fall back to the static icon without rotating.
                 appfilterXml.item(app.packageName, app.activityName, appFileName)
-                appMapXml.item(app.activityName, legacyName)
+                if (app.activityName !in ambiguousClasses) appMapXml.item(app.activityName, legacyName)
                 themeResourcesXml.item(app.packageName, app.activityName, legacyName)
             }
         }
