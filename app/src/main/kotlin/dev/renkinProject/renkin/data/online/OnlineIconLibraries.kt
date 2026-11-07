@@ -22,8 +22,6 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.ceil
-import kotlin.math.floor
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -93,11 +91,14 @@ class OnlineIconRepository internal constructor(
     private val context: Context,
     private val request: suspend (String, Int) -> HttpTextResponse,
     private val monotonicMillis: () -> Long,
-    private val ioDispatcher: CoroutineDispatcher
+    private val ioDispatcher: CoroutineDispatcher,
+    private val localSets: LocalIconSets? = null
 ) {
-    @Inject constructor(@ApplicationContext context: Context) : this(
-        context, ::executeHttpGet, SystemClock::elapsedRealtime, Dispatchers.IO
+    @Inject constructor(@ApplicationContext context: Context, localSets: LocalIconSets) : this(
+        context, ::executeHttpGet, SystemClock::elapsedRealtime, Dispatchers.IO, localSets
     )
+
+    fun isBuiltIn(prefix: String): Boolean = localSets?.isBuiltIn(prefix) == true
 
     @Volatile private var memoryCollections: List<IconifyCollection>? = null
     private val memoryIndexes = ConcurrentHashMap<String, List<OnlineIcon>>()
@@ -134,11 +135,15 @@ class OnlineIconRepository internal constructor(
                 url = "https://api.iconify.design/collections",
                 parses = { parseCollections(it) != null }
             )?.let(::parseCollections)?.also { memoryCollections = it }
-        }
+        } ?: localSets?.collections()?.takeIf { it.isNotEmpty() }
     }
 
     suspend fun icons(collection: IconifyCollection): List<OnlineIcon>? = withContext(ioDispatcher) {
         memoryIndexes[collection.prefix]?.let { return@withContext it }
+        localSets?.set(collection.prefix)?.let { set ->
+            return@withContext set.visibleNames.map { OnlineIcon(set.prefix, it) }
+                .also { memoryIndexes[collection.prefix] = it }
+        }
         indexLocks.getOrPut("set:${collection.prefix}") { Mutex() }.withLock {
             memoryIndexes[collection.prefix] ?: cachedOrFetch(
                 cache = File(cacheRoot, "iconify-set-${cacheKey(collection.prefix)}.json"),
@@ -168,6 +173,11 @@ class OnlineIconRepository internal constructor(
 
     suspend fun svg(icon: OnlineIcon, cachedOnly: Boolean = false): String? = withContext(ioDispatcher) {
         svgMemory.get(icon.svgUrl)?.let { return@withContext it }
+        // A local set counts as cache: it renders while scrolling, offline and during a 429 pause.
+        (localSets?.set(icon.prefix)?.lookup(icon.name) as? IconLookup.Markup)?.let {
+            svgMemory.put(icon.svgUrl, it.svg)
+            return@withContext it.svg
+        }
         if (cachedOnly) {
             return@withContext readCachedSvg(icon)?.also { svgMemory.put(icon.svgUrl, it) }
         }
@@ -269,14 +279,14 @@ class OnlineIconRepository internal constructor(
                     limitSvgRequests = true
                 )
                 if (sent.isEmpty()) continue
-                val parsed = json?.let(::parseIconBatch)
+                val parsed = json?.let(IconifyJson::parse)
                 for ((name, deferred) in sent) {
                     val icon = OnlineIcon(prefix, name)
-                    val markup = when (val entry = parsed?.get(name)) {
-                        is BatchIcon.Markup -> entry.svg.takeIf(::isWellFormedSvg)
+                    val markup = when (val entry = parsed?.lookup(name)) {
+                        is IconLookup.Markup -> entry.svg.takeIf(::isWellFormedSvg)
                             ?.also { writeAtomically(svgCacheFile(icon), it) }
-                        BatchIcon.NeedsDirectFetch -> fetchSingleSvg(icon)
-                        BatchIcon.Missing, null -> null
+                        IconLookup.NeedsDirectFetch -> fetchSingleSvg(icon)
+                        IconLookup.Missing, null -> null
                     }
                     deferred.complete(markup)
                 }
@@ -475,62 +485,10 @@ class OnlineIconRepository internal constructor(
         private const val MAX_BATCH_URL_LENGTH = 480
         private const val BATCH_GATHER_MS = 50L
         private val ICONIFY_NAME = Regex("^[a-z0-9]+(-[a-z0-9]+)*$")
-        private const val ICONIFY_DEFAULT_SIZE = 16.0
 
         private fun batchUrl(prefix: String, names: Collection<String>): String =
             "https://api.iconify.design/" + URLEncoder.encode(prefix, "UTF-8") +
                 ".json?icons=" + names.sorted().joinToString(",")
-
-        internal sealed interface BatchIcon {
-            data class Markup(val svg: String) : BatchIcon
-            data object Missing : BatchIcon
-            /** Transformed aliases/icons (rotate, flip, overrides) are left to the API's own SVG. */
-            data object NeedsDirectFetch : BatchIcon
-        }
-
-        /** Parses an IconifyJSON batch response into the same SVG the `/prefix/name.svg` API returns. */
-        internal fun parseIconBatch(json: String): Map<String, BatchIcon>? = runCatching {
-            val root = JSONObject(json)
-            val icons = root.optJSONObject("icons") ?: return null
-            val aliases = root.optJSONObject("aliases")
-            val result = HashMap<String, BatchIcon>()
-            root.optJSONArray("not_found")?.let { missing ->
-                for (i in 0 until missing.length()) result[missing.optString(i)] = BatchIcon.Missing
-            }
-            fun markup(icon: JSONObject): BatchIcon {
-                if (icon.has("rotate") || icon.has("hFlip") || icon.has("vFlip")) return BatchIcon.NeedsDirectFetch
-                val body = icon.optString("body").takeIf { it.isNotEmpty() } ?: return BatchIcon.Missing
-                fun dimension(key: String, default: Double) =
-                    icon.optDouble(key, root.optDouble(key, default)).takeIf { !it.isNaN() } ?: default
-                val width = dimension("width", ICONIFY_DEFAULT_SIZE)
-                val height = dimension("height", ICONIFY_DEFAULT_SIZE)
-                return BatchIcon.Markup(
-                    iconifySvg(body, dimension("left", 0.0), dimension("top", 0.0), width, height)
-                )
-            }
-            for (name in icons.keys()) icons.optJSONObject(name)?.let { result[name] = markup(it) }
-            aliases?.keys()?.forEach { name ->
-                val alias = aliases.optJSONObject(name) ?: return@forEach
-                val parent = alias.optString("parent")
-                result[name] = if (alias.length() != 1 || parent.isEmpty()) {
-                    BatchIcon.NeedsDirectFetch
-                } else {
-                    result[parent] ?: if (aliases.has(parent)) BatchIcon.NeedsDirectFetch else BatchIcon.Missing
-                }
-            }
-            result
-        }.getOrNull()
-
-        /** Matches the API's own SVG: height 1em and a width rounded up to 1/100 em from the aspect ratio. */
-        internal fun iconifySvg(body: String, left: Double, top: Double, width: Double, height: Double): String {
-            val widthEm = if (width == height) "1em" else "${number(ceil(width / height * 100) / 100)}em"
-            val viewBox = listOf(left, top, width, height).joinToString(" ") { number(it) }
-            return "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"$widthEm\" height=\"1em\" " +
-                "viewBox=\"$viewBox\">$body</svg>"
-        }
-
-        private fun number(value: Double): String =
-            if (value == floor(value)) value.toLong().toString() else value.toString()
 
         fun parseSearch(json: String): List<OnlineIcon>? = runCatching {
             val array = JSONObject(json).optJSONArray("icons") ?: return null

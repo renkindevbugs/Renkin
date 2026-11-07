@@ -1169,6 +1169,18 @@ old per-icon `.svg` request. When the last waiter of a flight is cancelled, the 
 and disconnects. Requests no longer force `Accept-Encoding: identity`, so responses arrive gzipped
 and size limits apply to inflated bytes. Search results use the shared 7-day disk cache.
 
+**Built-in Tabler set (verified)** ships the unmodified
+`@iconify-json/tabler@1.2.43` `icons.json` and `info.json` in `assets/online-icons/` (about 0.34 MB
+deflated; SHA-256 checked against `data.jsdelivr.com`; refresh only with app releases from the
+pinned jsDelivr URLs). `LocalIconSets` parses it once with a streaming `JsonReader` into
+`IconifySet` (bodies kept as UTF-8 bytes); the same `IconifyJson` parser reads API batch responses.
+The repository treats a local set as cache: its index and SVGs need no network and render while
+scrolling, offline and during a 429 pause. When the online set list is unavailable, the browser
+lists only the local sets (from `info.json`) instead of failing; no snapshot of all sets is bundled.
+Built-in sets show a quiet "Built in" badge. Imported icons keep the canonical Iconify `svgUrl`, so
+attribution and stored rows are unchanged. The MIT notice ships as `LICENSE-tabler.txt` and the
+About dialog credits the set.
+
 **7D4 (verified)** groups the help presentation in `feature.help`:
 `IntroShowcase`, `InfoDialog` and `WhatsNewDialog` (including the full history screen).
 The guided-tour targets, composition local and placement helper move with the tour. MainScreen

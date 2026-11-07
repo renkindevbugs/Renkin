@@ -130,6 +130,8 @@ class OnlineIconBrowserViewModel @Inject constructor(
 
     val rateLimitUntil = repository.rateLimitUntil
 
+    fun isBuiltIn(set: IconifyCollection): Boolean = repository.isBuiltIn(set.prefix)
+
     // Each open session owns its loads: closing cancels them, and a late result never publishes
     // into the next session, even when the browser reopens at once (the generation moves on).
     private var sessionJob: Job? = null

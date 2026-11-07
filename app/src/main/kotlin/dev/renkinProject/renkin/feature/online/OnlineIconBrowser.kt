@@ -577,13 +577,20 @@ private fun CollectionRow(
                     .weight(1f)
                     .padding(start = 6.dp, end = 4.dp)
             ) {
-                Text(
-                    text = set.name,
-                    style = MaterialTheme.typography.titleSmallEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = set.name,
+                        style = MaterialTheme.typography.titleSmallEmphasized,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (viewModel.isBuiltIn(set)) SetSourceBadge(stringResource(R.string.onlineSetBuiltIn))
+                }
                 Text(
                     text = stringResource(R.string.onlineSetCount, set.total) + " · " +
                         set.license.ifEmpty { stringResource(R.string.onlineUnknownLicense) },
@@ -600,6 +607,22 @@ private fun CollectionRow(
                 tint = MaterialTheme.colorScheme.primary
             )
         }
+    }
+}
+
+@Composable
+private fun SetSourceBadge(label: String) {
+    Surface(
+        shape = SwatchShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+        )
     }
 }
 

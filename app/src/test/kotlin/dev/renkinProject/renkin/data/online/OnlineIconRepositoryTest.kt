@@ -142,7 +142,7 @@ class OnlineIconRepositoryTest {
     }
 
     @Test
-    fun parseIconBatch_rebuildsApiSvgAndResolvesPlainAliases() {
+    fun iconifyJson_rebuildsApiSvgAndResolvesPlainAliases() {
         val json = """
             {"prefix":"fa6-solid","width":512,"height":512,
              "aliases":{"home":{"parent":"house"},"home-flipped":{"parent":"house","hFlip":true}},
@@ -153,32 +153,42 @@ class OnlineIconRepositoryTest {
              "not_found":["gone"]}
         """.trimIndent()
 
-        val batch = OnlineIconRepository.parseIconBatch(json)!!
+        val batch = IconifyJson.parse(json)!!
 
         val house = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1.13em\" height=\"1em\" " +
             "viewBox=\"0 0 576 512\"><path d=\"M0 0\"/></svg>"
-        assertEquals(OnlineIconRepository.Companion.BatchIcon.Markup(house), batch["house"])
-        assertEquals(batch["house"], batch["home"])
+        assertEquals(IconLookup.Markup(house), batch.lookup("house"))
+        assertEquals(batch.lookup("house"), batch.lookup("home"))
         assertEquals(
             "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"0.88em\" height=\"1em\" " +
                 "viewBox=\"0 0 448 512\"><path d=\"M1 1\"/></svg>",
-            (batch["user"] as OnlineIconRepository.Companion.BatchIcon.Markup).svg
+            (batch.lookup("user") as IconLookup.Markup).svg
         )
-        assertTrue((batch["square"] as OnlineIconRepository.Companion.BatchIcon.Markup).svg
+        assertTrue((batch.lookup("square") as IconLookup.Markup).svg
             .contains("width=\"1em\" height=\"1em\" viewBox=\"0 0 512 512\""))
-        assertEquals(OnlineIconRepository.Companion.BatchIcon.NeedsDirectFetch, batch["turned"])
-        assertEquals(OnlineIconRepository.Companion.BatchIcon.NeedsDirectFetch, batch["home-flipped"])
-        assertEquals(OnlineIconRepository.Companion.BatchIcon.Missing, batch["gone"])
-        assertNull(OnlineIconRepository.parseIconBatch("not json"))
+        assertEquals(IconLookup.NeedsDirectFetch, batch.lookup("turned"))
+        assertEquals(IconLookup.NeedsDirectFetch, batch.lookup("home-flipped"))
+        assertEquals(IconLookup.Missing, batch.lookup("gone"))
+        assertNull(IconifyJson.parse("not json"))
     }
 
     @Test
-    fun parseIconBatch_usesIconifyDefaultSizeWhenTheSetOmitsIt() {
-        val batch = OnlineIconRepository.parseIconBatch(
+    fun iconifyJson_usesIconifyDefaultSizeWhenTheSetOmitsIt() {
+        val batch = IconifyJson.parse(
             """{"prefix":"bi","icons":{"dot":{"body":"<circle r=\"1\"/>"}}}"""
         )!!
 
-        assertTrue((batch["dot"] as OnlineIconRepository.Companion.BatchIcon.Markup).svg
+        assertTrue((batch.lookup("dot") as IconLookup.Markup).svg
             .contains("viewBox=\"0 0 16 16\""))
+    }
+
+    @Test
+    fun iconifyJson_appliesRootSizeListedAfterIconsAndHidesHiddenIcons() {
+        val set = IconifyJson.parse(
+            """{"prefix":"t","icons":{"b":{"body":"<g/>"},"a":{"body":"<g/>","hidden":true}},"width":24,"height":24}"""
+        )!!
+
+        assertEquals(listOf("b"), set.visibleNames)
+        assertTrue((set.lookup("a") as IconLookup.Markup).svg.contains("viewBox=\"0 0 24 24\""))
     }
 }

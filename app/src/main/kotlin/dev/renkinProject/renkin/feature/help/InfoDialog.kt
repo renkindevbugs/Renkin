@@ -122,6 +122,17 @@ fun InfoDialog(onDismiss: () -> Unit) {
                     url = "https://github.com/ghosh/uiGradients",
                     modifier = Modifier.padding(top = 2.dp)
                 )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.aboutTablerIcons),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                LinkText(
+                    text = stringResource(R.string.aboutTablerIconsLink),
+                    url = "https://github.com/tabler/tabler-icons",
+                    modifier = Modifier.padding(top = 2.dp)
+                )
 
                 Spacer(Modifier.height(24.dp))
                 Text(

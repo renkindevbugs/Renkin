@@ -1,0 +1,31 @@
+{
+	"prefix": "tabler",
+	"name": "Tabler Icons",
+	"total": 6257,
+	"version": "3.50.0",
+	"author": {
+		"name": "Paweł Kuna",
+		"url": "https://github.com/tabler/tabler-icons"
+	},
+	"license": {
+		"title": "MIT",
+		"spdx": "MIT",
+		"url": "https://github.com/tabler/tabler-icons/blob/master/LICENSE"
+	},
+	"samples": [
+		"alien",
+		"device-desktop",
+		"photo",
+		"chevron-right",
+		"check",
+		"square-root"
+	],
+	"height": 24,
+	"category": "UI 24px",
+	"tags": [
+		"Precise Shapes",
+		"Has Padding",
+		"Uses Stroke"
+	],
+	"palette": false
+}

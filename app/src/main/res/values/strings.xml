@@ -61,6 +61,8 @@
     <string name="aboutForkLink">View Alembicons on F-Droid</string>
     <string name="aboutGradients">The gradient gallery ships the uiGradients collection by Indrashish Ghosh, used under the MIT license.</string>
     <string name="aboutGradientsLink">View uiGradients on GitHub</string>
+    <string name="aboutTablerIcons">The built-in Tabler Icons set by Paweł Kuna is used under the MIT license.</string>
+    <string name="aboutTablerIconsLink">View Tabler Icons on GitHub</string>
     <string name="githubUrl" translatable="false">https://github.com/renkindevbugs/Renkin</string>
     <string name="viewOnGithub">View on GitHub</string>
     <string name="aboutFeedback">Got an idea or a suggestion? Feel free to share it on GitHub — open it with the “View on GitHub” link under the app name above (suggestions and bug reports go in the “Issues” tab).</string>
@@ -857,6 +859,7 @@
     <string name="onlineSetCount">%1$d icons</string>
     <string name="onlinePoweredBy">Icon data by</string>
     <string name="onlineUnknownLicense">Unknown licence</string>
+    <string name="onlineSetBuiltIn">Built in</string>
     <string name="onlineIconNotImportable">Preview only — this icon uses gradients or effects the vector editor can\'t import</string>
     <string name="onlineIconLoadFailed">Couldn\'t download this icon. Check your connection and try again.</string>
     <string name="onlineIconsRateLimited">The online service is limiting downloads. Next attempt in %1$d seconds. Cached icons remain available.</string>
