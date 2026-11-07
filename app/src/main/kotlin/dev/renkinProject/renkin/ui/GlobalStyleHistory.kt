@@ -34,6 +34,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.datastore.preferences.core.Preferences
@@ -215,7 +216,7 @@ private fun HistoryRow(
             modifier = Modifier.padding(start = 12.dp, top = 10.dp, bottom = if (bake != null) 0.dp else 10.dp, end = 4.dp)
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                apps.forEach { app -> HistoryIconPreview(app, options, viewModel) }
+                apps.forEach { app -> key(app.key) { HistoryIconPreview(app, options, viewModel) } }
             }
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -309,11 +310,14 @@ private fun HistoryIconPreview(app: PackageInfoStruct, options: GenerationOption
     val base = app.baseIcon ?: app.createdIcon
     val targetPx = with(LocalDensity.current) { HistoryPreviewSize.roundToPx() }
     val baseBitmap = rememberIconBitmap(app, base, HistoryPreviewSize)
-    val preview by produceState(
-        options?.let { viewModel.cachedModifiedPreview(app, it, targetPx) },
-        app.key, app.internalVersion, options, targetPx
-    ) {
-        if (value == null && base != null && options != null) value = viewModel.modifiedPreview(app, options, targetPx)
+    val cached = remember(app.key, app.internalVersion, options, targetPx) {
+        options?.let { viewModel.cachedModifiedPreview(app, it, targetPx) }
+    }
+    val preview by produceState(cached, app.key, app.internalVersion, options, targetPx) {
+        // produceState keeps its value across key changes; a retained bitmap may show the previous
+        // app or version, so the new request decides from its own cache result.
+        value = cached
+        if (cached == null && base != null && options != null) value = viewModel.modifiedPreview(app, options, targetPx)
     }
     val painter = preview?.let { BitmapPainter(it.asImageBitmap()) }
         ?: if (options == null) baseBitmap?.let(::BitmapPainter) else null
