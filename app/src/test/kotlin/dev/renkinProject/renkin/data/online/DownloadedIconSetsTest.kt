@@ -170,6 +170,54 @@ class DownloadedIconSetsTest {
     }
 
     @Test
+    fun readingASetNeverDeletesFilesOfAnUpdateInProgress() = runTest {
+        serveRelease()
+        sets().download(release()) {}
+        val sets = sets()
+        sets.ensureScanned()
+        val part = File(root, "demo/icons-2.0.0.json.part").apply { writeText("{") }
+        val renamed = File(root, "demo/icons-2.0.0.json").apply { writeText("{}") }
+
+        assertTrue(sets.set("demo")!!.lookup("dot") is IconLookup.Markup)
+        assertEquals("Demo", sets.collections().single().name)
+
+        assertTrue(part.exists())
+        assertTrue(renamed.exists())
+    }
+
+    @Test
+    fun theFirstScanWaitsForARunningDownloadInsteadOfPruningIt() = runTest {
+        val writing = CompletableDeferred<Unit>()
+        val finish = CompletableDeferred<Unit>()
+        responses["$CDN/demo@1.0.0/info.json"] = HttpURLConnection.HTTP_OK to infoJson
+        val sets = sets(transport = { url, _, sink, onBytes ->
+            if (url.endsWith("icons.json")) {
+                sink.write(iconsJson)
+                onBytes(iconsJson.size.toLong())
+                writing.complete(Unit)
+                finish.await()
+                HttpURLConnection.HTTP_OK
+            } else {
+                sink.write(infoJson)
+                HttpURLConnection.HTTP_OK
+            }
+        })
+        val download = launch { sets.download(release()) {} }
+        writing.await()
+        val scan = launch { sets.ensureScanned() }
+        runCurrent()
+
+        assertTrue(File(root, "demo/icons-1.0.0.json.part").exists())
+        assertFalse(scan.isCompleted)
+
+        finish.complete(Unit)
+        download.join()
+        scan.join()
+        assertEquals(setOf("demo"), sets.sets.value.keys)
+        assertTrue(sets.set("demo")!!.lookup("dot") is IconLookup.Markup)
+    }
+
+    @Test
     fun deleteRemovesTheSetAndItsFiles() = runTest {
         serveRelease()
         val sets = sets()

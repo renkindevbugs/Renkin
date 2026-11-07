@@ -91,13 +91,17 @@ class DownloadedIconSets internal constructor(
     suspend fun ensureScanned() {
         if (scanned) return
         withContext(ioDispatcher) {
-            stateLock.withLock {
-                if (scanned) return@withLock
-                mutableSets.value = rootDir().listFiles().orEmpty()
-                    .filter { it.isDirectory }
-                    .mapNotNull(::readValidManifest)
-                    .associate { it.set.prefix to it.set }
-                scanned = true
+            // Pruning deletes files, so it waits for any transfer: a live update keeps its
+            // `.part` and renamed file outside the committed manifest until it commits.
+            downloadLock.withLock {
+                stateLock.withLock {
+                    if (scanned) return@withLock
+                    mutableSets.value = rootDir().listFiles().orEmpty()
+                        .filter { it.isDirectory }
+                        .mapNotNull(::readAndPrune)
+                        .associate { it.set.prefix to it.set }
+                    scanned = true
+                }
             }
         }
     }
@@ -230,6 +234,19 @@ class DownloadedIconSets internal constructor(
 
     private class Manifest(val set: DownloadedIconSet, val icons: File, val info: File?)
 
+    private fun readAndPrune(dir: File): Manifest? {
+        val parsed = readValidManifest(dir)
+        if (parsed == null) {
+            dir.deleteRecursively()
+            return null
+        }
+        dir.listFiles().orEmpty()
+            .filter { it.name != MANIFEST && it != parsed.icons && it != parsed.info }
+            .forEach { it.delete() }
+        return parsed
+    }
+
+    /** Never deletes: ordinary reads may overlap a download that owns uncommitted files here. */
     private fun readValidManifest(dir: File): Manifest? {
         val manifest = runCatching { JSONObject(AtomicFile(File(dir, MANIFEST)).readFully().decodeToString()) }
             .getOrNull()
@@ -242,13 +259,6 @@ class DownloadedIconSets internal constructor(
                     .takeIf { icons.isFile && icons.length() == bytes && json.getString("prefix") == dir.name }
             }.getOrNull()
         }
-        if (parsed == null) {
-            dir.deleteRecursively()
-            return null
-        }
-        dir.listFiles().orEmpty()
-            .filter { it.name != MANIFEST && it != parsed.icons && it != parsed.info }
-            .forEach { it.delete() }
         return parsed
     }
 
