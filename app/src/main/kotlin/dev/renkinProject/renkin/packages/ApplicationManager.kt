@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.packages
 
 import android.content.Context
+import android.content.res.Resources
 import android.graphics.drawable.Drawable
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawCalendar
@@ -167,8 +168,16 @@ internal class ApplicationManager(
         return getResourceDrawableByName(iconPackName, item.drawableLink)
     }
 
-    fun getResourceDrawableByName(iconPackName: String, drawableName: String): ResourceDrawable? {
-        val res = resourceResolver.getResources(iconPackName) ?: return null
+    fun getResourceDrawableByName(iconPackName: String, drawableName: String): ResourceDrawable? =
+        resourceResolver.getResources(iconPackName)?.let { getResourceDrawableByName(it, iconPackName, drawableName) }
+
+    /** Resolves [iconPackName]'s drawables by name, reading the pack's Resources once, on first use. */
+    fun packDrawableResolver(iconPackName: String): (String) -> ResourceDrawable? {
+        val res by lazy { resourceResolver.getResources(iconPackName) }
+        return { drawableName -> res?.let { getResourceDrawableByName(it, iconPackName, drawableName) } }
+    }
+
+    private fun getResourceDrawableByName(res: Resources, iconPackName: String, drawableName: String): ResourceDrawable? {
         val resourceId = runCatching {
             res.getIdentifierByName(drawableName, "drawable", iconPackName)
         }.getOrNull() ?: return null
