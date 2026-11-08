@@ -1122,4 +1122,39 @@
     <string name="sortAppsWithFilters">Sort and filter apps. Active filters: %1$d</string>
     <string name="sourceSecondaryOptional">Optional</string>
     <string name="sourceSecondaryNotNeeded">Not needed</string>
+    <string name="enlargeNewIconPreview">Enlarge new icon preview</string>
+    <string name="reduceIconMotion">Reduce icon motion</string>
+    <string name="reduceIconMotionSummary">Open and close the editor without flying icons. Loading indicators stay visible.</string>
+    <string name="settingsLastBackup">Last backup: %1$s</string>
+    <string name="watchNotificationSummaryLine">%1$s · %2$s</string>
+    <plurals name="watchNotificationAvailableCount">
+        <item quantity="one">%1$d icon available</item>
+        <item quantity="other">%1$d icons available</item>
+    </plurals>
+    <string name="watchEmptyTitle">Watch your favorite icons</string>
+    <string name="watchEmptyDescription">Add a rule with + to find out when an icon pack adds an icon for your app.</string>
+    <string name="watchLastCheckAt">Last checked: %1$s</string>
+    <string name="watchLastSuccessAt">Last successful check: %1$s</string>
+    <string name="watchLastCheckNoIcons">No new icons found</string>
+    <string name="watchLastCheckFailed">The last check could not finish</string>
+    <string name="watchCheckPartial">Some icon packs could not be checked</string>
+    <plurals name="watchLastCheckFound">
+        <item quantity="one">%1$d new icon found</item>
+        <item quantity="other">%1$d new icons found</item>
+    </plurals>
+    <string name="watchNotificationChooseProfile">Choose a profile</string>
+    <string name="watchNotificationChooseProfileBody">New icons are available in more than one profile. Choose which results to review.</string>
+    <string name="profileSwitchLoadingTitle">Opening profile</string>
+    <string name="startupProfileLoading">Loading apps and saved icons…</string>
+    <string name="buildNotificationChannel">Icon pack builds</string>
+    <string name="buildNotificationTitle">Building icon pack</string>
+    <string name="buildNotificationPreparing">Preparing your icon pack…</string>
+    <string name="buildNotificationFinishing">Finishing icon pack</string>
+    <string name="buildNotificationCount">%1$d / %2$d icons</string>
+    <string name="buildReady">Pack ready</string>
+    <string name="buildSavingReady">Saving the built profile…</string>
+    <string name="buildReadyInstall">Install icon pack</string>
+    <string name="buildInterrupted">The build was interrupted. Build the icon pack again.</string>
+    <string name="buildNoPendingPack">No prepared pack is available. Build the icon pack again.</string>
+    <string name="buildForegroundUnavailable">Could not start the background build. Return to Renkin and try again.</string>
 </resources>

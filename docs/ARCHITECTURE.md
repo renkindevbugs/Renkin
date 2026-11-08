@@ -80,8 +80,10 @@ once: `ByteArray.toLowerHex()` for every stored digest, `data/syncDirectory` for
 fsyncs, and `data/editor/EditorBinary.kt` for the bounded text, boolean and capped-buffer
 primitives of the editor draft codecs (their stored format is pinned by golden hash tests).
 
-`MainViewModel` owns a `BuildInstallCoordinator` for its lifetime. The coordinator owns the
-build/install job, APK handoffs and one sealed `BuildInstallState`: Idle, Building,
+The process-wide `BuildInstallSession` owns a `BuildInstallCoordinator` and its build/install job.
+`MainViewModel` attaches UI synchronization callbacks and the current export SavedStateHandle;
+clearing the ViewModel detaches those callbacks without cancelling the foreground operation.
+The coordinator owns APK handoffs and one sealed `BuildInstallState`: Idle, Building, Ready,
 ChoosingInstaller, Installing, Conflict, Done or Failed. Progress and pending artifacts belong
 to their applicable state; the existing MainViewModel UI properties are read-only projections,
 not independently writable flags. Installer catalog/preferences and Shizuku settings remain
@@ -89,8 +91,8 @@ with MainViewModel for this extraction. MainViewModel validates the active sessi
 starting and owns the app-list/diff/undo baseline callbacks; provider/build services retain the
 snapshot, profile/storage gates, epoch checks, installer backends and artifact reservations.
 Installer confirmation claims Installing synchronously. Operation ownership rejects late progress
-and terminal publication, while pending choice/conflict states retain the APK. Cancellation and
-ViewModel clearing release unclaimed artifacts outside cancellation; dismissing the picker finishes
+and terminal publication, while pending ready/choice/conflict states retain the APK. Cancellation
+releases unclaimed artifacts outside cancellation; dismissing the picker finishes
 the captured build without installing and synchronizes the owning profile's build baseline.
 Installer outcomes are published before best-effort UI synchronization. A changed session or
 failed baseline/missing-pack refresh is logged without reclassifying a successful installation,
@@ -100,9 +102,23 @@ still conflicts explicitly releases its APK as completed, so the next build can 
 progress uses one Main collector over conflated complete snapshots rather than a job per tick.
 The picker and conflict-dismiss paths update the diff to reflect the already committed build.
 This synchronization follows the captured pack and the baseline callback's profile/session checks,
-so starting another build does not skip it. Dismissing a pending prompt or clearing the ViewModel
+so starting another build does not skip it. Dismissing a pending prompt
 claims artifact cleanup before changing state; the previous job cannot release that APK as
 unfinished while its completion cleanup is still running.
+
+Builds use a non-exported `PackBuildForegroundService` (`dataSync` for local file processing),
+a timed partial wake lock and silent notifications sampled every 500 ms. Inside Renkin, the
+existing FAB displays the current phase and count while the list remains available for browsing;
+editor/source mutations remain gated. Foreground completion keeps the existing installer flow.
+Background completion saves the captured profile and built baseline before publishing Ready,
+retains the APK and offers Install on return or in the notification. That save updates the
+captured storage revision only if it still owned the profile's persisted state; a newer save
+still wins when installation eventually finishes. A new activity reattaches the same process
+session and transfers any pending export lease to its SavedStateHandle. Work IDs prevent an old
+service instance from cancelling a subsequent operation. This is not resumable build execution
+after process death: an interrupted build must be run again, and a completed Ready handoff is
+in memory, although its profile has already been saved. Service timeout/foreground failure
+cancels active work with a dismissible report; installer result verification remains unchanged.
 
 Confirmed installation is published before saving the captured profile. The same awaited job
 finishes saving; an operation-owned completion marker prevents another build after the success
@@ -722,8 +738,17 @@ instead of declaring old hashes ready. Startup has no retained
 edit markers and full import/Previous state reset their baselines explicitly. A load owner also
 rejects late publication from an older read in the same session after a Save/build synchronization.
 
-MainActivity shows the same inert `MainStartupScreen` during CHECKING and ordinary catalog/icon
-loading: home title/actions/search shell with Material's morphing-shape `LoadingIndicator`.
+MainActivity shows an inert `MainStartupScreen` during CHECKING and ordinary catalog/icon
+loading. While storage is checking or launch fire is moving, it keeps the lightweight
+title/search shell and Material's morphing-shape `LoadingIndicator`. After fire settles and
+storage recovery has completed, it shows the saved target profile's identity and pack artwork above placeholder
+rows, reusing `ProfileSwitchLoading`. `ApplicationProvider.startupProfile` publishes only the
+persisted selection's metadata; it does not publish a live profile session or ready icon counts.
+Its publication also proves recovery has finished if initialization owns the first storage gate
+and that gate still reports CHECKING until its outer operation returns.
+The existing apps → icon packs → saved icons initialization order stays intact, and the
+interactive `MainColumn` still waits for startup completion. This Orion presentation change
+is awaiting compilation and on-device review.
 Startup and the interactive screen use the same stateless title-bar content and shared search
 field; the startup branch does
 not instantiate toolbar ViewModels. No profile/edit/build actions are active in that shell.
@@ -734,7 +759,8 @@ changing startup presentation does not bypass them. Crash-report dialogs wait un
 finishes. Only the optional diff follows foreground switching; durable Save and target icon
 loading still finish before dismissing progress.
 
-The startup animation retains the established morphing shapes, as requested after the 7B7
+At the historical 7B7 checkpoint, the startup animation retained the established morphing shapes,
+as requested after the
 device checkpoint. This visual restoration leaves startup/recovery routing and readiness
 ownership unchanged. Its on-device appearance is confirmed; the startup-shell test, all 936
 unit tests across 149 suites and `assembleDebug` pass. The full suite uses the local test-JVM
@@ -2335,6 +2361,9 @@ The controlled device check of generated versus reloaded pack export resources i
 launcher drawables. The shared `InstalledIconLoader` provides an 8 MiB thumbnail cache with source
 identity keys that do not retain Drawables. Full sources are acquired for generator operations and
 one live editor, preserving component/user/resource/configuration provenance and adaptive layers.
+When a package has been reinstalled since catalog discovery, full-source loading resolves both
+the drawable and its resource id from the current launcher entry. A changed APK path alone
+must not make the editor's Current slot or Application icon source unavailable.
 Editor preparation and recovery-original previews run off Main; reviewed/recovered artwork keeps
 its existing ownership. Reload carries fresh descriptors together with preserved optional modifier
 metadata. Details and the accepted developer checkpoint are in

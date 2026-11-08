@@ -16,12 +16,13 @@ import androidx.work.workDataOf
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.watch.WatchRepository
+import dev.renkinProject.renkin.data.watch.WatchCheckOutcome
+import dev.renkinProject.renkin.data.watch.WatchCheckStatusStore
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.renkinProject.renkin.data.transfer.PackVerdictManager
 import dev.renkinProject.renkin.data.getLongValue
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
-import dev.renkinProject.renkin.data.setLongValue
 import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.flow.Flow
@@ -43,9 +44,12 @@ import java.util.concurrent.TimeUnit
  */
 class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
+        var checkEpoch: Long? = null
         return try {
             val shouldCheck = StorageOperationGate.run {
-                !inputData.getBoolean(KEY_PERIODIC, false) || enoughTimeElapsed()
+                (!inputData.getBoolean(KEY_PERIODIC, false) || enoughTimeElapsed()).also {
+                    if (it) checkEpoch = StorageOperationGate.epoch
+                }
             }
             val checked = if (shouldCheck) {
                 removeWatchRulesOfDeletedProfiles(
@@ -58,6 +62,7 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
                     val notifier = RenkinNotifications()
                     val profileRepo = RenkinPackRepository(applicationContext)
                     val watchRepo = WatchRepository(applicationContext)
+                    val summaryEntries = watchRepo.iconAvailableSummaryEntries(applicationContext)
                     for (suggestion in result.suggestions) {
                         val stored = watchRepo.getSuggestion(suggestion.suggestionId) ?: continue
                         val rule = watchRepo.getRule(stored.ruleId) ?: continue
@@ -66,9 +71,14 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
                         // A profile deleted during the scan: the next run removes its rules.
                         val profile = profileRepo.profile(suggestion.profileId) ?: continue
                         notifier.postIconAvailable(applicationContext, suggestion.suggestionId,
-                            suggestion.packageName, suggestion.packPackages, profile.name)
+                            suggestion.packageName, suggestion.packPackages, profile.name, summaryEntries)
                     }
-                    applicationContext.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())
+                    val partial = result.hadReadFailures
+                    WatchCheckStatusStore(applicationContext).record(
+                        result.storageEpoch,
+                        if (partial) WatchCheckOutcome.PARTIAL else WatchCheckOutcome.COMPLETE,
+                        result.suggestions.size
+                    )
                     true
                 }
             } else false
@@ -89,6 +99,15 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
         } catch (e: Exception) {
             // A failure that keeps retrying must stay diagnosable: error level with its stack trace.
             Log.error("WatchWorker", "Watch check failed", e)
+            checkEpoch?.let { epoch ->
+                try {
+                    WatchCheckStatusStore(applicationContext).record(epoch, WatchCheckOutcome.FAILED)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    Log.error("WatchWorker", "Could not retain the failed check result", error)
+                }
+            }
             Result.retry()
         }
     }

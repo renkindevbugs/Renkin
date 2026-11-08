@@ -53,6 +53,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -101,6 +103,8 @@ import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.ui.theme.ChangedOrange
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
+import dev.renkinProject.renkin.data.watch.WatchCheckOutcome
+import dev.renkinProject.renkin.data.watch.WatchCheckStatus
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.PermissionManager
 import dev.renkinProject.renkin.packages.notificationSettingsIntent
@@ -395,14 +399,7 @@ private fun WatchRuleList(
                 ) {
                     if (rules.isEmpty()) {
                         item {
-                            Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = stringResource(R.string.noWatchRulesYet),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                    modifier = Modifier.padding(32.dp)
-                                )
-                            }
+                            WatchEmptyState(Modifier.fillParentMaxSize())
                         }
                     }
                     if (completed.isNotEmpty()) {
@@ -486,6 +483,37 @@ private fun WatchRuleList(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun WatchEmptyState(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
+    ) {
+        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+            Box(Modifier.size(96.dp), contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Filled.NotificationsNone, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp)
+                )
+            }
+        }
+        Text(
+            stringResource(R.string.watchEmptyTitle),
+            style = MaterialTheme.typography.titleMediumEmphasized,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Text(
+            stringResource(R.string.watchEmptyDescription),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
+}
+
 /**
  * Shows when the next periodic check is due (from WorkManager's real schedule). In debug
  * builds it also exposes a frequency picker so the watcher can be tested without waiting
@@ -497,12 +525,12 @@ private fun WatchCheckScheduleRow() {
     val context = getCurrentContext()
     val nextCheck by watchViewModel.nextCheckAt.collectAsStateWithLifecycle()
     val intervalMinutes by watchViewModel.checkIntervalMinutes.collectAsStateWithLifecycle()
+    val lastCheck by watchViewModel.lastCheckStatus.collectAsStateWithLifecycle()
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
         val nextText = nextCheck?.let {
             stringResource(
@@ -513,15 +541,53 @@ private fun WatchCheckScheduleRow() {
                 )
             )
         } ?: stringResource(R.string.watchNextCheckUnknown)
-        Text(
-            text = nextText,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
-        )
-        if (BuildConfig.DEBUG) {
-            WatchIntervalPicker(intervalMinutes) { watchViewModel.setCheckIntervalMinutes(it) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = nextText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            if (BuildConfig.DEBUG) {
+                WatchIntervalPicker(intervalMinutes) { watchViewModel.setCheckIntervalMinutes(it) }
+            }
         }
+        lastCheck?.let { WatchLastCheckResult(it) }
+    }
+}
+
+@Composable
+private fun WatchLastCheckResult(status: WatchCheckStatus) {
+    val context = getCurrentContext()
+    fun formatTime(at: Long) = DateUtils.formatDateTime(
+        context, at, DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_ALL
+    )
+    val resultText = when (status.outcome) {
+        WatchCheckOutcome.COMPLETE -> if (status.foundCount == 0) stringResource(R.string.watchLastCheckNoIcons)
+            else androidx.compose.ui.res.pluralStringResource(
+                R.plurals.watchLastCheckFound, status.foundCount, status.foundCount
+            )
+        WatchCheckOutcome.PARTIAL -> stringResource(R.string.watchCheckPartial)
+        WatchCheckOutcome.FAILED -> stringResource(R.string.watchLastCheckFailed)
+    }
+    Text(
+        text = stringResource(R.string.watchLastCheckAt, formatTime(status.checkedAt)),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp)
+    )
+    Text(
+        text = resultText,
+        style = MaterialTheme.typography.bodySmall,
+        color = if (status.outcome == WatchCheckOutcome.COMPLETE) MaterialTheme.colorScheme.onSurfaceVariant
+            else MaterialTheme.colorScheme.error
+    )
+    if (status.outcome != WatchCheckOutcome.COMPLETE && status.lastSuccessfulAt > 0) {
+        Text(
+            text = stringResource(R.string.watchLastSuccessAt, formatTime(status.lastSuccessfulAt)),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

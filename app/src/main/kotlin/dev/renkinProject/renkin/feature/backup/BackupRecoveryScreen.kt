@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package dev.renkinProject.renkin.feature.backup
 
 import dev.renkinProject.renkin.ui.DialogNote
@@ -13,7 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -79,7 +81,7 @@ fun BackupRecoveryScreen(
                     }
                 }
             } else {
-                CircularProgressIndicator()
+                LoadingIndicator()
                 Text(stringResource(if (state == StorageRecoveryState.CHECKING) R.string.backupRecoveryChecking else R.string.backupRecoveryRunning))
             }
         }

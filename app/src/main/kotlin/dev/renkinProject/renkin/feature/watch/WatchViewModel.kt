@@ -6,7 +6,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.ExistingPeriodicWorkPolicy
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
-import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.WatchCheckIntervalKey
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
@@ -14,7 +13,6 @@ import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
 import dev.renkinProject.renkin.data.getPreferenceFlow
 import dev.renkinProject.renkin.data.setIntValue
-import dev.renkinProject.renkin.data.setLongValue
 import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.expiredSessionMessage
@@ -26,10 +24,14 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.watch.WatchRepository
+import dev.renkinProject.renkin.data.watch.WatchCheckOutcome
+import dev.renkinProject.renkin.data.watch.WatchCheckStatus
+import dev.renkinProject.renkin.data.watch.WatchCheckStatusStore
 import dev.renkinProject.renkin.service.WatchChecker
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.service.RenkinNotifications
 import dev.renkinProject.renkin.service.WatchWorker
+import dev.renkinProject.renkin.service.iconAvailableSummaryEntries
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -75,6 +77,10 @@ class WatchViewModel @Inject constructor(
     val nextCheckAt: StateFlow<Long?> =
         WatchWorker.nextScheduledCheckFlow(application)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val checkStatusStore = WatchCheckStatusStore(application)
+    val lastCheckStatus: StateFlow<WatchCheckStatus?> = checkStatusStore.status
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /** Configured periodic check interval in minutes (24h default; debug can lower it). */
     val checkIntervalMinutes: StateFlow<Int> =
@@ -191,10 +197,12 @@ class WatchViewModel @Inject constructor(
             StorageOperationGate.run {
                 if (!appProvider.isCurrentSession(expected)) return@run
                 val removedSuggestions = repo.deleteRules(ruleIds)
+                val remaining = repo.iconAvailableSummaryEntries(getApplication())
                 RenkinNotifications().cancelIconAvailable(
                     context = getApplication(),
                     suggestionIds = removedSuggestions,
-                    cancelSummary = repo.suggestionCount() == 0
+                    cancelSummary = remaining.isEmpty(),
+                    summaryEntries = remaining
                 )
             }
         } catch (error: CancellationException) {
@@ -228,16 +236,37 @@ class WatchViewModel @Inject constructor(
     // A restore replacing the storage mid-check makes the result stale: report nothing then.
     private suspend fun checkNow(): Int? {
         val app = getApplication<Application>()
-        val result = WatchChecker(app).runCheckResult(refreshCompletedSuggestions = true)
-        return StorageOperationGate.run {
-            if (!result.isCurrent()) return@run null
-            app.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())
-            val prefs = app.dataStore.getPreferencesAfterPendingWrites()
-            WatchWorker.schedulePeriodic(
-                app, normalizeWatchCheckInterval(prefs.getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)),
-                ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE
-            )
-            result.suggestions.size
+        val epoch = StorageOperationGate.run { StorageOperationGate.epoch }
+        try {
+            val result = WatchChecker(app).runCheckResult(refreshCompletedSuggestions = true)
+            return StorageOperationGate.run {
+                if (!result.isCurrent()) return@run null
+                checkStatusStore.record(
+                    result.storageEpoch,
+                    if (result.hadReadFailures) WatchCheckOutcome.PARTIAL else WatchCheckOutcome.COMPLETE,
+                    result.suggestions.size
+                )
+                val prefs = app.dataStore.getPreferencesAfterPendingWrites()
+                WatchWorker.schedulePeriodic(
+                    app, normalizeWatchCheckInterval(prefs.getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)),
+                    ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE
+                )
+                if (result.hadReadFailures) {
+                    toast(R.string.watchCheckPartial)
+                    null
+                } else result.suggestions.size
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            try {
+                checkStatusStore.record(epoch, WatchCheckOutcome.FAILED)
+            } catch (statusError: CancellationException) {
+                throw statusError
+            } catch (statusError: Exception) {
+                Log.error("WatchViewModel", "Could not retain the failed check result", statusError)
+            }
+            throw error
         }
     }
 

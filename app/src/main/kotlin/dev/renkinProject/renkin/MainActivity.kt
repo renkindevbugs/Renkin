@@ -93,6 +93,7 @@ class MainActivity : LocalizedActivity() {
         setContent {
             val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()
             val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
+            val startupProfile by viewModel.startupProfile.collectAsStateWithLifecycle()
             val recoveryState by StorageOperationGate.recoveryState.collectAsStateWithLifecycle()
             val recoveryFailureReason by StorageOperationGate.recoveryFailureReason.collectAsStateWithLifecycle()
             if (recoveryState == StorageRecoveryState.RECOVERING || recoveryState == StorageRecoveryState.FAILED ||
@@ -161,8 +162,16 @@ class MainActivity : LocalizedActivity() {
                                     ToastHost(toaster)
                                     // The overlay hides the home screen until the fire settles; composing
                                     // it earlier stalled the animation mid-burn.
+                                    // Published startup metadata is read after recovery, even if its outer gate still says CHECKING.
                                     if (startupLoading || !viewModel.launchFireSettled) {
-                                        MainStartupScreen()
+                                        MainStartupScreen(
+                                            profile = startupProfile,
+                                            showProfileSkeletons = viewModel.launchFireSettled &&
+                                                (recoveryState == StorageRecoveryState.READY ||
+                                                    (recoveryState == StorageRecoveryState.CHECKING &&
+                                                        !runtimeState.startupComplete && startupProfile != null)),
+                                            loadIcon = viewModel::profileSwitchArtwork
+                                        )
                                     } else {
                                         MainColumn(iconPackState.packs)
                                     }
@@ -202,6 +211,7 @@ class MainActivity : LocalizedActivity() {
 
     override fun onStart() {
         super.onStart()
+        viewModel.setBuildForeground(true)
         editorDraftViewModel.setBackgrounded(false)
         // An icon pack installed while the app was away won't be in the loaded list yet.
         // On every return to the foreground, diff the installed icon packs against what we
@@ -229,6 +239,7 @@ class MainActivity : LocalizedActivity() {
     }
 
     override fun onStop() {
+        viewModel.setBuildForeground(false)
         if (!isChangingConfigurations) {
             editorDraftViewModel.setBackgrounded(true)
             viewModel.flushUnsavedJournal()
@@ -244,6 +255,14 @@ class MainActivity : LocalizedActivity() {
     }
 
     private fun handleWatchIntent(intent: Intent?) {
+        if (intent?.action == ACTION_OPEN_WATCH) {
+            viewModel.openWatchFromNotification()
+            intent.action = null
+        }
+        if (intent?.action == ACTION_OPEN_BUILD) {
+            viewModel.openBuildFromNotification(intent.getBooleanExtra(EXTRA_INSTALL_READY_PACK, false))
+            intent.action = null
+        }
         if (intent?.action == ACTION_OPEN_SUGGESTION) {
             val id = intent.getLongExtra(EXTRA_SUGGESTION_ID, -1L)
             // Switches to the owning profile first (auto-saving the current one), then opens.
@@ -263,5 +282,8 @@ class MainActivity : LocalizedActivity() {
     companion object {
         const val ACTION_OPEN_SUGGESTION = "dev.renkinProject.renkin.OPEN_SUGGESTION"
         const val EXTRA_SUGGESTION_ID = "watch_suggestion_id"
+        const val ACTION_OPEN_WATCH = "dev.renkinProject.renkin.OPEN_WATCH"
+        const val ACTION_OPEN_BUILD = "dev.renkinProject.renkin.OPEN_BUILD"
+        const val EXTRA_INSTALL_READY_PACK = "install_ready_pack"
     }
 }

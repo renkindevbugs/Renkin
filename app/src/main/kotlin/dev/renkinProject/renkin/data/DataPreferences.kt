@@ -20,6 +20,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.data.watch.WatchLastCheckResultKey
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.extension.toNullableColor
 import dev.renkinProject.renkin.icon.creator.DEFAULT_SHAPE_CORNER_PERCENT
@@ -104,6 +105,8 @@ val ExternalInstallerComponentKey = stringPreferencesKey(EXTERNAL_INSTALLER_COMP
 val AskInstallerEveryTimeKey = booleanPreferencesKey(ASK_INSTALLER_EVERY_TIME_NAME)
 /** App-wide, not per profile: offer other profiles' generated packs as icon sources (issue #25). */
 val ShowRenkinPacksKey = booleanPreferencesKey(SHOW_RENKIN_PACKS_NAME)
+/** App-wide: skip decorative icon flights without suppressing loading feedback. */
+val ReduceIconMotionKey = booleanPreferencesKey("REDUCE_ICON_MOTION")
 val InstallerChoiceConfirmedKey = booleanPreferencesKey(INSTALLER_CHOICE_CONFIRMED_NAME)
 val IncludeVectorKey = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
 val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
@@ -339,14 +342,15 @@ private val legacyProfilePreferences = LegacyProfilePreferences(
 private val persistedPreferenceTypes: Map<String, (Any) -> Boolean> = buildMap {
     for (key in ProfileBooleanPrefKeys + listOf(
         AskInstallerEveryTimeKey, InstallerChoiceConfirmedKey, AppFilterNoIconKey,
-        OnboardingSeenKey, HideProfileShareWarningKey, ShowRenkinPacksKey
+        OnboardingSeenKey, HideProfileShareWarningKey, ShowRenkinPacksKey, ReduceIconMotionKey
     )) put(key.name) { it is Boolean }
     for (key in ProfileIntPrefKeys + listOf(
         DarkModeKey, InstallMethodKey, AppSortOrderKey, WatchCheckIntervalKey,
         AutoBackupIntervalKey, LastSeenWhatsNewVersionKey
     )) put(key.name) { it is Int }
     for (key in ProfileStringPrefKeys + listOf(
-        ExternalInstallerComponentKey, AutoBackupTreeUriKey, LastAutoBackupDigestKey, LastAutoBackupDocumentUriKey
+        ExternalInstallerComponentKey, AutoBackupTreeUriKey, LastAutoBackupDigestKey, LastAutoBackupDocumentUriKey,
+        WatchLastCheckResultKey
     )) {
         put(key.name) { it is String }
     }

@@ -120,6 +120,7 @@ import dev.renkinProject.renkin.ui.theme.GoldBase
 import dev.renkinProject.renkin.ui.theme.RemovedRed
 import dev.renkinProject.renkin.ui.theme.GoldShimmer
 import dev.renkinProject.renkin.ui.theme.CardShape
+import dev.renkinProject.renkin.ui.theme.readableAddedTextColor
 import kotlinx.coroutines.delay
 
 private const val CHANGE_BAR_ANIMATION_MS = 900
@@ -232,6 +233,8 @@ fun HeroPackCard(
     val themedCount = stats.themedCount
     val totalCount = stats.totalCount
     val fallbackCount = stats.fallbackCount
+    val heroBackground = MaterialTheme.colorScheme.primaryContainer
+    val addedTextColor = remember(heroBackground) { readableAddedTextColor(heroBackground) }
 
     var sheetOpen by remember { mutableStateOf(false) }
     var changesSession by remember { mutableStateOf<ProfileSessionToken?>(null) }
@@ -267,6 +270,7 @@ fun HeroPackCard(
 
     Surface(
         onClick = { sheetOpen = true },
+        enabled = !viewModel.buildBusy,
         shape = CardShape,
         color = MaterialTheme.colorScheme.primaryContainer,
         modifier = Modifier
@@ -345,7 +349,7 @@ fun HeroPackCard(
                             text = "+$addedCount",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = AddedGreen
+                            color = addedTextColor
                         )
                     }
                     if (removedCount > 0) {
@@ -940,8 +944,8 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
             targetValue = 1f,
             animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)),
             label = "shimmerSweep"
-        ).value
-    } else 0f
+        )
+    } else null
 
     Canvas(
         Modifier
@@ -962,7 +966,7 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
                     drawRect(color = GoldBase)
                     // The moving band travels a bit past both edges so the sweep fades in/out.
                     val band = size.width * 0.22f
-                    val x = shimmerProgress * (size.width + 2f * band) - band
+                    val x = (shimmerProgress?.value ?: 0f) * (size.width + 2f * band) - band
                     drawRect(
                         brush = Brush.horizontalGradient(
                             colors = listOf(

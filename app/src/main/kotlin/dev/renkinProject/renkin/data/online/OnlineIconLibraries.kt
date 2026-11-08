@@ -101,7 +101,9 @@ class OnlineIconRepository internal constructor(
     fun isBuiltIn(prefix: String): Boolean = localSets?.isBuiltIn(prefix) == true
 
     @Volatile private var memoryCollections: List<IconifyCollection>? = null
-    private val memoryIndexes = ConcurrentHashMap<String, List<OnlineIcon>>()
+    private data class CachedIconIndex(val sourceRevision: String, val icons: List<OnlineIcon>)
+
+    private val memoryIndexes = ConcurrentHashMap<String, CachedIconIndex>()
     private val indexLocks = ConcurrentHashMap<String, Mutex>()
     private val indexCacheLocks = ConcurrentHashMap<String, Mutex>()
     private val indexRefreshLocks = ConcurrentHashMap<String, Mutex>()
@@ -129,6 +131,11 @@ class OnlineIconRepository internal constructor(
     private val cacheRoot: File
         get() = File(context.cacheDir, "online-icons").apply { mkdirs() }
 
+    // Old flights keep their own namespace when a downloaded set replaces the source.
+    private suspend fun sourceRevision(prefix: String): String = localSets?.revision(prefix) ?: "network"
+
+    suspend fun previewCacheKey(icon: OnlineIcon): String = "${sourceRevision(icon.prefix)}|${icon.svgUrl}"
+
     suspend fun collections(): List<IconifyCollection>? = withContext(ioDispatcher) {
         memoryCollections?.let { return@withContext it }
         indexLocks.getOrPut("collections") { Mutex() }.withLock {
@@ -144,23 +151,27 @@ class OnlineIconRepository internal constructor(
     }
 
     suspend fun icons(collection: IconifyCollection): List<OnlineIcon>? = withContext(ioDispatcher) {
-        memoryIndexes[collection.prefix]?.let { return@withContext it }
+        val revision = sourceRevision(collection.prefix)
+        memoryIndexes[collection.prefix]?.takeIf { it.sourceRevision == revision }?.let { return@withContext it.icons }
         localSets?.set(collection.prefix)?.let { set ->
+            if (sourceRevision(collection.prefix) != revision) return@withContext null
             return@withContext set.visibleNames.map { OnlineIcon(set.prefix, it) }
-                .also { memoryIndexes[collection.prefix] = it }
+                .also { memoryIndexes[collection.prefix] = CachedIconIndex(revision, it) }
         }
         indexLocks.getOrPut("set:${collection.prefix}") { Mutex() }.withLock {
-            memoryIndexes[collection.prefix] ?: cachedOrFetch(
+            memoryIndexes[collection.prefix]?.takeIf { it.sourceRevision == revision }?.icons ?: cachedOrFetch(
                 cache = File(cacheRoot, "iconify-set-${cacheKey(collection.prefix)}.json"),
                 url = "https://api.iconify.design/collection?prefix=" +
                     URLEncoder.encode(collection.prefix, "UTF-8"),
                 parse = ::parseCollection,
                 onRefreshed = { refreshed ->
                     indexLocks.getValue("set:${collection.prefix}").withLock {
-                        memoryIndexes[collection.prefix] = refreshed
+                        if (sourceRevision(collection.prefix) == revision) {
+                            memoryIndexes[collection.prefix] = CachedIconIndex(revision, refreshed)
+                        }
                     }
                 }
-            )?.also { memoryIndexes[collection.prefix] = it }
+            )?.also { memoryIndexes[collection.prefix] = CachedIconIndex(revision, it) }
         }
     }
 
@@ -185,58 +196,62 @@ class OnlineIconRepository internal constructor(
     }
 
     suspend fun svg(icon: OnlineIcon, cachedOnly: Boolean = false): String? = withContext(ioDispatcher) {
-        svgMemory.get(icon.svgUrl)?.let { return@withContext it }
+        val revision = sourceRevision(icon.prefix)
+        val key = "$revision|${icon.svgUrl}"
+        svgMemory.get(key)?.let { return@withContext it }
         // The disk cache goes first: only one downloaded set stays parsed, so sample rows of several
         // downloaded sets would otherwise re-parse them in turn.
-        readCachedSvg(icon)?.let {
-            svgMemory.put(icon.svgUrl, it)
+        readCachedSvg(icon, revision)?.let {
+            svgMemory.put(key, it)
             return@withContext it
         }
         // A local set counts as cache: it renders while scrolling, offline and during a 429 pause.
         (localSets?.set(icon.prefix)?.lookup(icon.name) as? IconLookup.Markup)?.let {
-            svgMemory.put(icon.svgUrl, it.svg)
+            if (sourceRevision(icon.prefix) != revision) return@withContext null
+            svgMemory.put(key, it.svg)
             // Persist the extracted icon too, so a later miss skips re-parsing the whole set file
             // when browsing several downloaded sets evicts it from the single parsed slot.
-            runCatching { writeAtomically(svgCacheFile(icon), it.svg) }
+            runCatching { writeAtomically(svgCacheFile(icon, revision), it.svg) }
             return@withContext it.svg
         }
         if (cachedOnly) {
-            return@withContext readCachedSvg(icon)?.also { svgMemory.put(icon.svgUrl, it) }
+            return@withContext readCachedSvg(icon, revision)?.also { svgMemory.put(key, it) }
         }
-        val lock = svgLocks.getOrPut(icon.svgUrl) { Mutex() }
+        val lock = svgLocks.getOrPut(key) { Mutex() }
         try {
             lock.withLock {
-                svgMemory.get(icon.svgUrl)?.let { return@withLock it }
-                loadSvg(icon)?.also { svgMemory.put(icon.svgUrl, it) }
+                svgMemory.get(key)?.let { return@withLock it }
+                loadSvg(icon, revision)?.also { svgMemory.put(key, it) }
             }
         } finally {
-            if (!lock.isLocked) svgLocks.remove(icon.svgUrl, lock)
+            if (!lock.isLocked) svgLocks.remove(key, lock)
         }
     }
 
-    private fun svgCacheFile(icon: OnlineIcon): File {
+    private fun svgCacheFile(icon: OnlineIcon, revision: String): File {
         val dir = File(cacheRoot, "iconify-${cacheKey(icon.prefix)}").apply { mkdirs() }
-        return File(dir, "${cacheKey(icon.svgUrl)}.svg")
+        val identity = if (revision == "network") icon.svgUrl else "$revision|${icon.svgUrl}"
+        return File(dir, "${cacheKey(identity)}.svg")
     }
 
-    private fun readCachedSvg(icon: OnlineIcon): String? = svgCacheFile(icon)
+    private fun readCachedSvg(icon: OnlineIcon, revision: String): String? = svgCacheFile(icon, revision)
         .takeIf { it.isFile }
         ?.let { runCatching { it.readText() }.getOrNull() }
         ?.takeIf(::isWellFormedSvg)
 
-    private suspend fun loadSvg(icon: OnlineIcon): String? {
-        readCachedSvg(icon)?.let { return it }
-        if (!ICONIFY_NAME.matches(icon.name)) return fetchSingleSvg(icon)
-        return awaitBatchedSvg(icon)
+    private suspend fun loadSvg(icon: OnlineIcon, revision: String): String? {
+        readCachedSvg(icon, revision)?.let { return it }
+        if (!ICONIFY_NAME.matches(icon.name)) return fetchSingleSvg(icon, revision)
+        return awaitBatchedSvg(icon, revision)
     }
 
-    private suspend fun fetchSingleSvg(icon: OnlineIcon): String? {
+    private suspend fun fetchSingleSvg(icon: OnlineIcon, revision: String): String? {
         val markup = httpGetText(icon.svgUrl, MAX_SVG_BYTES, limitSvgRequests = true) ?: return null
         if (!isWellFormedSvg(markup)) {
             Log.error("OnlineIcons", "Invalid SVG response: ${icon.svgUrl}")
             return null
         }
-        writeAtomically(svgCacheFile(icon), markup)
+        writeAtomically(svgCacheFile(icon, revision), markup)
         return markup
     }
 
@@ -246,28 +261,28 @@ class OnlineIconRepository internal constructor(
      * so the 300 ms spacing and the shared 429 pause apply per batch. At most one flight per
      * prefix is active; the SVG permit is held only during its HTTP call.
      */
-    private suspend fun awaitBatchedSvg(icon: OnlineIcon): String? {
+    private suspend fun awaitBatchedSvg(icon: OnlineIcon, revision: String): String? {
         val result = synchronized(iconBatches) {
-            val queue = iconBatches.getOrPut(icon.prefix) { IconBatchQueue() }
+            val queue = iconBatches.getOrPut("${icon.prefix}|$revision") { IconBatchQueue() }
             queue.abandoned.remove(icon.name)
             val existing = queue.inFlight[icon.name]?.takeIf { !it.isCompleted }
                 ?: queue.pending[icon.name]
             existing ?: CompletableDeferred<String?>().also { deferred ->
                 queue.pending[icon.name] = deferred
-                if (queue.flight == null) queue.flight = launchBatchFlight(icon.prefix, queue)
+                if (queue.flight == null) queue.flight = launchBatchFlight(icon.prefix, revision, queue)
             }
         }
         try {
             return result.await()
         } catch (e: CancellationException) {
-            abandonBatchedName(icon)
+            abandonBatchedName(icon, revision)
             throw e
         }
     }
 
-    private fun abandonBatchedName(icon: OnlineIcon) {
+    private fun abandonBatchedName(icon: OnlineIcon, revision: String) {
         val flightToCancel = synchronized(iconBatches) {
-            val queue = iconBatches[icon.prefix] ?: return
+            val queue = iconBatches["${icon.prefix}|$revision"] ?: return
             if (queue.pending.remove(icon.name) == null) queue.abandoned.add(icon.name)
             val nobodyWaits = queue.pending.isEmpty() &&
                 queue.inFlight.keys.all { it in queue.abandoned }
@@ -281,14 +296,19 @@ class OnlineIconRepository internal constructor(
         flightToCancel?.cancel()
     }
 
-    private fun launchBatchFlight(prefix: String, queue: IconBatchQueue): Job = batchScope.launch {
+    private fun launchBatchFlight(prefix: String, revision: String, queue: IconBatchQueue): Job = batchScope.launch {
         val flight = coroutineContext[Job]
         try {
             while (true) {
                 // Tiles unlocked in the same frame enqueue a moment apart; let them join this batch.
                 delay(BATCH_GATHER_MS)
                 val idle = synchronized(iconBatches) {
-                    queue.pending.isEmpty().also { if (it && queue.flight === flight) queue.flight = null }
+                    queue.pending.isEmpty().also { empty ->
+                        if (empty && queue.flight === flight) {
+                            queue.flight = null
+                            if (queue.inFlight.isEmpty()) iconBatches.remove("$prefix|$revision", queue)
+                        }
+                    }
                 }
                 if (idle) return@launch
                 var sent: Map<String, CompletableDeferred<String?>> = emptyMap()
@@ -306,8 +326,8 @@ class OnlineIconRepository internal constructor(
                     val icon = OnlineIcon(prefix, name)
                     val markup = when (val entry = parsed?.lookup(name)) {
                         is IconLookup.Markup -> entry.svg.takeIf(::isWellFormedSvg)
-                            ?.also { writeAtomically(svgCacheFile(icon), it) }
-                        IconLookup.NeedsDirectFetch -> fetchSingleSvg(icon)
+                            ?.also { writeAtomically(svgCacheFile(icon, revision), it) }
+                        IconLookup.NeedsDirectFetch -> fetchSingleSvg(icon, revision)
                         IconLookup.Missing, null -> null
                     }
                     deferred.complete(markup)
@@ -327,7 +347,12 @@ class OnlineIconRepository internal constructor(
             }
         } finally {
             synchronized(iconBatches) {
-                if (queue.flight === flight) queue.flight = null
+                if (queue.flight === flight) {
+                    queue.flight = null
+                    if (queue.pending.isEmpty() && queue.inFlight.isEmpty()) {
+                        iconBatches.remove("$prefix|$revision", queue)
+                    }
+                }
             }
         }
     }

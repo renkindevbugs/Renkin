@@ -83,7 +83,11 @@ class WatchChecker(
         withContext(Dispatchers.Default) { block() }
     }
 
-    data class CheckResult(val suggestions: List<FiredSuggestion>, val storageEpoch: Long) {
+    data class CheckResult(
+        val suggestions: List<FiredSuggestion>,
+        val storageEpoch: Long,
+        val hadReadFailures: Boolean = false
+    ) {
         // Check under the storage gate together with notification/metadata side effects.
         fun isCurrent(): Boolean = storageEpoch == StorageOperationGate.epoch
     }
@@ -183,7 +187,7 @@ class WatchChecker(
                 committed
             }
         }
-        CheckResult(fired, epoch)
+        CheckResult(fired, epoch, packIcons.hadReadFailures)
     }
 
     private fun planActive(
@@ -204,7 +208,7 @@ class WatchChecker(
             if (resolved.componentChanged) {
                 val replacement = AppComponent(installedApp.packageName, installedApp.activityName)
                 return@mapNotNull AppCheck(replacement, component,
-                    buildBaseline(listOf(replacement), rule.rule.watchAllPacks, packs, installedPacks))
+                    buildBaseline(listOf(replacement), rule.rule.watchAllPacks, packs, installedPacks, packIcons::markReadFailure))
             }
             val states = mutableListOf<WatchState>()
             val candidates = mutableListOf<CandidateInput>()
@@ -295,7 +299,8 @@ class WatchChecker(
         apps: List<AppComponent>,
         watchAllPacks: Boolean,
         selectedPacks: List<String>,
-        installedPacks: Map<String, IconPack> = watchablePacks()
+        installedPacks: Map<String, IconPack> = watchablePacks(),
+        onReadFailure: () -> Unit = {}
     ): List<BaselineInput> {
         val packPackages = if (watchAllPacks) {
             installedPacks.keys.toList()
@@ -313,7 +318,10 @@ class WatchChecker(
             // A third-party pack with a malformed appfilter.xml throws while parsing. Skip that
             // pack instead of failing the whole baseline — the same isolation IconPackRepository
             // applies when loading packs.
-            val parsed = readWatchPackOrNull(packPackage) {
+            val parsed = readWatchPackOrNull(packPackage, onFailure = {
+                onReadFailure()
+                Log.error("WatchChecker", "Skipping unreadable pack $packPackage", it)
+            }) {
                 val elements = appMan.getAppFilterRawElements(packPackage, installedApps)
                 elements to appMan.getDrawableFromAppFilterElements(
                     packPackage, installedApps, elements

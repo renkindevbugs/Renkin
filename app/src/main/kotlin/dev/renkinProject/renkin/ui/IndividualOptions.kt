@@ -88,7 +88,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
@@ -1352,10 +1351,9 @@ private fun PackBrowserToolbar(packBrowser: PackBrowserChrome) {
         )
     }
     if (packBrowser.busy) {
-        LinearProgressIndicator(
+        WavyLoadingBar(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(3.dp)
         )
     }
 }

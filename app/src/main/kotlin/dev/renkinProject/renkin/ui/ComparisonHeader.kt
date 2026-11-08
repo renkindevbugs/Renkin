@@ -41,8 +41,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -240,10 +239,9 @@ internal fun ComparisonHeader(
             // Mihon-style activity line right under the bar: visible while pack rows are still
             // resolving the query, so "search finished" is unambiguous.
             if (showProgress) {
-                LinearProgressIndicator(
+                WavyLoadingBar(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(3.dp)
                 )
             }
 
@@ -538,6 +536,7 @@ private fun NewSlot(
     // steps aside while a copy is in the air.
     val flight = LocalIconFlight.current
     if (flight != null) SideEffect { flight.newSlotIcon = previewIcon }
+    val enlargeLabel = stringResource(R.string.enlargeNewIconPreview)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
             androidx.compose.animation.AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
@@ -550,7 +549,12 @@ private fun NewSlot(
                                 .graphicsLayer { alpha = if (flight.newSlotHidden) 0f else 1f }
                         )
                         .size(size)
-                        .clickable(enabled = previewIcon != null) { enlarged = true },
+                        .clickable(
+                            enabled = previewIcon != null,
+                            role = Role.Button,
+                            onClickLabel = enlargeLabel
+                        ) { enlarged = true }
+                        .semantics { contentDescription = enlargeLabel },
                     shape = iconTileShape(size),
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     border = BorderStroke(2.dp, borderColor)
@@ -579,9 +583,8 @@ private fun NewSlot(
                         }
                         // Only sustained work gets an activity indicator; quick updates stay instant.
                         if (showLoading) {
-                            CircularProgressIndicator(
+                            LoadingIndicator(
                                 modifier = Modifier.size(size / 2),
-                                strokeWidth = 2.dp,
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }

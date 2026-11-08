@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.data.online
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.util.Log
 import java.io.InputStream
 import javax.inject.Inject
@@ -31,6 +32,12 @@ class LocalIconSets internal constructor(
     @Volatile private var bundled: IconifySet? = null
 
     fun isBuiltIn(prefix: String): Boolean = prefix == BUNDLED_PREFIX
+
+    internal suspend fun revision(prefix: String): String {
+        if (isBuiltIn(prefix)) return "bundled:${BuildConfig.VERSION_CODE}"
+        downloads?.ensureScanned()
+        return downloads?.sets?.value?.get(prefix)?.let { "downloaded:${it.version}" } ?: "network"
+    }
 
     internal suspend fun set(prefix: String): IconifySet? {
         if (!isBuiltIn(prefix)) return downloads?.set(prefix)
