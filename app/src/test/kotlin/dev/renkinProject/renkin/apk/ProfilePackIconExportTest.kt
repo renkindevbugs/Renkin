@@ -17,7 +17,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -29,6 +31,23 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ProfilePackIconExportTest {
     private data class Export(val module: ApkModule, val resources: PackageBlock, val manifest: AndroidManifestBlock)
+
+    @get:Rule
+    val buildDirectory = TemporaryFolder()
+
+    @Test
+    fun encodedIconsAreStagedFilesInsideTheBuildDirectoryNotHeapBytes() {
+        val pixels = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.MAGENTA) }
+        val result = export(BitmapIconDrawable(pixels))
+        val path = result.resources.getEntry("", "mipmap", "ic_launcher")!!.valueAsString
+
+        val source = result.module.getInputSource(path)
+
+        assertTrue("$path is held as ${source.javaClass.simpleName}", source is StagedFileInputSource)
+        val staged = (source as StagedFileInputSource).file
+        assertTrue(staged.isFile)
+        assertTrue(staged.canonicalPath.startsWith(buildDirectory.root.resolve("stage").canonicalPath))
+    }
 
     @Test
     fun legacyCustomIconIsTheManifestIconAndDoesNotRetainDefaultAdaptiveVariants() {
@@ -93,7 +112,7 @@ class ProfilePackIconExportTest {
         manifest.packageName = "example.custom.profile"
         manifest.setApplicationLabel("Custom profile")
         assertNotNull("Fixture must resolve android:drawable", table.getResource(android.R.attr.drawable))
-        val builder = IconPackBuilder(context, emptyList(), emptyMap(), emptyMap(), packIcon = icon)
+        val builder = IconPackBuilder(context, emptyList(), emptyMap(), emptyMap(), apkDir = buildDirectory.root, packIcon = icon)
         IconPackBuilder::class.java.getDeclaredMethod("insertIconPackAppIcons", ApkModule::class.java,
             PackageBlock::class.java, AndroidManifestBlock::class.java).apply { isAccessible = true }
             .invoke(builder, module, resources, manifest)

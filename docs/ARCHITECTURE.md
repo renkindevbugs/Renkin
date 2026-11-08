@@ -1486,8 +1486,9 @@ be assumed to open the upgraded database.
   the captured dirty state as well as the icon; its snackbar follows the remaining live row count.
 - Builds capture profile identity, recipe, icons, calendar selections and lock policy under the
   gate. Calendar drawable loading, APK assembly and signing run outside it. Build jobs serialize
-  separately around the shared keystore and use distinct APK directories. Unsigned APKs are
-  removed after signing; completed directories are pruned on the next build. Pending installer
+  separately around the shared keystore and use distinct APK directories. Encoded raster
+  resources are staged as files in the build directory and removed once the unsigned APK is written.
+  Unsigned APKs are removed after signing; completed directories are pruned on the next build. Pending installer
   choices and conflict/replacement retries retain their APK reservation; dismissing a choice or
   clearing its ViewModel releases it. Cancelled build handoffs remove their working directory.
   Unmarked orphaned or timed-out artifacts have a 24-hour grace period before pruning. Installation persists

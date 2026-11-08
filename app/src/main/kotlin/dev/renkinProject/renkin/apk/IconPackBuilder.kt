@@ -21,7 +21,6 @@ import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
-import dev.renkinProject.renkin.extension.getBytes
 import dev.renkinProject.renkin.extension.getDrawableOrNull
 import dev.renkinProject.renkin.extension.toByteArray
 import dev.renkinProject.renkin.packages.IconPackCatalog
@@ -42,6 +41,7 @@ import dev.renkinProject.renkin.xml.file.VectorXml
 import dev.renkinProject.renkin.xml.file.XmlMemoryFile
 import com.reandroid.apk.ApkModule
 import com.reandroid.archive.ByteInputSource
+import com.reandroid.archive.InputSource
 import com.reandroid.arsc.chunk.PackageBlock
 import com.reandroid.arsc.chunk.TableBlock
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
@@ -97,6 +97,9 @@ class IconPackBuilder(
 ) {
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
+    // Encoded rasters wait here instead of in the heap until writeApk copies them; cleanup on failure is ApkBuildArtifacts.abandon.
+    private val stageDir = apkDir.resolve("stage")
+    private val stageResDir by lazy { stageDir.resolve("res").also { check(it.mkdirs() || it.isDirectory) } }
     private val keyStoreFile = PackKeystore.keystoreFile(ctx.filesDir)
 
     private val iconPackName = packPackageName
@@ -441,6 +444,7 @@ class IconPackBuilder(
         apkModule.uncompressedFiles.addCommonExtensions()
         checkActive()
         apkModule.writeApk(unsignedApk)
+        stageDir.deleteRecursively()
 
         textMethod(ctx.resources.getString(R.string.signApk))
         checkActive()
@@ -640,7 +644,7 @@ class IconPackBuilder(
         return icon
     }
 
-    private fun generateBitmap(image: Bitmap, name: String): ByteInputSource {
+    private fun generateBitmap(image: Bitmap, name: String): InputSource {
         return if (PackageVersion.is30OrMore()) {
             generateLosslessWebp(image, name)
         } else if (PackageVersion.is29OrMore()) {
@@ -650,23 +654,25 @@ class IconPackBuilder(
         }
     }
 
-    private fun generatePng(image: Bitmap, name: String): ByteInputSource {
+    private fun generatePng(image: Bitmap, name: String): InputSource {
         return compressBitmap(image, name, CompressFormat.PNG)
     }
 
     @Suppress(SuppressDeprecation)
-    private fun generateWebp(image: Bitmap, name: String): ByteInputSource {
+    private fun generateWebp(image: Bitmap, name: String): InputSource {
         return compressBitmap(image, name, CompressFormat.WEBP) //Since sdk 29 webp with quality of 100 is lossless
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
-    private fun generateLosslessWebp(image: Bitmap, name: String): ByteInputSource {
+    private fun generateLosslessWebp(image: Bitmap, name: String): InputSource {
         return compressBitmap(image, name, CompressFormat.WEBP_LOSSLESS)
     }
 
-    private fun compressBitmap(image: Bitmap, name: String, format: CompressFormat, quality: Int = 100): ByteInputSource {
-        val bytes = image.getBytes(format, quality)
-        return ByteInputSource(bytes, name)
+    private fun compressBitmap(image: Bitmap, name: String, format: CompressFormat, quality: Int = 100): InputSource {
+        val file = stageResDir.resolve(name.removePrefix("res/"))
+        // compress reports a failed write only through its result; a truncated image must not be packed.
+        check(file.outputStream().buffered().use { image.compress(format, quality, it) }) { "Could not encode $name" }
+        return StagedFileInputSource(file, name)
     }
 
     private fun createColorResource(packageBlock: PackageBlock, name: String, color: String) {
