@@ -366,7 +366,7 @@ class BackupManager(
         // One appfilter parse per source pack for the whole export, not one per icon.
         val packMappings = mutableMapOf<String, Map<String, String>>()
         exportArchive(KIND_PROFILE, metadata) { writer ->
-            packRepo.readExportIcons { rows ->
+            packRepo.readExportIcons(profileId) { rows ->
                 writeBackupExport(metadata, writer, BackupCodec.FORMAT_VERSION) { id, consume ->
                     rows.visit(id) { consume(sharedIcon(it, packMappings)) }
                 }

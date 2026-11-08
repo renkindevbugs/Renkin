@@ -85,6 +85,15 @@ class OversizedIconRowTest {
         assertEquals(listOf(big, baseOnly, small, otherProfile), exported)
     }
 
+    @Test fun profileScopedExportReadsOnlyThatProfileWithItsLongArtwork() = runBlocking {
+        val exported = mutableListOf<DbApplication>()
+        repo.readExportIcons(profileId = 2) { rows ->
+            rows.visit(2) { exported += it }
+            rows.visit(1) { exported += it }
+        }
+        assertEquals(listOf(otherProfile), exported)
+    }
+
     @Test fun exportSnapshotBlocksAnotherWriterAcrossSuspension() = runBlocking {
         val entered = CompletableDeferred<Unit>()
         val resume = CompletableDeferred<Unit>()

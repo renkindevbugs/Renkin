@@ -164,13 +164,13 @@ class RenkinPackStore(
      * Replaces [profileId]'s stored set with the created icons and calendar flags of [apps],
      * plus [preservedRows] — rows held back from the in-memory list (locked behind a missing
      * paid pack, or belonging to apps not installed here) that must survive the save. A live
-     * app entry always wins over a preserved row with the same key.
+     * app entry always wins over a preserved row with the same key. Returns the written rows.
      */
     suspend fun save(
         profileId: Long,
         apps: List<PackageInfoStruct>,
         preservedRows: Collection<DbApplication> = emptyList()
-    ) = StorageOperationGate.run {
+    ): List<DbApplication> = StorageOperationGate.run {
         withContext(Dispatchers.Default) {
             val preparedInputs = timeProfilePhase("prepare inputs profile=$profileId") {
                 val prepared = mutableMapOf<IconModifierInput, IconModifierInputStore.Prepared>()
@@ -188,6 +188,7 @@ class RenkinPackStore(
                 repo.replaceAll(profileId, rows)
             }
             preparedInputs.forEach { (state, prepared) -> inputStore.accept(state, prepared) }
+            rows
         }
     }
 
@@ -296,14 +297,11 @@ class RenkinPackStore(
         })
     }
 
-    /** Records what a build shipped, replacing the previous record for that profile. */
-    suspend fun recordBuilt(profileId: Long) = withContext(Dispatchers.Default) {
-        repo.replaceBuiltIcons(
-            profileId,
-            repo.getAll(profileId).map {
-                BuiltIcon(profileId, it.packageName, it.activityName, it.fingerprint())
-            }
-        )
+    /** Records what a build shipped from the rows [save] just wrote, without reading the profile back. */
+    suspend fun recordBuilt(profileId: Long, savedRows: List<DbApplication>) = withContext(Dispatchers.Default) {
+        repo.replaceBuiltIcons(profileId, savedRows.map {
+            BuiltIcon(profileId, it.packageName, it.activityName, it.fingerprint())
+        })
     }
 
     suspend fun recordBuilt(

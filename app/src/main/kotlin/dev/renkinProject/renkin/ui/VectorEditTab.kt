@@ -306,7 +306,7 @@ internal fun EditVectorColumn(
             }
         }
 
-        val painter = rememberVectorPainter(editedVector.toImageVector())
+        val painter = rememberVectorPainter(remember(editedVector) { editedVector.toImageVector() })
 
         // One lazy list for the WHOLE tab: with the header (preview, switches, pills)
         // outside the list only the path rows could scroll — on small screens everything
@@ -425,9 +425,15 @@ internal fun EditVectorColumn(
             }
 
             itemsIndexed(state.entries) { index, entry ->
+                // Rebuilding every visible thumbnail on each recomposition (a Thickness step) copied
+                // the whole template per row; the inputs below fully determine both values.
+                val previewVector = remember(entry, vector, state.thickness, state.viewportOverride) {
+                    entry.toPreviewVector(vector, state.thickness, state.viewportOverride)
+                }
+                val pathString = remember(entry.path.pathData) { entry.path.pathData.toStringPath() }
                 VectorPathItem(
-                    previewVector = entry.toPreviewVector(vector, state.thickness, state.viewportOverride),
-                    pathString = entry.path.pathData.toStringPath(),
+                    previewVector = previewVector,
+                    pathString = pathString,
                     filled = entry.filled,
                     gradient = entry.activeBrush() as? VectorGradientBrush,
                     onMakeSolid = { solid ->

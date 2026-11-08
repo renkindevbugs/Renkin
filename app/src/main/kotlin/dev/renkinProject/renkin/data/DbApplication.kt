@@ -268,6 +268,9 @@ interface RenkinPackDao {
     @Query("SELECT profileId, packageName, activityName FROM DbApplication ORDER BY rowid")
     fun exportKeys(): List<IconExportKey>
 
+    @Query("SELECT profileId, packageName, activityName FROM DbApplication WHERE profileId = :profileId ORDER BY rowid")
+    fun exportKeysOf(profileId: Long): List<IconExportKey>
+
     @Query("SELECT DISTINCT sourcePackName FROM DbApplication WHERE sourcePackName != '' " +
         "AND (:profileId IS NULL OR profileId = :profileId) " +
         "AND (:excludedProfileId IS NULL OR profileId != :excludedProfileId)")

@@ -281,13 +281,13 @@ class WatchChecker(
             val existing = repo.getStatesForRule(rule.rule.id).mapTo(mutableSetOf()) {
                 Triple(it.packageName, it.activityName, it.iconPackPackage)
             }
-            val baseline = buildBaseline(
-                apps = rule.apps.map { AppComponent(it.packageName, it.activityName) },
-                watchAllPacks = rule.rule.watchAllPacks,
-                selectedPacks = rule.packs.map { it.iconPackPackage },
-                installedPacks = installedPacks
-            ).filterNot { Triple(it.packageName, it.activityName, it.iconPackPackage) in existing }
-            repo.upsertStates(rule.rule.id, baseline)
+            val apps = rule.apps.map { AppComponent(it.packageName, it.activityName) }
+            val packs = if (rule.rule.watchAllPacks) installedPacks.keys else rule.packs.map { it.iconPackPackage }
+            // Resolve only pairs without a baseline: complete rules (the usual case) parse nothing.
+            for ((pack, missingApps) in missingBaselinePairs(apps, packs, existing)) {
+                val baseline = buildBaseline(missingApps, watchAllPacks = false, listOf(pack), installedPacks)
+                repo.upsertStates(rule.rule.id, baseline)
+            }
         }
     }
 
@@ -384,3 +384,12 @@ class WatchChecker(
 }
 
 private suspend fun commitRuleDirectly(operation: suspend () -> Long): Long = operation()
+
+/** Per pack, the apps of a rule that have no stored baseline yet; packs with none are left out. */
+internal fun missingBaselinePairs(
+    apps: List<AppComponent>,
+    packs: Collection<String>,
+    existing: Set<Triple<String, String, String>>
+): Map<String, List<AppComponent>> = packs.associateWith { pack ->
+    apps.filter { Triple(it.packageName, it.activityName, pack) !in existing }
+}.filterValues { it.isNotEmpty() }

@@ -143,4 +143,23 @@ class PackVerdictManagerTest {
         repo.upsertVerdicts(listOf(verdict.copy(verdict = VERDICT_PAID)))
         assertTrue(manager.lockedPacksAmong(setOf("pack.x")).isEmpty())
     }
+
+    @Test
+    fun ensureVerdicts_skipsTheStoreForOwnedPacksWithALabel_butAsksForAMissingLabel() = runBlocking {
+        repo.upsertVerdicts(listOf(
+            PackVerdict("pack.owned", label = "Owned Icons", seenInstalled = true),
+            PackVerdict("pack.nameless", seenInstalled = true)
+        ))
+        val looked = mutableListOf<String>()
+        val manager = PackVerdictManager(context, repo) { pack ->
+            looked += pack
+            StoreLookupResult(StoreVerdict.FREE, label = "Nameless Icons")
+        }
+
+        manager.ensureVerdicts(setOf("pack.owned", "pack.nameless"))
+
+        assertEquals(listOf("pack.nameless"), looked)
+        assertEquals("Nameless Icons", repo.verdicts(listOf("pack.nameless")).getValue("pack.nameless").label)
+        assertTrue(manager.lockedPacksAmong(setOf("pack.owned", "pack.nameless")).isEmpty())
+    }
 }

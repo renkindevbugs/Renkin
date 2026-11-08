@@ -74,6 +74,17 @@ class SharedBaseStorageTest {
         repo.getAll(1).single()
     }
 
+    @Test fun saveReturnsTheWrittenRowsSoABuildRecordMatchesTheStoredProfile() = runBlocking {
+        val written = store.save(1, listOf(PackageInfoStruct(
+            appName = "App", packageName = "app.one", activityName = "Main", icon = ColorDrawable(0), iconID = 0,
+            createdIcon = bitmapIcon(AndroidColor.RED), baseIcon = bitmapIcon(AndroidColor.BLUE)
+        )))
+
+        assertEquals(repo.getAll(1), written)
+        store.recordBuilt(1, written)
+        assertEquals(store.savedHashes(1), store.builtHashes(1))
+    }
+
     @Test fun unchangedBaseIsStoredOnceAndRestoresAsADetachedCopy() = runBlocking {
         val icon = bitmapIcon(AndroidColor.BLUE)
         val row = saveAndRead(icon, icon)

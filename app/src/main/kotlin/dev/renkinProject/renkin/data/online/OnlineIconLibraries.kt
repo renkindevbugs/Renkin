@@ -195,6 +195,9 @@ class OnlineIconRepository internal constructor(
         // A local set counts as cache: it renders while scrolling, offline and during a 429 pause.
         (localSets?.set(icon.prefix)?.lookup(icon.name) as? IconLookup.Markup)?.let {
             svgMemory.put(icon.svgUrl, it.svg)
+            // Persist the extracted icon too, so a later miss skips re-parsing the whole set file
+            // when browsing several downloaded sets evicts it from the single parsed slot.
+            runCatching { writeAtomically(svgCacheFile(icon), it.svg) }
             return@withContext it.svg
         }
         if (cachedOnly) {
