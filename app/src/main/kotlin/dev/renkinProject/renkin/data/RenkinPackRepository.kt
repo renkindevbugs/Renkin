@@ -127,8 +127,10 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         consistentRead { withFullArtwork(dao.getAllProfilesInline(), dao.oversizedArtworkAllProfiles()) }
     }
 
-    internal suspend fun <T> readExportIcons(block: suspend (ExportIcons) -> T): T = transaction {
-        val rows = ExportIcons(dao.exportKeys(), dao.oversizedArtworkAllProfiles())
+    /** [profileId] limits a shared profile's export to its own rows; null reads every profile (backup). */
+    internal suspend fun <T> readExportIcons(profileId: Long? = null, block: suspend (ExportIcons) -> T): T = transaction {
+        val rows = if (profileId == null) ExportIcons(dao.exportKeys(), dao.oversizedArtworkAllProfiles())
+        else ExportIcons(dao.exportKeysOf(profileId), dao.oversizedArtwork(profileId))
         try { block(rows) } finally { rows.active = false }
     }
 

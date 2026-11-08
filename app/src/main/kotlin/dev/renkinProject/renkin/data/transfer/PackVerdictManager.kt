@@ -127,6 +127,10 @@ class PackVerdictManager(
                     .also { updates.add(it) }
                 continue
             }
+            // Ownership already makes every icon usable; a store verdict would change nothing, so
+            // an owned pack is looked up only to learn a missing label.
+            val current = verdicts[pack] ?: row
+            if (current.seenInstalled && current.label.isNotEmpty()) continue
             val undecided = (verdicts[pack] ?: row).verdict == VERDICT_UNKNOWN
             val retryDue = now - ((verdicts[pack] ?: row).checkedAt) >= RETRY_INTERVAL_MS
             if (undecided && retryDue) {

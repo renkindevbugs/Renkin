@@ -257,6 +257,8 @@ class IconGenerationService(
             iconPackCatalog = iconPackCatalog
         )
         for (drawable in drawables) {
+            // A superseded search cancels this batch; stop before the next icon instead of finishing it.
+            ensureActive()
             // One broken icon must not take the whole pack down (#119)
             exportDrawables[drawable] = try {
                 builder.colorizeFromIconPack(iconPackName, drawable)

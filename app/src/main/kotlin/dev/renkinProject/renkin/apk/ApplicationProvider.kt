@@ -1364,8 +1364,7 @@ class ApplicationProvider internal constructor(
                         profileId = iconPack.profileId, apps = iconPack.profileApps,
                         preservedRows = iconPack.preservedRows, unbuiltAfter = false,
                         liveSession = iconPack.sessionToken
-                    )
-                    renkinPackStore.recordBuilt(iconPack.profileId)
+                    )?.let { renkinPackStore.recordBuilt(iconPack.profileId, it) }
                 } else {
                     // A newer explicit save wins; the built baseline still describes the older APK.
                     renkinPackStore.recordBuilt(iconPack.profileId, iconPack.profileApps, iconPack.preservedRows)
@@ -1454,18 +1453,18 @@ class ApplicationProvider internal constructor(
         preservedRows: Collection<DbApplication>,
         unbuiltAfter: Boolean,
         liveSession: ProfileSessionToken?
-    ) {
+    ): List<DbApplication>? {
         // A profile can be deleted through another UI path while the system installer owns the
         // screen. Do not recreate icon rows that no longer have an owning profile.
-        if (!profileManager.profileExists(profileId)) return
-        renkinPackStore.save(profileId, apps, preservedRows)
+        if (!profileManager.profileExists(profileId)) return null
+        val savedRows = renkinPackStore.save(profileId, apps, preservedRows)
         savedProfileRevisions[profileId] = (savedProfileRevisions[profileId] ?: 0L) + 1L
         editorDraftInvalidation.afterProfileSaved(profileId)
         profileManager.markUnbuilt(profileId, unbuiltAfter)
 
         // Only the matching live session may be mutated. An inactive profile will load these
         // persisted rows as locked when the user returns to it.
-        if (liveSession == null || !isCurrentSession(liveSession)) return
+        if (liveSession == null || !isCurrentSession(liveSession)) return savedRows
         val savedByKey = apps.associateBy { it.key }
         val matchingKeys = applicationList.filter { savedByKey[it.key] == it }.mapTo(mutableSetOf()) { it.key }
         lockManager.releaseReplaced(apps.filter { it.key in matchingKeys && it.createdIcon != null }.mapTo(mutableSetOf()) { it.key })
@@ -1473,6 +1472,7 @@ class ApplicationProvider internal constructor(
             if (app.isRefreshMade && savedByKey[app.key] == app) editApplication(index, app.locked())
         }
         unsavedIconKeys = unsavedIconKeys - matchingKeys
+        return savedRows
     }
 
     private suspend fun loadRenkinPack(profileId: Long) {
