@@ -29,8 +29,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 internal data class IconGenerationSources(
-    val primary: () -> Map<InstalledApplication, ResourceDrawable>,
-    val secondary: () -> Map<InstalledApplication, ResourceDrawable>,
+    val primary: () -> (InstalledApplication) -> ResourceDrawable?,
+    val secondary: () -> (InstalledApplication) -> ResourceDrawable?,
     val fallbackPack: String
 )
 

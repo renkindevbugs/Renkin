@@ -42,6 +42,24 @@ class AppFilterIndex internal constructor(
 
     internal fun elementsFor(packageName: String, requestedApps: List<InstalledApplication>): List<RawElement>? =
         elementsByPackage[packageName]?.takeIf { requestedApps.all { it.toComponentInfo() in components } }
+
+    internal fun drawableNameFor(packageName: String, app: InstalledApplication): String? =
+        drawableNamesByPackage[packageName]?.get(app.toComponentInfo())
+
+    internal fun covers(app: InstalledApplication): Boolean = app.toComponentInfo() in components
+}
+
+/**
+ * Looks up an app's drawable in [iconPack] as declared by the captured [index], resolving only when asked.
+ * Like the full-map pairing, apps outside the index's applications get nothing.
+ */
+internal fun appDrawableLookup(
+    index: AppFilterIndex,
+    iconPack: String,
+    resolve: (drawableName: String) -> ResourceDrawable?
+): (InstalledApplication) -> ResourceDrawable? {
+    if (iconPack.isEmpty() || index.drawableNamesByPackage[iconPack].isNullOrEmpty()) return { null }
+    return { app -> if (index.covers(app)) index.drawableNameFor(iconPack, app)?.let(resolve) else null }
 }
 
 /** Packs and the index built from them are published together, so no reader can pair them across loads. */
@@ -287,14 +305,14 @@ class IconPackRepository(
         }
     }
 
-    internal fun captureAppDrawables(iconPack: String): () -> Map<InstalledApplication, ResourceDrawable> {
+    /**
+     * Captures the current index now (callers hold the profile gate) and returns a factory of
+     * per-app lookups over it. A generator asks only for the apps it renders, so one icon no
+     * longer decodes the whole pack, and each lookup reads the pack's Resources afresh.
+     */
+    internal fun captureAppDrawables(iconPack: String): () -> (InstalledApplication) -> ResourceDrawable? {
         val index = state.value.index
-        val elements = index.elementsByPackage[iconPack].orEmpty()
-        val applications = index.applications
-        return {
-            if (iconPack.isEmpty() || elements.isEmpty()) emptyMap()
-            else appManager.getDrawableFromAppFilterElements(iconPack, applications, elements)
-        }
+        return { appDrawableLookup(index, iconPack, appManager.packDrawableResolver(iconPack)) }
     }
 
     /**
@@ -307,8 +325,7 @@ class IconPackRepository(
 
     private fun getAppDrawable(app: InstalledApplication, iconPack: String, index: AppFilterIndex): ResourceDrawable? {
         if (iconPack == "") return null
-        val drawableName = index.drawableNamesByPackage[iconPack]?.get(app.toComponentInfo())
-            ?: return null
+        val drawableName = index.drawableNameFor(iconPack, app) ?: return null
         return appManager.getResourceDrawableByName(iconPack, drawableName)
     }
 
