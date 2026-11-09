@@ -173,6 +173,11 @@ internal class ApplicationManager(
     fun getResourceDrawableByName(iconPackName: String, drawableName: String): ResourceDrawable? =
         resourceResolver.getResources(iconPackName)?.let { getResourceDrawableByName(it, iconPackName, drawableName) }
 
+    fun resourceDrawableExists(iconPackName: String, drawableName: String): Boolean? =
+        resourceResolver.getResources(iconPackName)?.let { resources ->
+            resourceResolver.hasDrawable(resources, iconPackName, drawableName)
+        }
+
     /** Resolves [iconPackName]'s drawables by name, reading the pack's Resources once, on first use. */
     fun packDrawableResolver(iconPackName: String): (String) -> ResourceDrawable? {
         val res by lazy { resourceResolver.getResources(iconPackName) }
