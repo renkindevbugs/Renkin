@@ -48,7 +48,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -86,8 +85,10 @@ import dev.renkinProject.renkin.feature.debug.DialogGalleryScreen
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.data.DARK_MODE_DEFAULT
+import dev.renkinProject.renkin.feature.backup.BackupExportRow
 import dev.renkinProject.renkin.data.DarkMode
 import dev.renkinProject.renkin.data.DarkModeKey
+import dev.renkinProject.renkin.data.OledBlackKey
 import dev.renkinProject.renkin.data.InstallMethod
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
 import dev.renkinProject.renkin.data.ShowRenkinPacksKey
@@ -184,7 +185,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
             ) {
             SettingsSectionHeader(stringResource(R.string.settingsAppearance))
             SettingsGroup {
-                ThemeRow(prefs, viewModel::setDarkMode)
+                ThemeRow(prefs, viewModel::setDarkMode, viewModel::setOledBlack)
                 val activity = LocalActivity.current
                 // MainActivity handles locale changes without recreation; re-read on each one.
                 val languageTag = remember(LocalConfiguration.current) { viewModel.appLanguageTag() }
@@ -285,11 +286,11 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                         autoBackupFolderLauncher.launch(autoBackupTreeUri)
                     }
                 }
-                SettingsRow(
-                    Icons.Filled.Save,
-                    stringResource(R.string.exportBackup),
+                BackupExportRow(
+                    feedback = viewModel.backupExportFeedback,
                     busy = viewModel.backupInProgress || backupCheckInProgress
                 ) {
+                    viewModel.clearBackupExportFeedback()
                     scope.launch {
                         backupCheckInProgress = true
                         try {
@@ -658,28 +659,32 @@ private fun AutoBackupRow(
     }
 }
 
-/** The theme picker row: current value on the right, options in a dropdown. */
 @Composable
-private fun ThemeRow(prefs: DataStore<Preferences>, onSelect: (DarkMode) -> Unit) {
+private fun ThemeRow(
+    prefs: DataStore<Preferences>,
+    onSelect: (DarkMode) -> Unit,
+    onOledChange: (Boolean) -> Unit
+) {
     val selected = prefs.getEnumValue(DarkModeKey, DARK_MODE_DEFAULT)
+    val pureBlack = prefs.getBooleanValue(OledBlackKey)
     val labels = getDarkModeLabels()
     var open by remember { mutableStateOf(false) }
 
-    Box {
-        SettingsRow(
-            icon = Icons.Filled.DarkMode,
-            label = stringResource(R.string.theme),
-            value = labels[selected],
-            onClick = { open = true }
+    SettingsRow(
+        icon = Icons.Filled.DarkMode,
+        label = stringResource(R.string.theme),
+        value = labels[selected],
+        subtitle = stringResource(R.string.oledBlackEnabled).takeIf { pureBlack },
+        onClick = { open = true }
+    )
+    if (open) {
+        ThemePickerDialog(
+            selected = selected,
+            pureBlack = pureBlack,
+            onSelect = onSelect,
+            onOledChange = onOledChange,
+            onDismiss = { open = false }
         )
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            labels.forEach { (mode, label) ->
-                CheckableDropdownItem(label, checked = mode == selected) {
-                    open = false
-                    onSelect(mode)
-                }
-            }
-        }
     }
 }
 
@@ -725,18 +730,7 @@ internal fun PackUsageDialog(entries: List<ApplicationProvider.PackUsage>?, onDi
         actions = { DialogPrimaryAction(stringResource(R.string.ok), onDismiss) }
     ) {
         if (!entries.isNullOrEmpty()) {
-            val max = entries.maxOf { it.count }.coerceAtLeast(1)
-            DialogCard {
-                entries.forEach { entry ->
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        DialogFactRow(
-                            entry.label + if (entry.installed) "" else " · " + stringResource(R.string.packUsageNotInstalled),
-                            "${entry.count}"
-                        )
-                        LinearProgressIndicator(progress = { entry.count / max.toFloat() }, modifier = Modifier.fillMaxWidth())
-                    }
-                }
-            }
+            PackUsageContent(entries)
         }
     }
 }

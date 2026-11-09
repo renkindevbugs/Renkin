@@ -86,7 +86,8 @@ class WatchChecker(
     data class CheckResult(
         val suggestions: List<FiredSuggestion>,
         val storageEpoch: Long,
-        val hadReadFailures: Boolean = false
+        val hadReadFailures: Boolean = false,
+        val failedPackNames: List<String> = emptyList()
     ) {
         // Check under the storage gate together with notification/metadata side effects.
         fun isCurrent(): Boolean = storageEpoch == StorageOperationGate.epoch
@@ -187,7 +188,8 @@ class WatchChecker(
                 committed
             }
         }
-        CheckResult(fired, epoch, packIcons.hadReadFailures)
+        CheckResult(fired, epoch, packIcons.hadReadFailures,
+            packIcons.failedPackages.map { installedPacks[it]?.applicationName ?: it })
     }
 
     private fun planActive(
@@ -300,7 +302,7 @@ class WatchChecker(
         watchAllPacks: Boolean,
         selectedPacks: List<String>,
         installedPacks: Map<String, IconPack> = watchablePacks(),
-        onReadFailure: () -> Unit = {}
+        onReadFailure: (String) -> Unit = {}
     ): List<BaselineInput> {
         val packPackages = if (watchAllPacks) {
             installedPacks.keys.toList()
@@ -319,7 +321,7 @@ class WatchChecker(
             // pack instead of failing the whole baseline — the same isolation IconPackRepository
             // applies when loading packs.
             val parsed = readWatchPackOrNull(packPackage, onFailure = {
-                onReadFailure()
+                onReadFailure(packPackage)
                 Log.error("WatchChecker", "Skipping unreadable pack $packPackage", it)
             }) {
                 val elements = appMan.getAppFilterRawElements(packPackage, installedApps)

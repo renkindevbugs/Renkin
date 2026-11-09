@@ -100,6 +100,8 @@ val TEXT_TYPE_DEFAULT = TextType.FULL_NAME
 val FALLBACK_SOURCE_DEFAULT = FallbackSource.NONE
 
 val DarkModeKey = intPreferencesKey(DARK_MODE_NAME)
+/** App-wide: use a black canvas whenever the selected theme resolves to dark mode. */
+val OledBlackKey = booleanPreferencesKey("OLED_BLACK")
 val InstallMethodKey = intPreferencesKey(INSTALL_METHOD_NAME)
 val ExternalInstallerComponentKey = stringPreferencesKey(EXTERNAL_INSTALLER_COMPONENT_NAME)
 val AskInstallerEveryTimeKey = booleanPreferencesKey(ASK_INSTALLER_EVERY_TIME_NAME)
@@ -260,6 +262,7 @@ fun MutablePreferences.setGlobalShapeCornerPercent(percent: Int) {
 val AppSortOrderKey = intPreferencesKey(APP_SORT_ORDER_NAME)
 val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
 val WatchCheckIntervalKey = intPreferencesKey(WATCH_CHECK_INTERVAL_NAME)
+val WatchAutomaticChecksKey = booleanPreferencesKey("WATCH_AUTOMATIC_CHECKS")
 val LastWatchCheckAtKey = longPreferencesKey(LAST_WATCH_CHECK_AT_NAME)
 val AutoBackupIntervalKey = intPreferencesKey(AUTO_BACKUP_INTERVAL_NAME)
 val AutoBackupTreeUriKey = stringPreferencesKey(AUTO_BACKUP_TREE_URI_NAME)
@@ -342,7 +345,7 @@ private val legacyProfilePreferences = LegacyProfilePreferences(
 private val persistedPreferenceTypes: Map<String, (Any) -> Boolean> = buildMap {
     for (key in ProfileBooleanPrefKeys + listOf(
         AskInstallerEveryTimeKey, InstallerChoiceConfirmedKey, AppFilterNoIconKey,
-        OnboardingSeenKey, HideProfileShareWarningKey, ShowRenkinPacksKey, ReduceIconMotionKey
+        OnboardingSeenKey, HideProfileShareWarningKey, ShowRenkinPacksKey, ReduceIconMotionKey, OledBlackKey, WatchAutomaticChecksKey
     )) put(key.name) { it is Boolean }
     for (key in ProfileIntPrefKeys + listOf(
         DarkModeKey, InstallMethodKey, AppSortOrderKey, WatchCheckIntervalKey,

@@ -2071,6 +2071,41 @@ follow-ups; CRC verifies transport integrity only.
   (closing the Watch rule editor or quick-action sheet) is never a toast or a bare SharedFlow:
   `WatchViewModel.ruleSaveState` retains it with the opener's request id until that opener
   acknowledges it, so a detached UI loses nothing and a new editor never takes an older result.
+  The manual full-backup export row additionally observes `BackupUiCoordinator.backupExportFeedback`:
+  writing, completed, or failed. Success follows the finished SAF write and export cleanup;
+  cancellation clears it. Starting another accepted backup operation clears the old result.
+  Existing result toasts remain. This inline feedback is presentation only, not operation control.
+- **Appearance**: Settings → Theme uses schematic System/Light/Dark screen previews and a
+  separate global `OledBlackKey` toggle. DarkMode ordinals are unchanged. `RenkinTheme` applies
+  pure black only to dark-mode base/background surfaces, retaining raised cards and theme
+  foregrounds. The same color-scheme helper supplies the previews.
+- **Editor backdrop**: preparation creates a small software-blurred copy of the original app
+  icon off Main on pre-Android-12 devices; newer devices retain a small sharp source for GPU blur.
+  The approved recipe uses a 92%-height window, a square source at 65% of card width scaled
+  2.2×, 16dp blur before scaling, 85% opacity, 120% saturation, 30% surface wash and a fade
+  starting at 47% of the window. A custom Layout lets the source exceed the window before
+  clipping, matching the mockup's filter/transform geometry. The previous global opacity cap
+  is removed. The foreground icons and generated output are unaffected. API 36 was checked
+  on device; the older-device software approximation has not been checked on a physical device.
+- **Watch schedule**: the compact outlined card places the automatic-check switch and real
+  WorkManager next-run time in its top row. Its bottom strip contains the last-check time,
+  a clickable result icon (check/warning/info), and an interval chip opening a selection sheet.
+  Full results and unreadable pack names live in a `MessageDialog`; refreshing stays on the
+  existing pull-to-refresh gesture, without a Check now button. Hourly/6h/12h/24h intervals
+  are selectable; debug builds additionally offer 15 minutes. The cadence and automatic-mode
+  setters share a busy guard. `WatchAutomaticChecksKey` is global and
+  defaults to true for existing users. Disabling cancels periodic/queued automatic work;
+  workers also check the preference before scanning/publishing. Manual ViewModel checks remain
+  available and never re-enable the schedule. Startup/restore reconciliation honors the choice.
+  Partial results retain unreadable pack labels for the next visible result, without treating
+  an unreadable mapped icon as a successful empty result or advancing its checked version.
+  The details modal separates the secondary unreadable-pack heading from stronger pack-name
+  rows with launcher artwork. Installed labels resolve only when unique; unknown or ambiguous
+  legacy labels retain a generic icon. Debug resource diagnostics distinguish missing names
+  from load errors without changing how a pack's winning mapping is resolved.
+- **Statistics**: the pack-usage modal keeps true-origin counts, online-source attribution and
+  unavailable sources. It shows the attributed-icon total and per-source percentages with
+  static bars relative to that total, rather than loading indicators or top-source-normalized bars.
 - **Shapes**: use the tokens in `ui/theme/Shapes.kt` (`DialogShape`/`CardShape`/`FieldShape`/
   `InnerShape`/`IconShape`/`SwatchShape`, plus `iconTileShape(size)` for tiles whose corner is a
   quarter of their size) — no raw `RoundedCornerShape(...)` at call sites.

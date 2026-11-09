@@ -9,7 +9,6 @@ import dev.renkinProject.renkin.ui.DialogBadge
 import dev.renkinProject.renkin.ui.MessageDialog
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.material.icons.filled.NotificationsOff
-import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
@@ -103,8 +102,6 @@ import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.ui.theme.ChangedOrange
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
-import dev.renkinProject.renkin.data.watch.WatchCheckOutcome
-import dev.renkinProject.renkin.data.watch.WatchCheckStatus
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.PermissionManager
 import dev.renkinProject.renkin.packages.notificationSettingsIntent
@@ -514,111 +511,26 @@ private fun WatchEmptyState(modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * Shows when the next periodic check is due (from WorkManager's real schedule). In debug
- * builds it also exposes a frequency picker so the watcher can be tested without waiting
- * the full 24h — WorkManager's periodic floor is 15 min, so that's the smallest option.
- */
 @Composable
 private fun WatchCheckScheduleRow() {
     val watchViewModel: WatchViewModel = hiltViewModel()
-    val context = getCurrentContext()
     val nextCheck by watchViewModel.nextCheckAt.collectAsStateWithLifecycle()
     val intervalMinutes by watchViewModel.checkIntervalMinutes.collectAsStateWithLifecycle()
     val lastCheck by watchViewModel.lastCheckStatus.collectAsStateWithLifecycle()
+    val automatic by watchViewModel.automaticChecksEnabled.collectAsStateWithLifecycle()
+    val scheduleUpdating by watchViewModel.scheduleUpdating.collectAsStateWithLifecycle()
+    val iconPackState by watchViewModel.iconPackState.collectAsStateWithLifecycle()
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-    ) {
-        val nextText = nextCheck?.let {
-            stringResource(
-                R.string.watchNextCheck,
-                DateUtils.formatDateTime(
-                    context, it,
-                    DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_ALL
-                )
-            )
-        } ?: stringResource(R.string.watchNextCheckUnknown)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = nextText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            if (BuildConfig.DEBUG) {
-                WatchIntervalPicker(intervalMinutes) { watchViewModel.setCheckIntervalMinutes(it) }
-            }
-        }
-        lastCheck?.let { WatchLastCheckResult(it) }
-    }
-}
-
-@Composable
-private fun WatchLastCheckResult(status: WatchCheckStatus) {
-    val context = getCurrentContext()
-    fun formatTime(at: Long) = DateUtils.formatDateTime(
-        context, at, DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_ALL
+    WatchScheduleCard(
+        automatic = automatic,
+        scheduleUpdating = scheduleUpdating,
+        nextCheckAt = nextCheck,
+        intervalMinutes = intervalMinutes,
+        lastCheck = lastCheck,
+        iconPacks = iconPackState.packs,
+        onAutomaticChange = watchViewModel::setAutomaticChecks,
+        onIntervalChange = watchViewModel::setCheckIntervalMinutes
     )
-    val resultText = when (status.outcome) {
-        WatchCheckOutcome.COMPLETE -> if (status.foundCount == 0) stringResource(R.string.watchLastCheckNoIcons)
-            else androidx.compose.ui.res.pluralStringResource(
-                R.plurals.watchLastCheckFound, status.foundCount, status.foundCount
-            )
-        WatchCheckOutcome.PARTIAL -> stringResource(R.string.watchCheckPartial)
-        WatchCheckOutcome.FAILED -> stringResource(R.string.watchLastCheckFailed)
-    }
-    Text(
-        text = stringResource(R.string.watchLastCheckAt, formatTime(status.checkedAt)),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 4.dp)
-    )
-    Text(
-        text = resultText,
-        style = MaterialTheme.typography.bodySmall,
-        color = if (status.outcome == WatchCheckOutcome.COMPLETE) MaterialTheme.colorScheme.onSurfaceVariant
-            else MaterialTheme.colorScheme.error
-    )
-    if (status.outcome != WatchCheckOutcome.COMPLETE && status.lastSuccessfulAt > 0) {
-        Text(
-            text = stringResource(R.string.watchLastSuccessAt, formatTime(status.lastSuccessfulAt)),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-/** Debug-only frequency picker. Options are all valid WorkManager periodic intervals. */
-@Composable
-private fun WatchIntervalPicker(selectedMinutes: Int, onChange: (Int) -> Unit) {
-    val options = listOf(15, 60, 1440)
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        TextButton(onClick = { expanded = true }) {
-            Text(intervalLabel(selectedMinutes))
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { minutes ->
-                DropdownMenuItem(
-                    text = { Text(intervalLabel(minutes)) },
-                    onClick = { expanded = false; onChange(minutes) },
-                    leadingIcon = if (minutes == selectedMinutes) {
-                        { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
-            }
-        }
-    }
-}
-
-private fun intervalLabel(minutes: Int): String = when (minutes) {
-    15 -> "15 min"
-    60 -> "1 h"
-    1440 -> "24 h"
-    else -> "$minutes min"
 }
 
 @Composable

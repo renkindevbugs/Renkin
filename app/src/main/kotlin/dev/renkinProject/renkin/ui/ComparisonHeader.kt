@@ -88,8 +88,6 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -132,7 +130,8 @@ internal fun ComparisonHeader(
     extraActions: (@Composable () -> Unit)? = null,
     onNavigateBack: (() -> Unit)? = null,
     showProgress: Boolean = false,
-    previewVariants: PreviewVariants? = null
+    previewVariants: PreviewVariants? = null,
+    frostedBackdrop: Bitmap? = null
 ) {
     // Both icons fly up into their slots when the dialog opens
     val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
@@ -151,14 +150,11 @@ internal fun ComparisonHeader(
         // Single compact row — close + name on the left, comparison icons centered, apply +
         // overflow on the right. Left and right clusters share equal weight so the icons land
         // dead-center; a long name gets ellipsised before it can reach them.
-        ElevatedCard(
+        FrostedComparisonPanel(
+            backdrop = frostedBackdrop,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            shape = CardShape,
-            colors = CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            )
+                .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -245,14 +241,11 @@ internal fun ComparisonHeader(
                 )
             }
 
-            ElevatedCard(
+            FrostedComparisonPanel(
+                backdrop = frostedBackdrop,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                shape = CardShape,
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                )
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -299,7 +292,8 @@ internal fun EditPreviewPane(
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
     extraCard: (@Composable () -> Unit)? = null,
-    previewVariants: PreviewVariants? = null
+    previewVariants: PreviewVariants? = null,
+    frostedBackdrop: Bitmap? = null
 ) {
     val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
     val flyInSpec = spring<androidx.compose.ui.unit.IntOffset>(
@@ -341,10 +335,14 @@ internal fun EditPreviewPane(
 
             // Vertical comparison: label above the small Current icon, a downward arrow, then
             // the large New preview with its own label below — one clear top-to-bottom flow.
-            Column(
+            FrostedComparisonPanel(
+                backdrop = frostedBackdrop,
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+            ) {
+                Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 16.dp),
+                    .padding(vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -363,6 +361,7 @@ internal fun EditPreviewPane(
                         .size(20.dp)
                 )
                 NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 176.dp, labelExpand = 1f, variants = previewVariants)
+                }
             }
 
             extraCard?.let {

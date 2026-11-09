@@ -7,6 +7,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.work.ExistingPeriodicWorkPolicy
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.renkinProject.renkin.data.WatchCheckIntervalKey
+import dev.renkinProject.renkin.data.WatchAutomaticChecksKey
+import dev.renkinProject.renkin.data.getBooleanValue
+import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.getIntValue
@@ -40,6 +43,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -81,12 +86,45 @@ class WatchViewModel @Inject constructor(
     private val checkStatusStore = WatchCheckStatusStore(application)
     val lastCheckStatus: StateFlow<WatchCheckStatus?> = checkStatusStore.status
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val iconPackState = appProvider.iconPackState
 
     /** Configured periodic check interval in minutes (24h default; debug can lower it). */
     val checkIntervalMinutes: StateFlow<Int> =
         application.dataStore.getPreferenceFlow(WatchCheckIntervalKey)
             .map { normalizeWatchCheckInterval(it ?: WATCH_CHECK_INTERVAL_DEFAULT) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WATCH_CHECK_INTERVAL_DEFAULT)
+
+    val automaticChecksEnabled: StateFlow<Boolean> =
+        application.dataStore.getPreferenceFlow(WatchAutomaticChecksKey).map { it ?: true }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    private val mutableScheduleUpdating = MutableStateFlow(false)
+    val scheduleUpdating = mutableScheduleUpdating.asStateFlow()
+
+    fun setAutomaticChecks(enabled: Boolean) {
+        if (!mutableScheduleUpdating.compareAndSet(false, true)) return
+        viewModelScope.launch {
+            try {
+                StorageOperationGate.run {
+                    val app = getApplication<Application>()
+                    app.dataStore.setBooleanValue(WatchAutomaticChecksKey, enabled)
+                    val prefs = app.dataStore.getPreferencesAfterPendingWrites()
+                    WatchWorker.schedulePeriodic(
+                        app,
+                        normalizeWatchCheckInterval(prefs.getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)),
+                        ExistingPeriodicWorkPolicy.UPDATE,
+                        enabled = enabled
+                    )
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.error("WatchViewModel", "Could not update automatic checks", error)
+                toast(R.string.watchScheduleNotSaved)
+            } finally {
+                mutableScheduleUpdating.value = false
+            }
+        }
+    }
 
     // Strings are resolved here because "found N" carries a count the Int toast channels cannot.
     private val mutableToastEvents = Channel<String>(Channel.BUFFERED)
@@ -96,21 +134,26 @@ class WatchViewModel @Inject constructor(
         mutableToastEvents.trySend(getApplication<Application>().getString(message, *args))
     }
 
-    /** Debug: change how often the periodic check runs and reschedule it immediately. */
+    /** Change the cadence without re-enabling automatic checks in manual mode. */
     fun setCheckIntervalMinutes(minutes: Int) {
+        if (!mutableScheduleUpdating.compareAndSet(false, true)) return
         viewModelScope.launch {
             try {
                 StorageOperationGate.run {
                     val app = getApplication<Application>()
                     val normalized = normalizeWatchCheckInterval(minutes)
                     app.dataStore.setIntValue(WatchCheckIntervalKey, normalized)
-                    WatchWorker.schedulePeriodic(app, normalized, ExistingPeriodicWorkPolicy.UPDATE)
+                    val prefs = app.dataStore.getPreferencesAfterPendingWrites()
+                    WatchWorker.schedulePeriodic(app, normalized, ExistingPeriodicWorkPolicy.UPDATE,
+                        enabled = prefs.getBooleanValue(WatchAutomaticChecksKey, true))
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
                 Log.error("WatchViewModel", "Could not update the check interval", error)
                 toast(R.string.watchIntervalNotSaved)
+            } finally {
+                mutableScheduleUpdating.value = false
             }
         }
     }
@@ -244,12 +287,14 @@ class WatchViewModel @Inject constructor(
                 checkStatusStore.record(
                     result.storageEpoch,
                     if (result.hadReadFailures) WatchCheckOutcome.PARTIAL else WatchCheckOutcome.COMPLETE,
-                    result.suggestions.size
+                    result.suggestions.size,
+                    result.failedPackNames
                 )
                 val prefs = app.dataStore.getPreferencesAfterPendingWrites()
                 WatchWorker.schedulePeriodic(
                     app, normalizeWatchCheckInterval(prefs.getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)),
-                    ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE
+                    ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
+                    enabled = prefs.getBooleanValue(WatchAutomaticChecksKey, true)
                 )
                 if (result.hadReadFailures) {
                     toast(R.string.watchCheckPartial)

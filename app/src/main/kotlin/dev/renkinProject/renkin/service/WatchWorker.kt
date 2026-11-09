@@ -14,6 +14,8 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
+import dev.renkinProject.renkin.data.WatchAutomaticChecksKey
+import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchCheckOutcome
@@ -47,7 +49,8 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
         var checkEpoch: Long? = null
         return try {
             val shouldCheck = StorageOperationGate.run {
-                (!inputData.getBoolean(KEY_PERIODIC, false) || enoughTimeElapsed()).also {
+                (applicationContext.dataStore.getPreferencesAfterPendingWrites().getBooleanValue(WatchAutomaticChecksKey, true) &&
+                    (!inputData.getBoolean(KEY_PERIODIC, false) || enoughTimeElapsed())).also {
                     if (it) checkEpoch = StorageOperationGate.epoch
                 }
             }
@@ -59,6 +62,8 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
                 Log.debug("Renkin", "WatchChecker fired ${result.suggestions.size} suggestion(s)")
                 StorageOperationGate.run {
                     if (!result.isCurrent()) return@run false
+                    if (!applicationContext.dataStore.getPreferencesAfterPendingWrites()
+                            .getBooleanValue(WatchAutomaticChecksKey, true)) return@run false
                     val notifier = RenkinNotifications()
                     val profileRepo = RenkinPackRepository(applicationContext)
                     val watchRepo = WatchRepository(applicationContext)
@@ -77,7 +82,8 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
                     WatchCheckStatusStore(applicationContext).record(
                         result.storageEpoch,
                         if (partial) WatchCheckOutcome.PARTIAL else WatchCheckOutcome.COMPLETE,
-                        result.suggestions.size
+                        result.suggestions.size,
+                        result.failedPackNames
                     )
                     true
                 }
@@ -140,8 +146,14 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
         fun schedulePeriodic(
             context: Context,
             intervalMinutes: Int = WATCH_CHECK_INTERVAL_DEFAULT,
-            policy: ExistingPeriodicWorkPolicy = ExistingPeriodicWorkPolicy.KEEP
+            policy: ExistingPeriodicWorkPolicy = ExistingPeriodicWorkPolicy.KEEP,
+            enabled: Boolean = true
         ) {
+            if (!enabled) {
+                WorkManager.getInstance(context).cancelUniqueWork(PERIODIC_NAME)
+                WorkManager.getInstance(context).cancelUniqueWork(ONESHOT_NAME)
+                return
+            }
             val normalized = normalizeWatchCheckInterval(intervalMinutes)
             val request = PeriodicWorkRequestBuilder<WatchWorker>(normalized.toLong(), TimeUnit.MINUTES)
                 .setConstraints(

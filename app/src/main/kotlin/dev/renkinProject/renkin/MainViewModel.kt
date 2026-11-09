@@ -65,6 +65,7 @@ import dev.renkinProject.renkin.data.AppSortOrderKey
 import dev.renkinProject.renkin.data.DarkMode
 import dev.renkinProject.renkin.data.DarkModeKey
 import dev.renkinProject.renkin.data.ReduceIconMotionKey
+import dev.renkinProject.renkin.data.OledBlackKey
 import dev.renkinProject.renkin.data.InstallMethod
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
 import dev.renkinProject.renkin.data.ShowRenkinPacksKey
@@ -823,6 +824,10 @@ class MainViewModel @Inject constructor(
 
     fun setDarkMode(mode: DarkMode) = updatePreferences {
         setEnumValue(DarkModeKey, mode)
+    }
+
+    fun setOledBlack(enabled: Boolean) = updatePreferences {
+        setBooleanValue(OledBlackKey, enabled)
     }
 
     fun setReduceIconMotion(enabled: Boolean) = updatePreferences {
@@ -1732,6 +1737,8 @@ class MainViewModel @Inject constructor(
     )
 
     val backupInProgress: Boolean get() = backupCoordinator.backupInProgress
+    val backupExportFeedback: BackupExportFeedback? get() = backupCoordinator.backupExportFeedback
+    fun clearBackupExportFeedback() = backupCoordinator.clearBackupExportFeedback()
     val autoBackupIntervalHours get() = backupCoordinator.autoBackupIntervalHours
     val autoBackupTreeUri get() = backupCoordinator.autoBackupTreeUri
     val lastAutoBackupAt get() = backupCoordinator.lastAutoBackupAt

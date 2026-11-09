@@ -12,6 +12,7 @@ import dev.renkinProject.renkin.data.setLongValue
 import dev.renkinProject.renkin.data.setPreferenceValue
 import kotlinx.coroutines.flow.map
 import org.json.JSONObject
+import org.json.JSONArray
 
 val WatchLastCheckResultKey = stringPreferencesKey("WATCH_LAST_CHECK_RESULT")
 
@@ -21,7 +22,8 @@ data class WatchCheckStatus(
     val checkedAt: Long,
     val outcome: WatchCheckOutcome,
     val foundCount: Int,
-    val lastSuccessfulAt: Long
+    val lastSuccessfulAt: Long,
+    val failedPackNames: List<String> = emptyList()
 )
 
 class WatchCheckStatusStore(context: Context) {
@@ -29,7 +31,10 @@ class WatchCheckStatusStore(context: Context) {
 
     val status = preferences.getPreferenceFlow(WatchLastCheckResultKey).map(::decode)
 
-    suspend fun record(epoch: Long, outcome: WatchCheckOutcome, foundCount: Int = 0) = StorageOperationGate.run {
+    suspend fun record(
+        epoch: Long, outcome: WatchCheckOutcome, foundCount: Int = 0,
+        failedPackNames: List<String> = emptyList()
+    ) = StorageOperationGate.run {
         if (epoch != StorageOperationGate.epoch) return@run
         val now = System.currentTimeMillis()
         val prefs = preferences.getPreferencesAfterPendingWrites()
@@ -41,6 +46,7 @@ class WatchCheckStatusStore(context: Context) {
             .put("outcome", outcome.name)
             .put("foundCount", foundCount.coerceAtLeast(0))
             .put("lastSuccessfulAt", lastSuccess)
+            .put("failedPackNames", JSONArray(failedPackNames.distinct()))
             .toString()
         preferences.setPreferenceValue(WatchLastCheckResultKey, encoded)
         if (outcome == WatchCheckOutcome.COMPLETE) preferences.setLongValue(LastWatchCheckAtKey, now)
@@ -53,7 +59,10 @@ class WatchCheckStatusStore(context: Context) {
                 json.getLong("checkedAt").also { at -> require(at > 0) },
                 WatchCheckOutcome.valueOf(json.getString("outcome")),
                 json.optInt("foundCount").coerceAtLeast(0),
-                json.optLong("lastSuccessfulAt").coerceAtLeast(0)
+                json.optLong("lastSuccessfulAt").coerceAtLeast(0),
+                json.optJSONArray("failedPackNames")?.let { names ->
+                    List(names.length()) { index -> names.optString(index) }.filter { it.isNotBlank() }
+                }.orEmpty()
             )
         }.getOrNull()
     }

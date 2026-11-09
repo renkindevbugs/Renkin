@@ -25,12 +25,17 @@ internal class WatchPackIcons(
     private val iconsByPackComponent = HashMap<Pair<String, String>, Pair<String?, String?>?>()
     var hadReadFailures: Boolean = false
         private set
+    private val unreadablePacks = linkedSetOf<String>()
+    val failedPackages: Set<String> get() = unreadablePacks.toSet()
 
-    fun markReadFailure() { hadReadFailures = true }
+    fun markReadFailure(packPackage: String) {
+        hadReadFailures = true
+        unreadablePacks += packPackage
+    }
 
     private inline fun <T> readPack(packPackage: String, read: () -> T): T? =
         readWatchPackOrNull(packPackage, onFailure = {
-            markReadFailure()
+            markReadFailure(packPackage)
             Log.error("WatchChecker", "Skipping unreadable pack $packPackage", it)
         }, read = read)
 
@@ -41,7 +46,8 @@ internal class WatchPackIcons(
         val resolved = if (elements == null) null else readPack(packPackage) { resolve(packPackage, app, elements) }
         val icon = if (resolved != null && resolved.first != null && resolved.second == null) {
             // A mapped icon that could not render must remain retryable at the same pack version.
-            markReadFailure()
+            markReadFailure(packPackage)
+            Log.error("WatchChecker", "Mapped icon unreadable: pack=$packPackage, component=${app.toComponentInfo()}, drawable=${resolved.first}")
             null
         } else resolved
         iconsByPackComponent[key] = icon
