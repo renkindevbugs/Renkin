@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.service
 
 import android.Manifest
 import android.app.Application
+import android.app.Notification
 import android.app.NotificationManager
 import androidx.room.Room
 import dev.renkinProject.renkin.data.Profile
@@ -38,6 +39,9 @@ class WatchRuleCleanupTest {
     private lateinit var packDb: RenkinPackDatabase
     private lateinit var watchRepo: WatchRepository
     private lateinit var packRepo: RenkinPackRepository
+    private val packDatabaseInstance = RenkinPackDatabase::class.java.getDeclaredField("instance").apply {
+        isAccessible = true
+    }
 
     @Before fun setUp() {
         StorageOperationGate.resetForTests()
@@ -46,10 +50,13 @@ class WatchRuleCleanupTest {
         packDb = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java).allowMainThreadQueries().build()
         watchRepo = WatchRepository(watchDb)
         packRepo = RenkinPackRepository(packDb)
+        // Notification summaries resolve profiles through the application's database singleton.
+        packDatabaseInstance.set(null, packDb)
     }
 
     @After fun tearDown() {
         StorageOperationGate.resetForTests()
+        packDatabaseInstance.set(null, null)
         watchDb.close()
         packDb.close()
     }
@@ -66,6 +73,7 @@ class WatchRuleCleanupTest {
     private fun postedIds(): Set<Int> = manager.activeNotifications.map { it.id }.toSet()
 
     @Test fun deletingRulesCancelsOnlyTheirNotificationsAndKeepsTheSummaryForOthers() = runBlocking {
+        packRepo.createProfile(Profile(id = 1L, name = "Kept profile"))
         val (deletedRule, deletedSuggestion) = notifiedSuggestion(2L, "app.deleted")
         val (_, keptSuggestion) = notifiedSuggestion(1L, "app.kept")
         val before = postedIds()
@@ -77,6 +85,13 @@ class WatchRuleCleanupTest {
         assertNull(watchRepo.getSuggestion(deletedSuggestion))
         assertTrue(watchRepo.getSuggestion(keptSuggestion) != null)
         assertNull(watchRepo.getRule(deletedRule))
+        val summary = manager.activeNotifications.single {
+            it.notification.flags and Notification.FLAG_GROUP_SUMMARY != 0
+        }.notification
+        assertEquals(
+            listOf("app.kept · Kept profile"),
+            summary.extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)!!.map { it.toString() }
+        )
     }
 
     @Test fun deletingTheLastSuggestionAlsoCancelsTheSummary() = runBlocking {

@@ -54,6 +54,8 @@ import org.robolectric.shadows.ShadowStatFs
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
@@ -106,8 +108,13 @@ class BackupUiCoordinatorTest {
         StorageOperationGate.resetForTests()
     }
 
-    private suspend fun withCoordinator(action: suspend (BackupUiCoordinator) -> Unit) {
+    private suspend fun withCoordinator(
+        onOwner: (Job) -> Unit = {},
+        onNotification: (Int) -> Unit = {},
+        action: suspend (BackupUiCoordinator) -> Unit
+    ) {
         val owner = SupervisorJob(currentCoroutineContext()[Job])
+        onOwner(owner)
         val coordinator = BackupUiCoordinator(
             provider, manager, AutoBackupManager(application),
             CoroutineScope(currentCoroutineContext() + owner), mutex,
@@ -118,7 +125,7 @@ class BackupUiCoordinatorTest {
             },
             onRestored = { error("These scenarios must not replace the active session") },
             onVerdictsUpdated = { error("Empty test profiles have no verdicts to update") },
-            notify = { notifications += it }
+            notify = { notifications += it; onNotification(it) }
         )
         try { action(coordinator) } finally {
             coordinator.close()
@@ -142,6 +149,100 @@ class BackupUiCoordinatorTest {
         val archive = File(application.cacheDir, "full.renkin")
         manager.exportBackup { archive.outputStream() }
         return Uri.fromFile(archive)
+    }
+
+    private class PausedCloseOutput : ByteArrayOutputStream() {
+        val closeStarted = CompletableDeferred<Unit>()
+        private val releaseClose = CountDownLatch(1)
+
+        override fun close() {
+            closeStarted.complete(Unit)
+            if (!releaseClose.await(10, TimeUnit.SECONDS)) throw IOException("Test did not release destination close")
+            super.close()
+        }
+
+        fun finishClose() = releaseClose.countDown()
+    }
+
+    @Test
+    fun fullExportRetainsWritingUntilDestinationClosesThenReportsSuccess() = runBlocking {
+        val uri = Uri.parse("content://backup.test/paused-close")
+        val output = PausedCloseOutput()
+        var cleanupFinishedWhenNotified = false
+        shadowOf(application.contentResolver).registerOutputStream(uri, output)
+        withCoordinator(onNotification = { message ->
+            if (message == R.string.backupExported) cleanupFinishedWhenNotified = stagedFiles().isEmpty()
+        }) { coordinator ->
+            assertNull(coordinator.backupExportFeedback)
+            coordinator.exportBackup(uri)
+            assertEquals(BackupExportFeedback.Writing, coordinator.backupExportFeedback)
+            try {
+                withTimeout(10_000) { output.closeStarted.await() }
+                assertTrue(output.size() > 0)
+                assertTrue(coordinator.backupInProgress)
+                assertEquals(BackupExportFeedback.Writing, coordinator.backupExportFeedback)
+                assertTrue(notifications.isEmpty())
+                assertTrue(stagedFiles().isNotEmpty())
+            } finally { output.finishClose() }
+            coordinator.awaitIdle()
+            assertTrue(stagedFiles().isEmpty())
+            assertTrue(cleanupFinishedWhenNotified)
+            assertEquals(BackupExportFeedback.Result(R.string.backupExported, successful = true), coordinator.backupExportFeedback)
+            assertEquals(listOf(R.string.backupExported), notifications)
+            coordinator.clearBackupExportFeedback()
+            assertNull(coordinator.backupExportFeedback)
+        }
+    }
+
+    @Test
+    fun failedDestinationRetainsFailureAndRetryReplacesItWithRealSuccess() = runBlocking {
+        val uri = Uri.parse("content://backup.test/failed-write")
+        shadowOf(application.contentResolver).registerOutputStream(uri, object : ByteArrayOutputStream() {
+            override fun write(bytes: ByteArray, offset: Int, length: Int) {
+                throw IOException("Destination unavailable")
+            }
+        })
+        withCoordinator { coordinator ->
+            coordinator.exportBackup(uri)
+            coordinator.awaitIdle()
+            assertEquals(BackupExportFeedback.Result(R.string.backupExportFailed, successful = false), coordinator.backupExportFeedback)
+            assertEquals(listOf(R.string.backupExportFailed), notifications)
+            assertTrue(stagedFiles().isEmpty())
+            val retryEntered = CompletableDeferred<Unit>()
+            val releaseRetry = CompletableDeferred<Unit>()
+            beforeExport = { retryEntered.complete(Unit); releaseRetry.await() }
+            val retry = File(application.cacheDir, "retried.renkin")
+            coordinator.exportBackup(Uri.fromFile(retry))
+            try {
+                retryEntered.await()
+                assertEquals(BackupExportFeedback.Writing, coordinator.backupExportFeedback)
+                assertEquals(listOf(R.string.backupExportFailed), notifications)
+            } finally { releaseRetry.complete(Unit) }
+            coordinator.awaitIdle()
+            assertTrue(retry.length() > 0)
+            assertEquals(BackupExportFeedback.Result(R.string.backupExported, successful = true), coordinator.backupExportFeedback)
+            assertEquals(listOf(R.string.backupExportFailed, R.string.backupExported), notifications)
+        }
+    }
+
+    @Test
+    fun cancelledOwnerDuringDestinationCloseDoesNotPublishSuccess() = runBlocking {
+        val uri = Uri.parse("content://backup.test/cancelled-close")
+        val output = PausedCloseOutput()
+        shadowOf(application.contentResolver).registerOutputStream(uri, output)
+        var owner: Job? = null
+        withCoordinator(onOwner = { owner = it }) { coordinator ->
+            coordinator.exportBackup(uri)
+            try {
+                withTimeout(10_000) { output.closeStarted.await() }
+                assertEquals(BackupExportFeedback.Writing, coordinator.backupExportFeedback)
+                checkNotNull(owner).cancel()
+            } finally { output.finishClose() }
+            coordinator.awaitIdle()
+            assertNull(coordinator.backupExportFeedback)
+            assertTrue(notifications.isEmpty())
+            assertTrue(stagedFiles().isEmpty())
+        }
     }
 
     @Test
