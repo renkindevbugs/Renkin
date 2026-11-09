@@ -34,6 +34,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -98,9 +99,13 @@ class OnlineIconBrowserViewModel @Inject constructor(
     var collapsedCategories by mutableStateOf<Set<String>>(emptySet())
         private set
 
+    private var previewSources by mutableStateOf<Map<String, DownloadedIconSet>>(emptyMap())
+
     init {
         viewModelScope.launch { collapsedCategories = collapsedStore.read() }
     }
+
+    fun previewRevision(prefix: String): String? = previewSources[prefix]?.version
 
     fun toggleCategory(category: String) {
         val next = if (category in collapsedCategories) collapsedCategories - category
@@ -283,9 +288,19 @@ class OnlineIconBrowserViewModel @Inject constructor(
     private val parsedSvgCache = LruCache<String, SvgVectorImporter.ImportedSvg>(PARSED_SVG_COUNT)
 
     // Rasterised previews for icons the strict importer rejects (gradient/clip documents).
-    // Keyed by URL + tint because currentColor is substituted at render time.
+    // Keyed by source revision + URL + tint because currentColor is substituted at render time.
     private val rasterCache = object : LruCache<String, ImageBitmap>(RASTER_CACHE_BYTES) {
         override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
+    }
+
+    init {
+        viewModelScope.launch {
+            downloads.sets.collect { current ->
+                val previous = previewSources
+                previewSources = current
+                selectedCollection?.takeIf { previous[it.prefix] != current[it.prefix] }?.let(::loadIcons)
+            }
+        }
     }
 
     fun beginSession() {
@@ -344,9 +359,12 @@ class OnlineIconBrowserViewModel @Inject constructor(
         tintArgb: Int,
         rasterSize: Int = PREVIEW_RASTER_SIZE
     ): OnlineIconPreview? {
-        memoryPreview(icon, tintArgb, rasterSize)?.let { return it }
+        val key = repository.previewCacheKey(icon)
+        memoryPreview(key, tintArgb, rasterSize)?.let { return it }
         val markup = repository.svg(icon) ?: return null
-        return renderPreview(icon, markup, tintArgb, rasterSize)
+        if (key != repository.previewCacheKey(icon)) return null
+        val preview = renderPreview(icon, key, markup, tintArgb, rasterSize)
+        return preview.takeIf { key == repository.previewCacheKey(icon) }
     }
 
     internal suspend fun cachedPreview(
@@ -355,28 +373,33 @@ class OnlineIconBrowserViewModel @Inject constructor(
         detail: Boolean
     ): OnlineIconCachedPreview {
         val rasterSize = if (detail) DETAIL_RASTER_SIZE else PREVIEW_RASTER_SIZE
-        memoryPreview(icon, tintArgb, rasterSize)?.let { return OnlineIconCachedPreview.Ready(it) }
+        val key = repository.previewCacheKey(icon)
+        memoryPreview(key, tintArgb, rasterSize)?.let { return OnlineIconCachedPreview.Ready(it) }
         val markup = repository.svg(icon, cachedOnly = true) ?: return OnlineIconCachedPreview.Missing
-        return renderPreview(icon, markup, tintArgb, rasterSize)
+        if (key != repository.previewCacheKey(icon)) return OnlineIconCachedPreview.Missing
+        val rendered = renderPreview(icon, key, markup, tintArgb, rasterSize)
+        if (key != repository.previewCacheKey(icon)) return OnlineIconCachedPreview.Missing
+        return rendered
             ?.let { OnlineIconCachedPreview.Ready(it) } ?: OnlineIconCachedPreview.Failed
     }
 
-    private fun memoryPreview(icon: OnlineIcon, tintArgb: Int, rasterSize: Int): OnlineIconPreview? {
-        parsedSvgCache.get(icon.svgUrl)?.let { return OnlineIconPreview.Editable(it) }
-        val rasterKey = "${icon.svgUrl}#$tintArgb#$rasterSize"
+    private fun memoryPreview(key: String, tintArgb: Int, rasterSize: Int): OnlineIconPreview? {
+        parsedSvgCache.get(key)?.let { return OnlineIconPreview.Editable(it) }
+        val rasterKey = "$key#$tintArgb#$rasterSize"
         return rasterCache.get(rasterKey)?.let { OnlineIconPreview.PreviewOnly(it) }
     }
 
     private suspend fun renderPreview(
         icon: OnlineIcon,
+        key: String,
         markup: String,
         tintArgb: Int,
         rasterSize: Int
     ): OnlineIconPreview? {
-        val rasterKey = "${icon.svgUrl}#$tintArgb#$rasterSize"
+        val rasterKey = "$key#$tintArgb#$rasterSize"
         val preview = withContext(Dispatchers.Default) {
             SvgVectorImporter.parse(markup)?.let { parsed ->
-                parsedSvgCache.put(icon.svgUrl, parsed)
+                parsedSvgCache.put(key, parsed)
                 OnlineIconPreview.Editable(parsed)
             } ?: SvgRasterizer.rasterize(markup, rasterSize, tintArgb)
                 ?.asImageBitmap()
@@ -402,10 +425,13 @@ class OnlineIconBrowserViewModel @Inject constructor(
      * (galleryPath null); only fetch/render failures return null.
      */
     suspend fun importImage(icon: OnlineIcon, currentColorArgb: Int): OnlineImageImport? {
+        val key = repository.previewCacheKey(icon)
         val markup = repository.svg(icon) ?: return null
+        if (key != repository.previewCacheKey(icon)) return null
         val bitmap = withContext(Dispatchers.Default) {
             SvgRasterizer.rasterize(markup, IMAGE_IMPORT_SIZE, currentColorArgb)
         } ?: return null
+        if (key != repository.previewCacheKey(icon)) return null
         val saved = withContext(Dispatchers.IO) {
             runCatchingCancellable { UploadedImageStore.save(context, bitmap) }.getOrNull()
         }
@@ -415,11 +441,14 @@ class OnlineIconBrowserViewModel @Inject constructor(
     /** Import resolution for a tapped icon: distinguishes "couldn't fetch" from "fetched,
      * but not modellable as editable vector paths" so the UI can explain which happened. */
     suspend fun importIcon(icon: OnlineIcon): OnlineIconImport {
-        parsedSvgCache.get(icon.svgUrl)?.let { return OnlineIconImport.Imported(it) }
+        val key = repository.previewCacheKey(icon)
+        parsedSvgCache.get(key)?.let { return OnlineIconImport.Imported(it) }
         val markup = repository.svg(icon) ?: return OnlineIconImport.LoadFailed
+        if (key != repository.previewCacheKey(icon)) return OnlineIconImport.LoadFailed
         val parsed = withContext(Dispatchers.Default) { SvgVectorImporter.parse(markup) }
             ?: return OnlineIconImport.NotImportable
-        parsedSvgCache.put(icon.svgUrl, parsed)
+        if (key != repository.previewCacheKey(icon)) return OnlineIconImport.LoadFailed
+        parsedSvgCache.put(key, parsed)
         return OnlineIconImport.Imported(parsed)
     }
 

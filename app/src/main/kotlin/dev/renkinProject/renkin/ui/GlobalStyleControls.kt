@@ -30,7 +30,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -48,7 +47,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.Role
@@ -130,20 +128,17 @@ private fun GlobalShadowCard(
     }
 }
 
-/** Native indeterminate progress, inset so its rounded caps remain visible on the dock edge. */
+/** Shared activity feedback, inset from the dock edge. */
 @Composable
 internal fun GlobalPreviewProgressIndicator(
     visible: Boolean,
     modifier: Modifier = Modifier
 ) {
     if (!visible) return
-    LinearProgressIndicator(
+    WavyLoadingBar(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        color = MaterialTheme.colorScheme.primary,
-        trackColor = Color.Transparent,
-        strokeCap = StrokeCap.Round
+            .padding(horizontal = 12.dp)
     )
 }
 

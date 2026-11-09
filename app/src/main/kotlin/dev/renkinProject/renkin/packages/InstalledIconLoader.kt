@@ -164,7 +164,8 @@ class InstalledIconLoader @Inject constructor(@param:ApplicationContext private 
             launcher.resolveActivity(Intent().setComponent(source.component), source.user)
         }.getOrNull() ?: return null
         val info = app.applicationInfo
-        if (info.sourceDir != source.sourcePath || info.splitSourceDirs.orEmpty().toList() != source.splitPaths) return null
+        // Reinstalling a generated pack moves its APK while the catalog entry stays alive.
+        // Resolve both the drawable and its resource id from this fresh launcher entry.
         val activityIcon = runCatching { app.getIcon(configured.resources.displayMetrics.densityDpi) }.getOrNull()
         val icon = activityIcon ?: runCatching { info.loadIcon(configured.packageManager) }.getOrNull() ?: return null
         val id = if (activityIcon != null) launcherActivityIconId(configured, app) else info.icon

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
@@ -34,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -144,6 +146,10 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
     val toaster = LocalToaster.current
 
     val buildStep = viewModel.buildStep
+    val ready = viewModel.buildReady
+    val buildProgress = viewModel.buildProgress
+    val profileAction by viewModel.profileActionProgress.collectAsStateWithLifecycle()
+    if (profileAction?.profileTarget != null) return
 
     // The preview lives in its own activity (WallpaperPreviewActivity) so the real wallpaper can
     // show behind it; RESULT_OK = the user pressed Build there.
@@ -173,6 +179,10 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
 
     ExtendedFloatingActionButton(
         onClick = {
+            if (ready) {
+                viewModel.installReadyPack()
+                return@ExtendedFloatingActionButton
+            }
             if (viewModel.packPreviewOpen) return@ExtendedFloatingActionButton
             if (viewModel.buildBusy) {
                 toaster.show(context.getString(R.string.buildOperationPending))
@@ -200,22 +210,39 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
             )
         },
         icon = {
-            Icon(
+            if (buildStep != null) {
+                if (buildProgress != null) {
+                    CircularWavyProgressIndicator(
+                        progress = { if (buildProgress.second <= 0) 0f else (buildProgress.first.toFloat() / buildProgress.second).coerceIn(0f, 1f) },
+                        modifier = Modifier.size(28.dp)
+                    )
+                } else LoadingIndicator(modifier = Modifier.size(28.dp))
+            } else Icon(
                 imageVector = Icons.Filled.Build,
                 contentDescription = null
             )
         },
-        text = { Text(stringResource(id = R.string.buildIconPack)) },
-        expanded = expanded,
+        text = {
+            Column {
+                Text(stringResource(if (ready) R.string.buildReadyInstall else if (buildStep != null) R.string.buildNotificationTitle else R.string.buildIconPack))
+                if (buildStep != null) {
+                    Text(
+                        text = buildProgress?.let { stringResource(R.string.buildNotificationCount, it.first, it.second) }
+                            ?: buildStep,
+                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                        modifier = Modifier.widthIn(min = 100.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        },
+        expanded = expanded || buildStep != null || ready,
         modifier = modifier,
         containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer
     )
 
-    if (buildStep != null) {
-        KeepScreenOn()
-        BuildProgressDialog(buildStep, viewModel.buildProgress)
-    }
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)

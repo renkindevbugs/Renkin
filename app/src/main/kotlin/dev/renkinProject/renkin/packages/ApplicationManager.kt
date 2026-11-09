@@ -3,6 +3,8 @@ package dev.renkinProject.renkin.packages
 import android.content.Context
 import android.content.res.Resources
 import android.graphics.drawable.Drawable
+import dev.renkinProject.renkin.BuildConfig
+import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawCalendar
 import dev.renkinProject.renkin.data.RawDynamicClock
@@ -181,8 +183,20 @@ internal class ApplicationManager(
         val resourceId = runCatching {
             res.getIdentifierByName(drawableName, "drawable", iconPackName)
         }.getOrNull() ?: return null
-        if (resourceId <= 0) return null
-        val drawable = runCatching { resourceResolver.getDrawable(res, resourceId) }.getOrNull() ?: return null
+        if (resourceId <= 0) {
+            if (BuildConfig.DEBUG) {
+                val mipmapId = res.getIdentifierByName(drawableName, "mipmap", iconPackName)
+                Log.debug("PackResources", "Missing drawable: pack=$iconPackName, name=$drawableName, mipmapId=$mipmapId")
+            }
+            return null
+        }
+        val drawable = runCatching { resourceResolver.getDrawable(res, resourceId) }
+            .onFailure { if (BuildConfig.DEBUG) Log.error("PackResources", "Drawable load failed: pack=$iconPackName, name=$drawableName, id=$resourceId", it) }
+            .getOrNull()
+        if (drawable == null) {
+            if (BuildConfig.DEBUG) Log.debug("PackResources", "Unreadable drawable: pack=$iconPackName, name=$drawableName, id=$resourceId")
+            return null
+        }
         return ResourceDrawable(resourceId, drawable)
     }
 

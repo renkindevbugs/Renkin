@@ -12,6 +12,7 @@ import dev.renkinProject.renkin.data.AppTarget
 import dev.renkinProject.renkin.data.setIconSources
 import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
+import dev.renkinProject.renkin.data.ActiveProfileIdKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.UnsavedIconJournal
@@ -212,6 +213,8 @@ class ApplicationProvider internal constructor(
         sessionToken = ProfileSessionToken(profileManager.activeProfileId, 0L, providerInstanceId)
     ))
     val runtimeState = mutableRuntimeState.asStateFlow()
+    private val mutableStartupProfile = MutableStateFlow<Profile?>(null)
+    val startupProfile = mutableStartupProfile.asStateFlow()
     /** Operation-time view; composables collect [applicationState]. Mutations hold the profile gate. */
     val applicationList: List<PackageInfoStruct> get() = stagedApplications
     // UI observes the repository flow; synchronous getters serve operation snapshots.
@@ -386,6 +389,9 @@ class ApplicationProvider internal constructor(
                 profileOperations.run {
                     if (!startupComplete) {
                         val startupPrefs = context.dataStore.getPreferencesAfterPendingWrites()
+                        val storedProfileId = startupPrefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
+                        mutableStartupProfile.value = profileManager.profile(storedProfileId)
+                            ?: profileManager.profile(DEFAULT_PROFILE_ID)
                         if (startupPrefs.contains(BuiltPrimarySourceKey)) {
                             context.dataStore.restoreBuiltPrimarySource(startupPrefs)
                         }
@@ -1346,8 +1352,18 @@ class ApplicationProvider internal constructor(
         finishInstallAttempt(iconPack, ApkInstallOutcome(ApkInstallResult.ABORTED))
     }
 
-    private suspend fun finishInstallAttempt(iconPack: BuiltIconPack, outcome: ApkInstallOutcome) {
+    internal suspend fun retainReadyBuild(iconPack: BuiltIconPack): BuiltIconPack {
+        val revision = finishInstallAttempt(iconPack, ApkInstallOutcome(ApkInstallResult.ABORTED), retainArtifacts = true)
+        return iconPack.copy(storageRevision = revision)
+    }
+
+    private suspend fun finishInstallAttempt(
+        iconPack: BuiltIconPack,
+        outcome: ApkInstallOutcome,
+        retainArtifacts: Boolean = false
+    ): Long? {
         val success = outcome.result == ApkInstallResult.SUCCESS
+        var retainedRevision = iconPack.storageRevision
         // Building the APK is the commitment, not installing it: someone who only wants their
         // icons stored can go through Build and dismiss the installer. Either way the save
         // matches the pack that was produced, so it counts as built.
@@ -1365,6 +1381,7 @@ class ApplicationProvider internal constructor(
                         preservedRows = iconPack.preservedRows, unbuiltAfter = false,
                         liveSession = iconPack.sessionToken
                     )?.let { renkinPackStore.recordBuilt(iconPack.profileId, it) }
+                    retainedRevision = savedProfileRevisions[iconPack.profileId] ?: retainedRevision
                 } else {
                     // A newer explicit save wins; the built baseline still describes the older APK.
                     renkinPackStore.recordBuilt(iconPack.profileId, iconPack.profileApps, iconPack.preservedRows)
@@ -1375,10 +1392,11 @@ class ApplicationProvider internal constructor(
                 if (success) lockManager.clearProvenanceCache()
             }
         } finally {
-            if (outcome.result != ApkInstallResult.CONFLICT) withContext(NonCancellable) {
+            if (!retainArtifacts && outcome.result != ApkInstallResult.CONFLICT) withContext(NonCancellable) {
                 iconPackBuildService.releaseArtifacts(iconPack, completed = outcome.result != ApkInstallResult.TIMEOUT)
             }
         }
+        return retainedRevision
     }
 
     /**

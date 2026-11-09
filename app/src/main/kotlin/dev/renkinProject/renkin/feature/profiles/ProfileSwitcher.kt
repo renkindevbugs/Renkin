@@ -237,7 +237,7 @@ fun ProfileSwitcherTitle() {
                                 if (viewModel.hasUnsavedChanges()) {
                                     pendingPromptProcess = currentProcess
                                     pendingSwitch = profile.id
-                                } else viewModel.switchProfile(profile.id)
+                                } else viewModel.switchProfile(profile.id, targetProfile = profile)
                             }
                         }
                     )
@@ -328,7 +328,9 @@ fun ProfileSwitcherTitle() {
             onSave = {
                 // Saving an unchanged profile would still mark it "not built yet".
                 val saveFirst = viewModel.hasUnsavedChanges()
-                pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = saveFirst) }
+                pendingSwitch?.let { id ->
+                    viewModel.switchProfile(id, saveFirst = saveFirst, targetProfile = profiles.firstOrNull { it.id == id })
+                }
                 if (pendingCreate) {
                     detailsViewModel.pendingSubmission?.let { details ->
                         viewModel.createProfile(details.name, details.description, details.packLabel,
@@ -338,7 +340,9 @@ fun ProfileSwitcherTitle() {
                 pendingSwitch = null; pendingCreate = false
             },
             onDiscard = {
-                pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = false) }
+                pendingSwitch?.let { id ->
+                    viewModel.switchProfile(id, saveFirst = false, targetProfile = profiles.firstOrNull { it.id == id })
+                }
                 if (pendingCreate) {
                     detailsViewModel.pendingSubmission?.let { details ->
                         viewModel.createProfile(details.name, details.description, details.packLabel,

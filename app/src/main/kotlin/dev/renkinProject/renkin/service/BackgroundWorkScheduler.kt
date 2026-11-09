@@ -7,6 +7,8 @@ import dev.renkinProject.renkin.data.AutoBackupIntervalKey
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.renkinProject.renkin.data.WatchCheckIntervalKey
+import dev.renkinProject.renkin.data.WatchAutomaticChecksKey
+import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.normalizeAutoBackupInterval
@@ -21,7 +23,8 @@ object BackgroundWorkScheduler {
         WatchWorker.schedulePeriodic(
             context,
             normalizeWatchCheckInterval(prefs.getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)),
-            ExistingPeriodicWorkPolicy.UPDATE
+            ExistingPeriodicWorkPolicy.UPDATE,
+            enabled = prefs.getBooleanValue(WatchAutomaticChecksKey, true)
         )
         AutoBackupWorker.schedule(
             context,

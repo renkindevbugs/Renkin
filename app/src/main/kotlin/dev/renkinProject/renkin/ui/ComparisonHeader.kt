@@ -41,8 +41,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -89,8 +88,6 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -133,7 +130,8 @@ internal fun ComparisonHeader(
     extraActions: (@Composable () -> Unit)? = null,
     onNavigateBack: (() -> Unit)? = null,
     showProgress: Boolean = false,
-    previewVariants: PreviewVariants? = null
+    previewVariants: PreviewVariants? = null,
+    frostedBackdrop: Bitmap? = null
 ) {
     // Both icons fly up into their slots when the dialog opens
     val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
@@ -152,14 +150,11 @@ internal fun ComparisonHeader(
         // Single compact row — close + name on the left, comparison icons centered, apply +
         // overflow on the right. Left and right clusters share equal weight so the icons land
         // dead-center; a long name gets ellipsised before it can reach them.
-        ElevatedCard(
+        FrostedComparisonPanel(
+            backdrop = frostedBackdrop,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            shape = CardShape,
-            colors = CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            )
+                .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -240,21 +235,17 @@ internal fun ComparisonHeader(
             // Mihon-style activity line right under the bar: visible while pack rows are still
             // resolving the query, so "search finished" is unambiguous.
             if (showProgress) {
-                LinearProgressIndicator(
+                WavyLoadingBar(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(3.dp)
                 )
             }
 
-            ElevatedCard(
+            FrostedComparisonPanel(
+                backdrop = frostedBackdrop,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                shape = CardShape,
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                )
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -301,7 +292,8 @@ internal fun EditPreviewPane(
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
     extraCard: (@Composable () -> Unit)? = null,
-    previewVariants: PreviewVariants? = null
+    previewVariants: PreviewVariants? = null,
+    frostedBackdrop: Bitmap? = null
 ) {
     val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
     val flyInSpec = spring<androidx.compose.ui.unit.IntOffset>(
@@ -343,10 +335,14 @@ internal fun EditPreviewPane(
 
             // Vertical comparison: label above the small Current icon, a downward arrow, then
             // the large New preview with its own label below — one clear top-to-bottom flow.
-            Column(
+            FrostedComparisonPanel(
+                backdrop = frostedBackdrop,
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+            ) {
+                Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 16.dp),
+                    .padding(vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -365,6 +361,7 @@ internal fun EditPreviewPane(
                         .size(20.dp)
                 )
                 NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 176.dp, labelExpand = 1f, variants = previewVariants)
+                }
             }
 
             extraCard?.let {
@@ -538,6 +535,7 @@ private fun NewSlot(
     // steps aside while a copy is in the air.
     val flight = LocalIconFlight.current
     if (flight != null) SideEffect { flight.newSlotIcon = previewIcon }
+    val enlargeLabel = stringResource(R.string.enlargeNewIconPreview)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
             androidx.compose.animation.AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
@@ -550,7 +548,12 @@ private fun NewSlot(
                                 .graphicsLayer { alpha = if (flight.newSlotHidden) 0f else 1f }
                         )
                         .size(size)
-                        .clickable(enabled = previewIcon != null) { enlarged = true },
+                        .clickable(
+                            enabled = previewIcon != null,
+                            role = Role.Button,
+                            onClickLabel = enlargeLabel
+                        ) { enlarged = true }
+                        .semantics { contentDescription = enlargeLabel },
                     shape = iconTileShape(size),
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     border = BorderStroke(2.dp, borderColor)
@@ -579,9 +582,8 @@ private fun NewSlot(
                         }
                         // Only sustained work gets an activity indicator; quick updates stay instant.
                         if (showLoading) {
-                            CircularProgressIndicator(
+                            LoadingIndicator(
                                 modifier = Modifier.size(size / 2),
-                                strokeWidth = 2.dp,
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }

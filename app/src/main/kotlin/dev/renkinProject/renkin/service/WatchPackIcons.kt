@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.service
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.toComponentInfo
+import dev.renkinProject.renkin.util.Log
 
 /**
  * One check run's pack reads: each pack's appfilter is parsed once for all [watchedApps] instead
@@ -22,12 +23,33 @@ internal class WatchPackIcons(
     // Null values are remembered too: an unreadable pack is reported once per run, not per app.
     private val elementsByPack = HashMap<String, List<RawElement>?>()
     private val iconsByPackComponent = HashMap<Pair<String, String>, Pair<String?, String?>?>()
+    var hadReadFailures: Boolean = false
+        private set
+    private val unreadablePacks = linkedSetOf<String>()
+    val failedPackages: Set<String> get() = unreadablePacks.toSet()
+
+    fun markReadFailure(packPackage: String) {
+        hadReadFailures = true
+        unreadablePacks += packPackage
+    }
+
+    private inline fun <T> readPack(packPackage: String, read: () -> T): T? =
+        readWatchPackOrNull(packPackage, onFailure = {
+            markReadFailure(packPackage)
+            Log.error("WatchChecker", "Skipping unreadable pack $packPackage", it)
+        }, read = read)
 
     fun resolveIcon(packPackage: String, app: InstalledApplication): Pair<String?, String?>? {
         val key = packPackage to app.toComponentInfo()
         if (key in iconsByPackComponent) return iconsByPackComponent[key]
         val elements = elementsFor(packPackage, app)
-        val icon = if (elements == null) null else readWatchPackOrNull(packPackage) { resolve(packPackage, app, elements) }
+        val resolved = if (elements == null) null else readPack(packPackage) { resolve(packPackage, app, elements) }
+        val icon = if (resolved != null && resolved.first != null && resolved.second == null) {
+            // A mapped icon that could not render must remain retryable at the same pack version.
+            markReadFailure(packPackage)
+            Log.error("WatchChecker", "Mapped icon unreadable: pack=$packPackage, component=${app.toComponentInfo()}, drawable=${resolved.first}")
+            null
+        } else resolved
         iconsByPackComponent[key] = icon
         return icon
     }
@@ -35,10 +57,10 @@ internal class WatchPackIcons(
     // The parse keeps only the listed components, so an app outside the run's set gets its own read.
     private fun elementsFor(packPackage: String, app: InstalledApplication): List<RawElement>? {
         if (app.toComponentInfo() !in watchedComponents) {
-            return readWatchPackOrNull(packPackage) { parse(packPackage, listOf(app)) }
+            return readPack(packPackage) { parse(packPackage, listOf(app)) }
         }
         if (packPackage !in elementsByPack) {
-            elementsByPack[packPackage] = readWatchPackOrNull(packPackage) { parse(packPackage, watchedApps) }
+            elementsByPack[packPackage] = readPack(packPackage) { parse(packPackage, watchedApps) }
         }
         return elementsByPack[packPackage]
     }

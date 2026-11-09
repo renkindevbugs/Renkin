@@ -88,7 +88,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
@@ -902,7 +901,8 @@ internal fun OptionsDialog(
                     icon = rotatingPreview.icon,
                     loading = alternateIconPending || draft.generating || globalPreviewPending || rotatingPreview.pending,
                     canConfirm = interactionAllowed && session.canConfirmDraft(composedRenderWitness),
-                    variants = rotatingPreview.variants
+                    variants = rotatingPreview.variants,
+                    frostedBackdrop = applicationIcon?.frostedBackdrop.takeIf { session.purpose == EditorPurpose.APPLICATION }
                 )
                 val actions = OptionsPreviewActions(
                     onDismiss = startClose,
@@ -1049,7 +1049,8 @@ private data class OptionsPreview(
     val icon: IconPackDrawable?,
     val loading: Boolean,
     val canConfirm: Boolean = !loading,
-    val variants: PreviewVariants? = null
+    val variants: PreviewVariants? = null,
+    val frostedBackdrop: Bitmap? = null
 )
 
 @Composable
@@ -1200,6 +1201,7 @@ private fun WideOptionsLayout(
         EditPreviewPane(
             heroBitmap = preview.heroBitmap,
             appName = preview.appName,
+            frostedBackdrop = preview.frostedBackdrop,
             previewIcon = preview.icon,
             previewLoading = preview.loading,
             confirmEnabled = preview.canConfirm,
@@ -1262,6 +1264,7 @@ private fun PhoneOptionsLayout(
                     ComparisonHeader(
                         heroBitmap = preview.heroBitmap,
                         appName = preview.appName,
+                        frostedBackdrop = preview.frostedBackdrop,
                         previewIcon = preview.icon,
                         previewLoading = preview.loading,
                         confirmEnabled = preview.canConfirm,
@@ -1352,10 +1355,9 @@ private fun PackBrowserToolbar(packBrowser: PackBrowserChrome) {
         )
     }
     if (packBrowser.busy) {
-        LinearProgressIndicator(
+        WavyLoadingBar(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(3.dp)
         )
     }
 }

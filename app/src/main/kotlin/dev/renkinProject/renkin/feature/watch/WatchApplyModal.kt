@@ -21,7 +21,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ImageNotSupported
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
@@ -273,7 +273,7 @@ private fun ComparePreview(
                 when (s) {
                     "bitmap" -> bitmap?.let { Image(BitmapPainter(it), null, Modifier.fillMaxSize()) }
                     "icon" -> icon?.let { Image(it.getPainter(), null, Modifier.fillMaxSize()) }
-                    "loading" -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    "loading" -> LoadingIndicator(modifier = Modifier.size(24.dp))
                     else -> Icon(
                         Icons.Filled.ImageNotSupported, null,
                         tint = MaterialTheme.colorScheme.outline,

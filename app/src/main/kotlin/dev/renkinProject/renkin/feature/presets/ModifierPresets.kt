@@ -26,7 +26,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ImageNotSupported
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -666,7 +666,7 @@ private fun PresetPreview(
                     .clip(InnerShape)
             )
             !result.loaded && payload != null && previews != null -> Box(contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                LoadingIndicator(modifier = Modifier.size(20.dp))
             }
             else -> Box(contentAlignment = Alignment.Center) {
                 Icon(Icons.Filled.ImageNotSupported, contentDescription = null)

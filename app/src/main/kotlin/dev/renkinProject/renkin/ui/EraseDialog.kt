@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
@@ -22,7 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.Icon
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -227,8 +229,7 @@ internal fun EraseDialog(
                         }
                 ) {
                     if (generating) {
-                        CircularProgressIndicator(
-                            strokeWidth = 2.5.dp,
+                        LoadingIndicator(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .padding(10.dp)

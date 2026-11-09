@@ -8,7 +8,15 @@ import kotlinx.coroutines.sync.Mutex
 
 data class ProfileActionProgress(
     @get:StringRes val messageRes: Int,
-    val applicationName: String? = null
+    val applicationName: String? = null,
+    val profileTarget: ProfileSwitchTarget? = null
+)
+
+data class ProfileSwitchTarget(
+    val id: Long,
+    val name: String,
+    val packLabel: String,
+    val packIcon: String
 )
 
 /** Owns the foreground indicator and its optional session-mutex reservation until job completion. */
