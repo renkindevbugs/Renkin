@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.pluralStringResource
@@ -55,6 +56,8 @@ import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.watch.WatchCheckOutcome
 import dev.renkinProject.renkin.data.watch.WatchCheckStatus
+import dev.renkinProject.renkin.data.watch.WatchReadIssue
+import dev.renkinProject.renkin.data.watch.WatchReadFailureReason
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.ui.DialogBadge
 import dev.renkinProject.renkin.ui.DialogCard
@@ -205,6 +208,36 @@ private fun WatchCheckDetailsDialog(status: WatchCheckStatus?, iconPacks: List<I
         actions = { DialogPrimaryAction(stringResource(R.string.close), onDismiss) }
     ) {
         if (status != null) {
+            status.readIssues.groupBy { it.packPackage }.forEach { (packPackage, issues) ->
+                DialogCard {
+                    Text(stringResource(R.string.watchUnreadablePacksTitle),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    WatchFailedPackHeading(packPackage, issues.first().packName)
+                    issues.forEachIndexed { index, issue ->
+                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        WatchReadIssueDetail(issue)
+                    }
+                    Text(stringResource(R.string.watchPackReadRetryHint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            val legacyNames = status.failedPackNames.filterNot { name -> status.readIssues.any { it.packName == name } }
+            if (legacyNames.isNotEmpty()) {
+                DialogCard {
+                    Text(stringResource(R.string.watchUnreadablePacksTitle),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    legacyNames.forEach { name ->
+                        val pack = iconPacks.filter { it.applicationName == name }.singleOrNull()
+                        WatchFailedPackHeading(pack?.packageName, name)
+                    }
+                    Text(stringResource(R.string.watchLegacyDetailsHint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             DialogCard {
                 DialogFactRow(stringResource(R.string.watchDetailsLastCheck), formatCheckTime(context, status.checkedAt))
                 if (status.lastSuccessfulAt > 0) {
@@ -214,27 +247,41 @@ private fun WatchCheckDetailsDialog(status: WatchCheckStatus?, iconPacks: List<I
                     if (status.outcome == WatchCheckOutcome.FAILED) stringResource(R.string.watchDetailsUnknown)
                     else status.foundCount.toString())
             }
-            if (status.failedPackNames.isNotEmpty()) {
-                DialogCard {
-                    Text(stringResource(R.string.watchUnreadablePacksTitle),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    status.failedPackNames.forEach { name ->
-                        val pack = iconPacks.filter { it.applicationName == name }.singleOrNull()
-                        Row(verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            if (pack != null) PackIconImage(pack.packageName, 40.dp)
-                            else Surface(shape = IconShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                                Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Filled.Layers, contentDescription = null, modifier = Modifier.size(22.dp))
-                                }
-                            }
-                            Text(name, style = MaterialTheme.typography.titleMediumEmphasized,
-                                modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
+        }
+    }
+}
+
+@Composable
+private fun WatchFailedPackHeading(packPackage: String?, name: String) {
+    Row(verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (packPackage != null) PackIconImage(packPackage, 40.dp)
+        else Surface(shape = IconShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.Layers, contentDescription = null, modifier = Modifier.size(22.dp))
             }
+        }
+        Text(name, style = MaterialTheme.typography.titleMediumEmphasized,
+            modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun WatchReadIssueDetail(issue: WatchReadIssue) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        (issue.appName ?: issue.appPackage)?.let { name ->
+            Text(name, style = MaterialTheme.typography.titleSmall)
+        }
+        Text(stringResource(when (issue.reason) {
+            WatchReadFailureReason.PACK_UNREADABLE -> R.string.watchPackReadFailedReason
+            WatchReadFailureReason.MISSING_DRAWABLE -> R.string.watchMissingDrawableReason
+            WatchReadFailureReason.ICON_UNREADABLE -> R.string.watchIconReadFailedReason
+        }), style = MaterialTheme.typography.bodyMedium)
+        issue.drawableName?.let { name ->
+            Text(stringResource(R.string.watchFailedDrawableResource, name),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

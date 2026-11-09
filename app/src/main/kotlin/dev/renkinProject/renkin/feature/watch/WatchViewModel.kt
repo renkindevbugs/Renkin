@@ -288,7 +288,8 @@ class WatchViewModel @Inject constructor(
                     result.storageEpoch,
                     if (result.hadReadFailures) WatchCheckOutcome.PARTIAL else WatchCheckOutcome.COMPLETE,
                     result.suggestions.size,
-                    result.failedPackNames
+                    result.failedPackNames,
+                    result.readIssues
                 )
                 val prefs = app.dataStore.getPreferencesAfterPendingWrites()
                 WatchWorker.schedulePeriodic(

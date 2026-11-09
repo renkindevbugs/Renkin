@@ -83,7 +83,8 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
                         result.storageEpoch,
                         if (partial) WatchCheckOutcome.PARTIAL else WatchCheckOutcome.COMPLETE,
                         result.suggestions.size,
-                        result.failedPackNames
+                        result.failedPackNames,
+                        result.readIssues
                     )
                     true
                 }
@@ -156,6 +157,8 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
             }
             val normalized = normalizeWatchCheckInterval(intervalMinutes)
             val request = PeriodicWorkRequestBuilder<WatchWorker>(normalized.toLong(), TimeUnit.MINUTES)
+                // Re-enqueuing after a manual check must not immediately overwrite its result.
+                .setInitialDelay(normalized.toLong(), TimeUnit.MINUTES)
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiresBatteryNotLow(true)

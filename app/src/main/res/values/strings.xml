@@ -1180,7 +1180,13 @@
     <string name="watchScheduleNotSaved">Could not update automatic checks. Try again.</string>
     <string name="watchUnreadablePacks">Could not read: %1$s</string>
     <string name="watchMoreUnreadablePacks">Other unreadable packs: %1$d</string>
-    <string name="watchPartialExplanation">Some pack data or mapped icons could not be read. Check again to retry.</string>
+    <string name="watchPartialExplanation">Some pack icons could not be read. Checks include watched apps in all profiles.</string>
+    <string name="watchMissingDrawableReason">The pack maps this app to an icon resource that is missing from the installed pack.</string>
+    <string name="watchIconReadFailedReason">The mapped icon could not be loaded or rendered.</string>
+    <string name="watchPackReadFailedReason">The pack resources or app filter could not be read.</string>
+    <string name="watchFailedDrawableResource">Resource: %1$s</string>
+    <string name="watchPackReadRetryHint">Renkin will retry next time. Check for an update to the icon pack.</string>
+    <string name="watchLegacyDetailsHint">Pull down to refresh and collect details about the affected apps and icon resources.</string>
     <plurals name="watchLastCheckFound">
         <item quantity="one">%1$d new icon found</item>
         <item quantity="other">%1$d new icons found</item>

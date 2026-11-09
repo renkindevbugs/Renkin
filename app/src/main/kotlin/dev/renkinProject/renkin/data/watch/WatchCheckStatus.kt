@@ -23,7 +23,8 @@ data class WatchCheckStatus(
     val outcome: WatchCheckOutcome,
     val foundCount: Int,
     val lastSuccessfulAt: Long,
-    val failedPackNames: List<String> = emptyList()
+    val failedPackNames: List<String> = emptyList(),
+    val readIssues: List<WatchReadIssue> = emptyList()
 )
 
 class WatchCheckStatusStore(context: Context) {
@@ -33,7 +34,8 @@ class WatchCheckStatusStore(context: Context) {
 
     suspend fun record(
         epoch: Long, outcome: WatchCheckOutcome, foundCount: Int = 0,
-        failedPackNames: List<String> = emptyList()
+        failedPackNames: List<String> = emptyList(),
+        readIssues: List<WatchReadIssue> = emptyList()
     ) = StorageOperationGate.run {
         if (epoch != StorageOperationGate.epoch) return@run
         val now = System.currentTimeMillis()
@@ -47,6 +49,18 @@ class WatchCheckStatusStore(context: Context) {
             .put("foundCount", foundCount.coerceAtLeast(0))
             .put("lastSuccessfulAt", lastSuccess)
             .put("failedPackNames", JSONArray(failedPackNames.distinct()))
+            .put("readIssues", JSONArray().apply {
+                readIssues.distinct().forEach { issue ->
+                    put(JSONObject()
+                        .put("packPackage", issue.packPackage)
+                        .put("packName", issue.packName)
+                        .put("reason", issue.reason.name)
+                        .put("appPackage", issue.appPackage)
+                        .put("activityName", issue.activityName)
+                        .put("appName", issue.appName)
+                        .put("drawableName", issue.drawableName))
+                }
+            })
             .toString()
         preferences.setPreferenceValue(WatchLastCheckResultKey, encoded)
         if (outcome == WatchCheckOutcome.COMPLETE) preferences.setLongValue(LastWatchCheckAtKey, now)
@@ -62,8 +76,30 @@ class WatchCheckStatusStore(context: Context) {
                 json.optLong("lastSuccessfulAt").coerceAtLeast(0),
                 json.optJSONArray("failedPackNames")?.let { names ->
                     List(names.length()) { index -> names.optString(index) }.filter { it.isNotBlank() }
+                }.orEmpty(),
+                json.optJSONArray("readIssues")?.let { issues ->
+                    (0 until issues.length()).mapNotNull { index ->
+                        issues.optJSONObject(index)?.let(::decodeIssue)
+                    }.distinct()
                 }.orEmpty()
             )
         }.getOrNull()
     }
+
+    private fun decodeIssue(json: JSONObject): WatchReadIssue? {
+        val pack = json.stringOrNull("packPackage") ?: return null
+        val reason = WatchReadFailureReason.entries.firstOrNull { it.name == json.optString("reason") }
+            ?: WatchReadFailureReason.ICON_UNREADABLE
+        return WatchReadIssue(
+            packPackage = pack,
+            reason = reason,
+            packName = json.stringOrNull("packName") ?: pack,
+            appPackage = json.stringOrNull("appPackage"),
+            activityName = json.stringOrNull("activityName"),
+            appName = json.stringOrNull("appName"),
+            drawableName = json.stringOrNull("drawableName")
+        )
+    }
 }
+
+private fun JSONObject.stringOrNull(key: String): String? = (opt(key) as? String)?.takeIf { it.isNotBlank() }

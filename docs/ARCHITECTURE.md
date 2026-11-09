@@ -2097,12 +2097,22 @@ follow-ups; CRC verifies transport integrity only.
   defaults to true for existing users. Disabling cancels periodic/queued automatic work;
   workers also check the preference before scanning/publishing. Manual ViewModel checks remain
   available and never re-enable the schedule. Startup/restore reconciliation honors the choice.
-  Partial results retain unreadable pack labels for the next visible result, without treating
-  an unreadable mapped icon as a successful empty result or advancing its checked version.
+  New periodic requests delay their first run by the selected interval. Re-enqueuing after a
+  manual refresh therefore schedules the next check instead of immediately running an
+  active-rule-only scan that could overwrite the fuller manual result.
+  Partial results retain structured read issues (pack/component identity, display labels,
+  mapped resource and missing-resource/load-or-render/pack-read reason). The result preference
+  remains compatible with older pack-label-only records; their modal asks for a refresh to
+  collect diagnostics. Manual checks and the worker persist the same details. A failed mapped
+  icon is never a successful empty baseline, and older same-version rows with a mapped name
+  but no hash are retried. Healthy and genuinely unthemed pairs retain version-based skipping.
   The details modal separates the secondary unreadable-pack heading from stronger pack-name
   rows with launcher artwork. Installed labels resolve only when unique; unknown or ambiguous
-  legacy labels retain a generic icon. Debug resource diagnostics distinguish missing names
-  from load errors without changing how a pack's winning mapping is resolved.
+  legacy labels retain a generic icon. Structured issues resolve artwork by package identity
+  and show the affected app and exact resource, including why the pack cannot provide it.
+  Debug resource diagnostics distinguish missing names from load errors without changing
+  how a pack's winning mapping is resolved. Checks cover all profiles; a broken pack does not
+  discard findings from healthy sources, and a missing asset is never replaced by a guessed icon.
 - **Statistics**: the pack-usage modal keeps true-origin counts, online-source attribution and
   unavailable sources. It shows the attributed-icon total and per-source percentages with
   static bars relative to that total, rather than loading indicators or top-source-normalized bars.
