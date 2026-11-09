@@ -61,7 +61,6 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Settings
@@ -1684,13 +1683,10 @@ fun TitleBar(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f).introTarget(IntroTarget.PROFILE)) { ProfileSwitcherTitle() }
                 if (hasSavedEdit) {
-                    val label = stringResource(R.string.editorAutosaveReview)
-                    RenkinTooltipBox(label) {
-                        IconButton(onClick = { draftOwner.reviewSavedEdit() }) {
-                            Icon(Icons.Filled.Restore, contentDescription = label,
-                                tint = MaterialTheme.colorScheme.primary)
-                        }
-                    }
+                    SavedEditorDraftButton(
+                        reduceMotion = prefs.getBooleanValue(ReduceIconMotionKey),
+                        onClick = draftOwner::reviewSavedEdit
+                    )
                 }
             }
         }
