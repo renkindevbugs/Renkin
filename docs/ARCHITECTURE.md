@@ -1109,11 +1109,17 @@ the dialog never borrows pixels recycled by preparation disposal or transfer. Pr
 including allocation failure, keeps a valid offer recoverable and does not disable autosave.
 Cancellation still propagates. Refresh replaces the UI state without first hiding an offer just
 to dispose its native preparation. Checkpoint/lease and profile/session validation remain with
-the recovery owners. Not now postpones the observed checkpoint during the current profile visit;
-returning to its owning profile offers it again. Automatic checks on other profiles remain hidden;
-explicit review can explain which profile owns the edit without switching silently. A fresh owner
-may offer the draft at launch. A different checkpoint is not hidden by postponement. Unreadable
-catalog postponement remains owner-local because its profile cannot be identified safely.
+the recovery owners. Passive startup/profile observations inspect checkpoint metadata and expose
+`hasSavedEdit` without preparing artwork or opening a recovery dialog. The existing Restore icon
+beside the profile title stays still while a green ring expands/fades behind it, followed by a
+quiet pause. The ring is drawn inside the existing touch area without per-frame recomposition;
+Reduce icon motion suppresses it. Explicit review prepares the offer and can explain which
+profile owns the edit without switching silently. Review intent survives the requested profile switch; Not now/Back/outside
+dismissal ends that intent while preserving the checkpoint and indicator. A fresh process starts
+quietly again. Accepting recovery or finding an empty checkpoint clears review intent. Autosave
+admission, checkpoint/lease fencing, cleanup and confirmed Discard remain with their existing
+owners. A different checkpoint is not hidden by postponement. Unreadable catalog postponement
+remains owner-local because its profile cannot be identified safely.
 Verification status is recorded in
 [editor-recovery-preview-checkpoint.md](editor-recovery-preview-checkpoint.md).
 
