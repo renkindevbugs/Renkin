@@ -109,9 +109,6 @@ import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
-import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews
-import dev.renkinProject.renkin.icon.creator.PackIconPreview
-import dev.renkinProject.renkin.icon.creator.PackRowPreviews
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.util.timeProfilePhase
@@ -206,6 +203,9 @@ class MainViewModel @Inject constructor(
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
 
     val iconPackState = appProvider.iconPackState
+    private val packBrowserOwner = lazy { appProvider.packBrowserPreviews() }
+    private val packBrowserPreviews by packBrowserOwner
+    val packBrowserRevision get() = packBrowserPreviews.revision
 
     /** Action-time snapshot only; UI readiness comes from [applicationState]. */
     val applicationsLoaded: Boolean get() = appProvider.applicationsLoaded
@@ -664,6 +664,11 @@ class MainViewModel @Inject constructor(
         loadStartup()
         observeProfileSession()
         loadWhatsNewState()
+        viewModelScope.launch {
+            combine(iconPackState, runtimeState.map { it.ready }.distinctUntilChanged()) { state, ready ->
+                state.takeIf { ready && it.loaded }
+            }.filterNotNull().collect { state -> packBrowserPreviews.prewarm(state.packs) }
+        }
     }
 
     private fun cancelRefresh() {
@@ -888,6 +893,7 @@ class MainViewModel @Inject constructor(
     fun openShizukuManager(): Boolean = ShizukuSupport.openManager(getApplication<Application>())
 
     override fun onCleared() {
+        if (packBrowserOwner.isInitialized()) packBrowserPreviews.close()
         backupCoordinator.close()
         shizukuObservation.close()
         buildSession.detach(this)
@@ -1287,6 +1293,7 @@ class MainViewModel @Inject constructor(
             try {
                 appProvider.forceSync(expected)
                 packBrowserPreviews.clear()
+                packBrowserPreviews.prewarm(iconPackState.value.packs)
                 // The sync may have unlocked held-back icons — the badge/banner must follow.
                 refreshMissingPacks(prompt = false)
                 _toastEvents.trySend(R.string.packsSynced)
@@ -1336,6 +1343,7 @@ class MainViewModel @Inject constructor(
             try {
                 val reloaded = appProvider.reloadPreservingSession(expected, unsavedKeys())
                 packBrowserPreviews.clear()
+                packBrowserPreviews.prewarm(iconPackState.value.packs)
                 // An uninstalled app no longer has a visible row to carry a session edit.
                 val liveKeys = appProvider.applicationList.mapTo(mutableSetOf()) { it.key }
                 appProvider.commitSessionState(reloaded) {
@@ -1412,28 +1420,17 @@ class MainViewModel @Inject constructor(
         )
     }
 
-    private val packBrowserPreviews by lazy {
-        appProvider.packBrowserPreviews()
-    }
+    fun searchPackIcons(packs: List<IconPack>, sort: IconSortOrder, query: String, component: InstalledApplication?) =
+        packBrowserPreviews.search(packs, sort, query, component)
 
-    /** Collapsed row previews for the icon-pack browser (see [PackBrowserPreviews.rowPreviews]). */
-    suspend fun packRowPreviews(
-        iconPack: IconPack,
-        sortOrder: IconSortOrder,
-        query: String,
-        options: GenerationOptions,
-        component: InstalledApplication? = null
-    ): PackRowPreviews = packBrowserPreviews.rowPreviews(iconPack, sortOrder, query, options, component)
+    fun cachedPackThumbnail(pack: IconPack, identity: String, name: String, options: GenerationOptions, sizePx: Int) =
+        packBrowserPreviews.cachedThumbnail(pack, identity, name, options, sizePx)
 
-    /** Streaming full-pack grid previews for the browser (see [PackBrowserPreviews.detailPreviews]). */
-    suspend fun packDetailPreviews(
-        iconPack: IconPack,
-        sortOrder: IconSortOrder,
-        query: String,
-        options: GenerationOptions,
-        component: InstalledApplication? = null,
-        onChunk: (List<PackIconPreview>) -> Unit
-    ) = packBrowserPreviews.detailPreviews(iconPack, sortOrder, query, options, component, onChunk)
+    suspend fun loadPackThumbnail(pack: IconPack, identity: String, name: String, options: GenerationOptions, sizePx: Int) =
+        packBrowserPreviews.thumbnail(pack, identity, name, options, sizePx)
+
+    suspend fun loadPackBrowserResource(pack: IconPack, identity: String, name: String): ResourceDrawable? =
+        packBrowserPreviews.resource(pack, identity, name)
 
     /** All profiles for the switcher (default first). */
     val profiles = appProvider.profilesFlow()

@@ -543,6 +543,16 @@ internal fun OptionsDialog(
     val externalEditorScope = rememberCoroutineScope()
     val calendarSelectionScope = rememberCoroutineScope()
     var calendarSelectionJob by remember(session) { mutableStateOf<Job?>(null) }
+    var packSelectionJob by remember(session) { mutableStateOf<Job?>(null) }
+    var packSelectionRequest by remember(session) { mutableStateOf(0L) }
+    var packSelectionPending by remember(session) { mutableStateOf(false) }
+    val packIconUnavailable = stringResource(R.string.packIconUnavailable)
+    val currentCanInteract by rememberUpdatedState(canInteract)
+    LaunchedEffect(session, selectedTab, browserSource, createSearchQuery, dialogTransition.targetState) {
+        packSelectionRequest++
+        packSelectionJob?.cancel()
+        packSelectionPending = false
+    }
 
     LaunchedEffect(selectedTab) {
         // Leaving the icon-pack list re-expands the app bar (other tabs barely scroll).
@@ -551,6 +561,7 @@ internal fun OptionsDialog(
     }
 
     val confirmIcon: () -> Unit = confirm@{
+        if (packSelectionPending) return@confirm
         if (!canInteract()) return@confirm
         if (!session.canConfirmDraft(session.renderWitnessOrNull())) return@confirm
         // Credit the icon to a pack only when it actually came from one: the Create
@@ -689,34 +700,58 @@ internal fun OptionsDialog(
                                 componentMatch = if (session.purpose == EditorPurpose.APPLICATION && createSearchQuery == app.originalName) {
                                     app.toInstalledApplication()
                                 } else null,
-                                onIconSelect = { res, pack, drawableName ->
-                                    calendarSelectionJob?.cancel()
-                                    source = Source.ICON_PACK
-                                    if (customIconList.firstOrNull()?.resourceId != res.resourceId ||
-                                        iconPack != pack.packageName
-                                    ) {
-                                        materialYouPackAdjustments.reset()
-                                    }
-                                    customIconList = listOf(res)
-                                    iconPack = pack.packageName
-                                    activateCreate()
-                                    val newPrefix = drawableName.calendarPrefixOrNull().takeIf {
-                                        session.purpose == EditorPurpose.APPLICATION
-                                    }
-                                    val keepCalendarEnabled = calendarEnabled
-                                    calendarPrefix = null
-                                    calendarPackName = null
-                                    calendarEnabled = false
-                                    if (newPrefix != null) {
-                                        calendarSelectionJob = calendarSelectionScope.launch {
-                                            val validPrefixes = viewModel.calendarPrefixesAmong(pack.packageName, listOf(newPrefix))
-                                            if (source == Source.ICON_PACK && iconPack == pack.packageName &&
-                                                customIconList.singleOrNull()?.resourceId == res.resourceId &&
-                                                newPrefix in validPrefixes) {
-                                                calendarPrefix = newPrefix
-                                                calendarPackName = pack.packageName
-                                                calendarEnabled = keepCalendarEnabled
+                                onIconSelect = { pack, identity, drawableName ->
+                                    packSelectionJob?.cancel()
+                                    val request = ++packSelectionRequest
+                                    val expectedSource = source
+                                    val expectedPack = iconPack
+                                    val expectedIcons = customIconList
+                                    val expectedQuery = createSearchQuery
+                                    packSelectionPending = true
+                                    packSelectionJob = calendarSelectionScope.launch {
+                                        try {
+                                            val res = runCatchingCancellable {
+                                                viewModel.loadPackBrowserResource(pack, identity, drawableName)
+                                            }.getOrNull()
+                                            if (request != packSelectionRequest || !currentCanInteract() ||
+                                                !dialogTransition.targetState || selectedTab != 0 ||
+                                                session.createSourceToDisplay != Source.ICON_PACK ||
+                                                source != expectedSource || iconPack != expectedPack ||
+                                                customIconList != expectedIcons || createSearchQuery != expectedQuery) return@launch
+                                            if (res == null) {
+                                                toaster.show(packIconUnavailable)
+                                                return@launch
                                             }
+                                            calendarSelectionJob?.cancel()
+                                            source = Source.ICON_PACK
+                                            if (customIconList.firstOrNull()?.resourceId != res.resourceId ||
+                                                iconPack != pack.packageName) {
+                                                materialYouPackAdjustments.reset()
+                                            }
+                                            customIconList = listOf(res)
+                                            iconPack = pack.packageName
+                                            activateCreate()
+                                            val newPrefix = drawableName.calendarPrefixOrNull().takeIf {
+                                                session.purpose == EditorPurpose.APPLICATION
+                                            }
+                                            val keepCalendarEnabled = calendarEnabled
+                                            calendarPrefix = null
+                                            calendarPackName = null
+                                            calendarEnabled = false
+                                            if (newPrefix != null) {
+                                                calendarSelectionJob = calendarSelectionScope.launch {
+                                                    val validPrefixes = viewModel.calendarPrefixesAmong(pack.packageName, listOf(newPrefix))
+                                                    if (source == Source.ICON_PACK && iconPack == pack.packageName &&
+                                                        customIconList.singleOrNull()?.resourceId == res.resourceId &&
+                                                        newPrefix in validPrefixes) {
+                                                        calendarPrefix = newPrefix
+                                                        calendarPackName = pack.packageName
+                                                        calendarEnabled = keepCalendarEnabled
+                                                    }
+                                                }
+                                            }
+                                        } finally {
+                                            if (request == packSelectionRequest) packSelectionPending = false
                                         }
                                     }
                                 },
@@ -899,8 +934,8 @@ internal fun OptionsDialog(
                     heroBitmap = heroBitmap,
                     appName = app.appName,
                     icon = rotatingPreview.icon,
-                    loading = alternateIconPending || draft.generating || globalPreviewPending || rotatingPreview.pending,
-                    canConfirm = interactionAllowed && session.canConfirmDraft(composedRenderWitness),
+                    loading = packSelectionPending || alternateIconPending || draft.generating || globalPreviewPending || rotatingPreview.pending,
+                    canConfirm = interactionAllowed && !packSelectionPending && session.canConfirmDraft(composedRenderWitness),
                     variants = rotatingPreview.variants,
                     frostedBackdrop = applicationIcon?.frostedBackdrop.takeIf { session.purpose == EditorPurpose.APPLICATION }
                 )
@@ -1204,6 +1239,7 @@ private fun WideOptionsLayout(
             frostedBackdrop = preview.frostedBackdrop,
             previewIcon = preview.icon,
             previewLoading = preview.loading,
+            contentLoading = packBrowser.visible && packBrowser.busy,
             confirmEnabled = preview.canConfirm,
             onDismiss = actions.onDismiss,
             onClear = actions.onClear,
@@ -1352,12 +1388,6 @@ private fun PackBrowserToolbar(packBrowser: PackBrowserChrome) {
             onSortOrderChange = packBrowser.onIconSortChange,
             packSortOrder = packBrowser.packSortOrder,
             onPackSortOrderChange = packBrowser.onPackSortChange
-        )
-    }
-    if (packBrowser.busy) {
-        WavyLoadingBar(
-            modifier = Modifier
-                .fillMaxWidth()
         )
     }
 }

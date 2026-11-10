@@ -79,6 +79,7 @@ private fun blurBackdrop(source: IntArray, width: Int, height: Int, horizontal: 
 internal fun FrostedComparisonPanel(
     backdrop: Bitmap?,
     modifier: Modifier = Modifier,
+    loading: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colors = MaterialTheme.colorScheme
@@ -88,7 +89,7 @@ internal fun FrostedComparisonPanel(
         shape = CardShape,
         colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceContainerHigh)
     ) {
-        Box(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().editorLoadingBorder(loading)) {
             if (bitmap != null) {
                 Box(Modifier.matchParentSize()) {
                     Box(Modifier.fillMaxWidth().fillMaxHeight(0.92f).clipToBounds()) {

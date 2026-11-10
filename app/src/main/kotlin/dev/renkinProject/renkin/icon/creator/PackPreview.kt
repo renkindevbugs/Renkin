@@ -33,3 +33,12 @@ data class PackIconPreview(
  * off-screen (and is discarded from composition) doesn't regenerate its bitmaps on the way back.
  */
 data class PackRowPreviews(val previews: List<PackIconPreview>, val moreCount: Int)
+
+data class PackSearchResult(
+    val names: List<String> = emptyList(),
+    val complete: Boolean = false,
+    val failed: Boolean = false,
+    val identity: String = ""
+)
+
+data class PackThumbnail(val resourceId: Int, val preview: ImageBitmap)
