@@ -2129,6 +2129,11 @@ follow-ups; CRC verifies transport integrity only.
   *over* scroll-under content (Mihon-style — the content keeps its size, so flings stay
   smooth while the bar animates; used by the edit dialog), and `Modifier.drawVerticalScrollbar`
   adds the transient scrollbar used on every long list/grid.
+- **Editor navigation icons** (`ui/EditorModeIcon.kt`): the approved 24dp vector set is a
+  rotating plus in a tile (Create), image + plus (Upload), outlined pen + Bezier arc (Vector),
+  and moving Tune heads (Modifier). Selection changes play one finite animation, with frame
+  reads in Draw; the first composition stays still. Reduce icon motion suppresses movement.
+  The existing NavigationBar owns tint, labels, selection and the unavailable Modifier hint.
 - **Loading**: the startup shell and full-page application-list loader use Material's
   morphing-shape `LoadingIndicator`, preserving the established startup animation. Linear
   progress uses the shared `WavyLoadingBar` (ControlWidgets.kt); no hand-rolled indicators.
