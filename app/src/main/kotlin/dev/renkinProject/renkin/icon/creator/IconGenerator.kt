@@ -49,6 +49,7 @@ import dev.renkinProject.renkin.drawable.isAdaptiveIconDrawable
 import dev.renkinProject.renkin.drawable.newAdaptiveIconDrawable
 import dev.renkinProject.renkin.drawable.shrinkIfBiggerThan
 import dev.renkinProject.renkin.extension.newArgbBitmap
+import dev.renkinProject.renkin.extension.contentBounds
 import dev.renkinProject.renkin.extension.scaleFromCenter
 import dev.renkinProject.renkin.icon.parser.IconParser
 import dev.renkinProject.renkin.packages.IconPackCatalog
@@ -307,6 +308,62 @@ class IconGenerator(
                 parsedIcon,
                 preserveAdaptiveAppearance = changesWithMaterialYou
             )
+    }
+
+    fun packBrowserBitmap(iconPackName: String, icon: ResourceDrawable, size: Int): Bitmap? {
+        require(size > 0)
+        val effect = modifiers.effect.imageEdit
+        if (!export.themed && !modifiers.materialYouPack.hasRestyling &&
+            effect != ImageEdit.COLORIZE && effect != ImageEdit.COLORIZE_SEGMENTS &&
+            icon.drawable.isAdaptiveIconDrawable()
+        ) {
+            val preview = try {
+                icon.drawable.copyForRendering().renderBrowserBitmap(size)
+                    .takeIf { it.contentBounds() != null }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
+            if (preview != null) return preview
+        }
+
+        return try {
+            val generated = colorizeFromIconPack(iconPackName, icon) ?: return null
+            val rendered = generated.toBrowserPreviewBitmap(size)
+            if (rendered.contentBounds() != null) rendered
+            else browserPlatformPreview(icon.drawable.copyForRendering(), size) ?: rendered
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun Drawable.renderBrowserBitmap(size: Int, foregroundOnly: Boolean = false): Bitmap {
+        val previousBounds = Rect(bounds)
+        return try {
+            newArgbBitmap(size, size) { canvas ->
+                val overdraw = if (foregroundOnly) (size * (ADAPTIVE_ICON_SCALE - 1f) / 2f).toInt() else 0
+                setBounds(-overdraw, -overdraw, size + overdraw, size + overdraw)
+                draw(canvas)
+            }
+        } finally {
+            bounds = previousBounds
+        }
+    }
+
+    private fun browserPlatformPreview(drawable: Drawable, size: Int): Bitmap? {
+        val rendered = if (drawable.isAdaptiveIconDrawable()) {
+            (drawable as AdaptiveIconDrawable).foreground
+                ?.renderBrowserBitmap(256, foregroundOnly = true)
+                ?.takeIf { it.contentBounds() != null }
+                ?: drawable.renderBrowserBitmap(256).takeIf { it.contentBounds() != null }
+        } else {
+            drawable.renderBrowserBitmap(256).takeIf { it.contentBounds() != null }
+        } ?: return null
+        if (size >= rendered.width) return rendered
+        return Bitmap.createScaledBitmap(rendered, size, size, true)
     }
 
     private fun generateIcon(

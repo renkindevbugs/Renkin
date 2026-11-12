@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.apk
 import dev.renkinProject.renkin.packages.InstalledIconLoader
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Typeface
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.InstalledApplication
@@ -239,6 +240,23 @@ class IconGenerationService(
 
     private fun modifierPipeline(options: GenerationOptions) =
         IconImageEditPipeline(context.resources, options)
+
+    suspend fun packBrowserBitmap(
+        iconPackName: String,
+        options: GenerationOptions,
+        resource: ResourceDrawable,
+        size: Int
+    ): Bitmap? = withContext(Dispatchers.Default) {
+        currentCoroutineContext().ensureActive()
+        val pack = IconPackContainer("", emptyMap())
+        IconGenerator(
+            context,
+            options,
+            pack,
+            pack,
+            iconPackCatalog = iconPackCatalog
+        ).packBrowserBitmap(iconPackName, resource, size)
+    }
 
     suspend fun getIconPackIcons(
         iconPackName: String,

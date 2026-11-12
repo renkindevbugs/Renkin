@@ -38,6 +38,10 @@ class AppFilterIndex internal constructor(
 ) {
     internal val drawableNamesByPackage: Map<String, Map<String, String>> =
         elementsByPackage.mapValues { (_, elements) -> indexAppDrawableNames(elements) }
+    private val browserNamesByPackage = elementsByPackage.mapValues { (_, elements) ->
+        elements.filterIsInstance<RawItem>().groupBy({ it.component }, { it.drawableLink })
+            .mapValues { (_, names) -> names.distinct() }
+    }
     private val components = applications.mapTo(mutableSetOf()) { it.toComponentInfo() }
 
     internal fun elementsFor(packageName: String, requestedApps: List<InstalledApplication>): List<RawElement>? =
@@ -47,6 +51,12 @@ class AppFilterIndex internal constructor(
         drawableNamesByPackage[packageName]?.get(app.toComponentInfo())
 
     internal fun covers(app: InstalledApplication): Boolean = app.toComponentInfo() in components
+
+    internal fun browserNamesFor(packageName: String, app: InstalledApplication): List<String>? {
+        if (!covers(app)) return null
+        val names = browserNamesByPackage[packageName] ?: return null
+        return names[app.toComponentInfo()].orEmpty()
+    }
 }
 
 /**
@@ -342,6 +352,9 @@ class IconPackRepository(
     // An empty mapping is conclusive only when the index covered every requested component.
     internal fun indexedElements(iconPackageName: String, applications: List<InstalledApplication>): List<RawElement>? =
         state.value.index.elementsFor(iconPackageName, applications)
+
+    internal fun indexedBrowserNames(iconPackageName: String, app: InstalledApplication): List<String>? =
+        state.value.index.browserNamesFor(iconPackageName, app)
 
     internal fun captureIndexedElements(): (String, List<InstalledApplication>) -> List<RawElement>? {
         val index = state.value.index

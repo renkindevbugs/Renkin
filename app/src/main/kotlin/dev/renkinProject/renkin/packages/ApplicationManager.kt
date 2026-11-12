@@ -46,6 +46,7 @@ internal data class NamedResourceDrawable(val name: String, val resource: Resour
 
 internal interface PackBrowserDataSource {
     fun getIconPackDrawableNames(iconPackName: String): List<String>
+    fun getIconPackDrawableIds(iconPackName: String, drawableNames: List<String>): Map<String, Int> = emptyMap()
     fun getIconPackDrawableEntries(iconPackName: String, drawableNames: List<String>): List<NamedResourceDrawable>
     fun getAppFilterRawElements(iconPackName: String, applications: List<InstalledApplication>): List<RawElement>
 }
@@ -260,6 +261,18 @@ internal class ApplicationManager(
             resolveId = { name -> res.getIdentifierByName(name, "drawable", iconPackName) },
             loadDrawable = { id -> resourceResolver.getDrawable(res, id) }
         )
+    }
+
+    override fun getIconPackDrawableIds(iconPackName: String, drawableNames: List<String>): Map<String, Int> {
+        val res = checkNotNull(resourceResolver.getResources(iconPackName)) { "Icon pack resources unavailable: $iconPackName" }
+        return drawableNames.associateWith { name ->
+            val id = res.getIdentifierByName(name, "drawable", iconPackName)
+            if (id == 0 && BuildConfig.DEBUG) {
+                val mipmapId = res.getIdentifierByName(name, "mipmap", iconPackName)
+                Log.debug("PackResources", "Missing browser drawable: pack=$iconPackName, name=$name, mipmapId=$mipmapId")
+            }
+            id
+        }
     }
 
     fun getCalendarApplications(applications: List<InstalledApplication>, elements: List<RawElement>): Map<InstalledApplication, String> {

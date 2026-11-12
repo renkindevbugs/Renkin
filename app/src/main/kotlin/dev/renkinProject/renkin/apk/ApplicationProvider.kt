@@ -62,7 +62,8 @@ import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.icon.creator.withModifiers
 import dev.renkinProject.renkin.icon.creator.withExport
 import dev.renkinProject.renkin.icon.creator.withEffect
-import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews
+import dev.renkinProject.renkin.icon.creator.PackBrowserSession
+import dev.renkinProject.renkin.icon.creator.PackBrowserIndex
 import dev.renkinProject.renkin.icon.creator.globalModifierOptions
 import dev.renkinProject.renkin.icon.creator.hasVisibleModifierEffect
 import dev.renkinProject.renkin.packages.ApplicationManager
@@ -1684,8 +1685,11 @@ class ApplicationProvider internal constructor(
     suspend fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, IconPackDrawable?> =
         iconGenService.getIconPackIcons(iconPackName, options, drawables)
 
-    internal fun packBrowserPreviews(): PackBrowserPreviews =
-        PackBrowserPreviews(appManager, iconPackRepo::indexedElements, ::getIconPackIcons)
+    internal fun packBrowserPreviews(): PackBrowserSession =
+        PackBrowserSession(
+            PackBrowserIndex(context, appManager), appManager,
+            iconPackRepo::indexedBrowserNames, iconGenService::packBrowserBitmap
+        )
 
     suspend fun getIconPackDropdownIcons(): Map<String, ResourceDrawable> = iconPackRepo.getDropdownIcons()
 

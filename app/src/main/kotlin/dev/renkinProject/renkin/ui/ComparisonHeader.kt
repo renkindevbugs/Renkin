@@ -41,7 +41,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -97,7 +96,6 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
@@ -105,7 +103,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.animation.EnterTransition
 import dev.renkinProject.renkin.ui.theme.iconTileShape
-import kotlinx.coroutines.delay
 @Composable
 internal fun ComparisonHeader(
     heroBitmap: Bitmap?,
@@ -125,7 +122,7 @@ internal fun ComparisonHeader(
     // Create-tab chrome (Mihon-style): [titleContent] replaces the app-name title (the inline
     // search field), [extraActions] adds buttons before the overflow (the sort menu),
     // [onNavigateBack] swaps the close button for a back arrow (collapses the pack grid first),
-    // and [showProgress] draws a thin indeterminate line under the bar while icons still load.
+    // and [showProgress] keeps the comparison-card loading border active during pack searches.
     titleContent: (@Composable () -> Unit)? = null,
     extraActions: (@Composable () -> Unit)? = null,
     onNavigateBack: (() -> Unit)? = null,
@@ -152,6 +149,7 @@ internal fun ComparisonHeader(
         // dead-center; a long name gets ellipsised before it can reach them.
         FrostedComparisonPanel(
             backdrop = frostedBackdrop,
+            loading = previewLoading || showProgress,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 6.dp)
@@ -187,7 +185,7 @@ internal fun ComparisonHeader(
                 Row(verticalAlignment = Alignment.Top) {
                     CurrentSlot(heroBitmap, flyIn, flyInEnter, 44.dp, labelExpand = 0f)
                     ComparisonArrow(44.dp)
-                    NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 44.dp, labelExpand = 0f, variants = previewVariants)
+                    NewSlot(previewIcon, flyIn, flyInEnter, 44.dp, labelExpand = 0f, variants = previewVariants)
                 }
 
                 Row(
@@ -232,17 +230,9 @@ internal fun ComparisonHeader(
                     scrolledContainerColor = Color.Transparent
                 )
             )
-            // Mihon-style activity line right under the bar: visible while pack rows are still
-            // resolving the query, so "search finished" is unambiguous.
-            if (showProgress) {
-                WavyLoadingBar(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                )
-            }
-
             FrostedComparisonPanel(
                 backdrop = frostedBackdrop,
+                loading = previewLoading || showProgress,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 6.dp)
@@ -259,7 +249,7 @@ internal fun ComparisonHeader(
                     ) {
                         CurrentSlot(heroBitmap, flyIn, flyInEnter, 56.dp, labelExpand = labelExpand)
                         ComparisonArrow(56.dp)
-                        NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 56.dp, labelExpand = labelExpand, variants = previewVariants)
+                        NewSlot(previewIcon, flyIn, flyInEnter, 56.dp, labelExpand = labelExpand, variants = previewVariants)
                     }
                     ApplyButton(
                         onConfirm,
@@ -293,7 +283,8 @@ internal fun EditPreviewPane(
     modifier: Modifier = Modifier,
     extraCard: (@Composable () -> Unit)? = null,
     previewVariants: PreviewVariants? = null,
-    frostedBackdrop: Bitmap? = null
+    frostedBackdrop: Bitmap? = null,
+    contentLoading: Boolean = false
 ) {
     val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
     val flyInSpec = spring<androidx.compose.ui.unit.IntOffset>(
@@ -337,6 +328,7 @@ internal fun EditPreviewPane(
             // the large New preview with its own label below — one clear top-to-bottom flow.
             FrostedComparisonPanel(
                 backdrop = frostedBackdrop,
+                loading = previewLoading || contentLoading,
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
             ) {
                 Column(
@@ -360,7 +352,7 @@ internal fun EditPreviewPane(
                         .padding(vertical = 8.dp)
                         .size(20.dp)
                 )
-                NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 176.dp, labelExpand = 1f, variants = previewVariants)
+                NewSlot(previewIcon, flyIn, flyInEnter, 176.dp, labelExpand = 1f, variants = previewVariants)
                 }
             }
 
@@ -505,11 +497,10 @@ private fun CurrentSlot(
     }
 }
 
-/** The "new" icon preview, with a generating spinner and a primary border once a preview exists. */
+/** The "new" icon preview, with a primary border once a preview exists. */
 @Composable
 private fun NewSlot(
     previewIcon: IconPackDrawable?,
-    previewLoading: Boolean,
     flyIn: MutableTransitionState<Boolean>,
     flyInEnter: EnterTransition,
     size: Dp,
@@ -520,16 +511,6 @@ private fun NewSlot(
     // Tapping the preview blows it up, so the result is judgeable before applying.
     var enlarged by remember { mutableStateOf(false) }
     var previewMask by rememberSaveable { mutableStateOf(LauncherPreviewMask.ROUNDED) }
-    var showLoading by remember { mutableStateOf(false) }
-    LaunchedEffect(previewLoading) {
-        if (previewLoading) {
-            // Fast modifier previews should update without a distracting one-frame spinner.
-            delay(120)
-            showLoading = true
-        } else {
-            showLoading = false
-        }
-    }
     // The row's custom icon flies into this slot as the editor opens, and this preview flies to
     // the row's result slot as it closes, so the flight needs its position and icon, and the slot
     // steps aside while a copy is in the air.
@@ -579,13 +560,6 @@ private fun NewSlot(
                                     modifier = Modifier.size(size / 2)
                                 )
                             }
-                        }
-                        // Only sustained work gets an activity indicator; quick updates stay instant.
-                        if (showLoading) {
-                            LoadingIndicator(
-                                modifier = Modifier.size(size / 2),
-                                color = MaterialTheme.colorScheme.primary
-                            )
                         }
                     }
                 }

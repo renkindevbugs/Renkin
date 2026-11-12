@@ -1,4 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="editorLoading">Loading editor content</string>
+    <string name="packIconUnavailable">Icon unavailable</string>
+    <string name="packSearchFailed">Could not read all icons in this pack. Try refreshing the icon packs.</string>
     <string name="app_name" translatable="false">Renkin</string>
 
     <string name="iconColor">Icon color</string>

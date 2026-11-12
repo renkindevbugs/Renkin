@@ -215,6 +215,35 @@ the latest state even if loading finished while they were stopped. Pack lists pa
 editor/source widgets come from those collected snapshots. Tap-time readiness and foreground
 installed-pack checks still read the current domain value.
 
+The interactive installed-pack browser uses `PackBrowserSession`, owned and closed by
+MainViewModel. Its metadata search evaluates every offered pack independently of lazy row
+composition. `AppFilterIndex` has a separate multi-name component lookup for browser alternatives;
+the canonical last-wins drawable mapping is unchanged. Exact component results can be published
+before name indexing finishes. Pending and failed metadata are distinct from a confirmed empty
+result. Confirmed missing drawable references are omitted before publication, so a pack with no
+remaining matches shows the normal empty state. Existing resources whose load/render fails still
+appear as unavailable tiles; debug logs distinguish these failures from missing resource names.
+
+`PackBrowserIndex` keeps naturally sorted names in RAM and in a disposable, bounded AtomicFile
+cache under cacheDir, outside profiles, backups and Room. Prewarming starts only after runtime
+readiness and does not delay startup. Package revision and relevant configuration validate names;
+thumbnail identity additionally includes the current dynamic palette. Sync/refresh invalidates
+in-flight work and restarts prewarming. The browser retains its 30/400 candidate limits, but only
+composed lazy tiles request images. A shared 16 MiB thumbnail cache serves both rows and detail;
+it holds no source Drawable or generated export payload. Native adaptive thumbnails skip full
+layer capture/PNG encoding when effects allow it, retaining the existing generator and platform
+fallback otherwise. Full layer capture, persistence and export remain on the selected-icon path.
+Selection resolves the resource asynchronously with fresh identity checks before and after load;
+pending selection blocks confirmation and cannot overwrite a newer query, tab or source choice.
+
+Editor comparison cards display indeterminate activity as a primary segment moving along their
+inside perimeter, for both preview generation and pack browsing. This draw-only overlay has no
+measurement or padding effect. The phone app-bar progress row and wide-toolbar progress row are
+removed, so loading transitions cannot move Current/New flight targets or the Apply action.
+When work finishes, the current border segment closes into the whole outline over 200 ms and
+fades over 120 ms. This draw-only completion does not delay controls or readiness semantics;
+new work cancels the completion and resumes indeterminate activity.
+
 The lifecycle runtime Compose dependency uses the existing lifecycle version. Pack exclusion,
 isolated parallel appfilter parsing, cancellation, cache clearing and refresh/profile ownership
 are unchanged. The live application list and provider/profile scalar state keep their existing
