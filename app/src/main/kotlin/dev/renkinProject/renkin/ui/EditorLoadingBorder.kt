@@ -1,6 +1,8 @@
 package dev.renkinProject.renkin.ui
 
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -8,6 +10,12 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
@@ -30,7 +38,12 @@ import kotlin.math.sin
 
 @Composable
 internal fun Modifier.editorLoadingBorder(loading: Boolean): Modifier {
-    if (!loading) return this
+    var visible by remember { mutableStateOf(loading) }
+    var finishing by remember { mutableStateOf(false) }
+    var stoppedProgress by remember { mutableFloatStateOf(0f) }
+    val completion = remember { Animatable(0f) }
+    val opacity = remember { Animatable(1f) }
+    if (!loading && !visible) return this
     val color = MaterialTheme.colorScheme.primary
     val description = stringResource(R.string.editorLoading)
     val transition = rememberInfiniteTransition(label = "editorLoadingBorder")
@@ -40,10 +53,26 @@ internal fun Modifier.editorLoadingBorder(loading: Boolean): Modifier {
         animationSpec = infiniteRepeatable(tween(1600, easing = LinearEasing), RepeatMode.Restart),
         label = "editorLoadingPosition"
     )
-    return semantics {
+    LaunchedEffect(loading) {
+        if (loading) {
+            visible = true
+            finishing = false
+            completion.snapTo(0f)
+            opacity.snapTo(1f)
+        } else {
+            stoppedProgress = phase.value
+            finishing = true
+            completion.animateTo(1f, tween(200, easing = FastOutSlowInEasing))
+            opacity.animateTo(0f, tween(120, easing = LinearEasing))
+            visible = false
+        }
+    }
+    // Completion is visual only: accessibility and controls follow the real work state.
+    val activity = if (loading) semantics {
         progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
         stateDescription = description
-    }.drawWithCache {
+    } else this
+    return activity.drawWithCache {
         val width = 2.dp.toPx()
         val inset = width / 2f
         val outline = CardShape.createOutline(
@@ -66,15 +95,22 @@ internal fun Modifier.editorLoadingBorder(loading: Boolean): Modifier {
             drawContent()
             val length = measure.length
             if (length > 0f) {
-                val progress = phase.value
+                val progress = if (finishing) stoppedProgress else phase.value
                 val start = (progress * length) % length
-                val extent = length * (0.18f + 0.10f * sin(progress * 2f * PI.toFloat()))
+                val baseExtent = 0.18f + 0.10f * sin(progress * 2f * PI.toFloat())
+                val fraction = if (finishing) baseExtent + (1f - baseExtent) * completion.value else baseExtent
+                val extent = length * fraction
                 val end = start + extent
-                segment.reset()
-                measure.getSegment(start, minOf(end, length), segment)
-                if (end > length) measure.getSegment(0f, end - length, segment)
-                drawPath(perimeter, color.copy(alpha = 0.16f), style = stroke)
-                drawPath(segment, color, style = stroke)
+                val alpha = opacity.value
+                drawPath(perimeter, color.copy(alpha = 0.16f * alpha), style = stroke)
+                if (fraction >= 1f) {
+                    drawPath(perimeter, color.copy(alpha = alpha), style = stroke)
+                } else {
+                    segment.reset()
+                    measure.getSegment(start, minOf(end, length), segment)
+                    if (end > length) measure.getSegment(0f, end - length, segment)
+                    drawPath(segment, color.copy(alpha = alpha), style = stroke)
+                }
             }
         }
     }

@@ -240,6 +240,9 @@ Editor comparison cards display indeterminate activity as a primary segment movi
 inside perimeter, for both preview generation and pack browsing. This draw-only overlay has no
 measurement or padding effect. The phone app-bar progress row and wide-toolbar progress row are
 removed, so loading transitions cannot move Current/New flight targets or the Apply action.
+When work finishes, the current border segment closes into the whole outline over 200 ms and
+fades over 120 ms. This draw-only completion does not delay controls or readiness semantics;
+new work cancels the completion and resumes indeterminate activity.
 
 The lifecycle runtime Compose dependency uses the existing lifecycle version. Pack exclusion,
 isolated parallel appfilter parsing, cancellation, cache clearing and refresh/profile ownership
@@ -2155,6 +2158,11 @@ follow-ups; CRC verifies transport integrity only.
   *over* scroll-under content (Mihon-style — the content keeps its size, so flings stay
   smooth while the bar animates; used by the edit dialog), and `Modifier.drawVerticalScrollbar`
   adds the transient scrollbar used on every long list/grid.
+- **Editor navigation icons** (`ui/EditorModeIcon.kt`): the approved 24dp vector set is a
+  rotating plus in a tile (Create), image + plus (Upload), outlined pen + Bezier arc (Vector),
+  and moving Tune heads (Modifier). Selection changes play one finite animation, with frame
+  reads in Draw; the first composition stays still. Reduce icon motion suppresses movement.
+  The existing NavigationBar owns tint, labels, selection and the unavailable Modifier hint.
 - **Loading**: the startup shell and full-page application-list loader use Material's
   morphing-shape `LoadingIndicator`, preserving the established startup animation. Linear
   progress uses the shared `WavyLoadingBar` (ControlWidgets.kt); no hand-rolled indicators.

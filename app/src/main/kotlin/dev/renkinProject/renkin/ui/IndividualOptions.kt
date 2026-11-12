@@ -14,10 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +57,8 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.AppTargetState
+import dev.renkinProject.renkin.data.ReduceIconMotionKey
+import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.Source
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
@@ -127,7 +126,7 @@ import androidx.compose.runtime.produceState
 import dev.renkinProject.renkin.apk.EditorGlobalLayer
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.util.runCatchingCancellable
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.NavigationBar
@@ -1400,23 +1399,30 @@ private fun OptionsBottomBar(
     onSelectTab: (Int) -> Unit,
     onModifierBlocked: () -> Unit
 ) {
+    val reduceMotion = getPreferences().getBooleanValue(ReduceIconMotionKey)
     NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         NavigationBarItem(
             selected = selectedTab == 0,
             onClick = { onSelectTab(0) },
-            icon = { Icon(Icons.Filled.Refresh, null) },
+            icon = {
+                EditorModeIcon(EditorMode.CREATE, selected = selectedTab == 0, reduceMotion = reduceMotion)
+            },
             label = { Text(stringResource(R.string.create)) }
         )
         NavigationBarItem(
             selected = selectedTab == 1,
             onClick = { onSelectTab(1) },
-            icon = { Icon(Icons.Filled.Face, null) },
+            icon = {
+                EditorModeIcon(EditorMode.UPLOAD, selected = selectedTab == 1, reduceMotion = reduceMotion)
+            },
             label = { Text(stringResource(R.string.upload)) }
         )
         NavigationBarItem(
             selected = selectedTab == 3,
             onClick = { onSelectTab(3) },
-            icon = { Icon(Icons.Filled.Create, null) },
+            icon = {
+                EditorModeIcon(EditorMode.VECTOR, selected = selectedTab == 3, reduceMotion = reduceMotion)
+            },
             label = { Text(stringResource(R.string.editVector)) }
         )
         val disabledTint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
@@ -1424,11 +1430,12 @@ private fun OptionsBottomBar(
             selected = selectedTab == 2,
             onClick = { if (modifierEnabled) onSelectTab(2) else onModifierBlocked() },
             icon = {
-                if (modifierEnabled) {
-                    Icon(Icons.Filled.Tune, null)
-                } else {
-                    Icon(Icons.Filled.Tune, null, tint = disabledTint)
-                }
+                EditorModeIcon(
+                    EditorMode.MODIFIER,
+                    selected = selectedTab == 2,
+                    reduceMotion = reduceMotion || !modifierEnabled,
+                    tint = if (modifierEnabled) LocalContentColor.current else disabledTint
+                )
             },
             label = {
                 if (modifierEnabled) {
