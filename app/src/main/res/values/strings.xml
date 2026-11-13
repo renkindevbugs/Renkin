@@ -429,6 +429,7 @@
     <string name="searchFonts">Search fonts</string>
     <string name="searchFontsEmpty">No font matches that name</string>
     <string name="searchPacksEmpty">No icon pack matches that name</string>
+    <string name="createNoIconPacks">No icon packs found on this device. Install an icon pack, or pick App Icon or Text below.</string>
     <string name="packCoverage">%1$d of %2$d apps matched</string>
     <string name="packCoverageUsed">%1$d of %2$d apps matched · %3$d used</string>
     <string name="filterChipMissing">%d missing</string>
