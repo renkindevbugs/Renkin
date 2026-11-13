@@ -40,3 +40,9 @@ data class IconPackFallback(
 fun InstalledApplication.toComponentInfo(): String {
     return "ComponentInfo{${this.packageName}/${this.activityName}}"
 }
+
+/** The drawable names these appfilter elements map to [app]'s component (usually 0 or 1). */
+fun List<RawElement>.drawableNamesFor(app: InstalledApplication): List<String> {
+    val component = app.toComponentInfo()
+    return filterIsInstance<RawItem>().filter { it.component == component }.map { it.drawableLink }.distinct()
+}

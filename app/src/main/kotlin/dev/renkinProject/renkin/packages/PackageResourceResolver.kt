@@ -13,6 +13,7 @@ import dev.renkinProject.renkin.extension.getDrawableOrNull
 import dev.renkinProject.renkin.extension.getIdentifierByName
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
+import java.util.WeakHashMap
 
 /**
  * Resolves resources owned by another installed package.
@@ -29,6 +30,18 @@ internal class PackageResourceResolver(private val context: Context) {
          * this value because an in-app theme override does not update Android's configuration.
          */
         var displayedNightMode: Boolean? by mutableStateOf(null)
+
+        fun isNightDisplayed(configuration: Configuration): Boolean =
+            displayedNightMode ?: configuration.isNight()
+
+        private fun Configuration.isNight(): Boolean =
+            uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+
+        private class NightOverride(val base: Configuration, val night: Boolean, val resources: Resources)
+
+        // A fresh Resources starts with an empty drawable cache; the pack browser resolves one per
+        // thumbnail, so overrides are reused while the system Resources and its configuration live.
+        private val nightOverrides = WeakHashMap<Resources, NightOverride>()
     }
 
     fun getResources(packageName: String): Resources? = try {
@@ -89,14 +102,18 @@ internal class PackageResourceResolver(private val context: Context) {
 
     private fun Resources.withDisplayedNightMode(): Resources {
         val displayedNight = displayedNightMode ?: return this
-        val updated = Configuration(configuration)
-        val resolvedNight =
-            updated.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-        if (resolvedNight == displayedNight) return this
+        val base = configuration
+        if (base.isNight() == displayedNight) return this
+        synchronized(nightOverrides) {
+            nightOverrides[this]?.takeIf { it.night == displayedNight && it.base == base }?.let { return it.resources }
+        }
 
+        val updated = Configuration(base)
         updated.uiMode = (updated.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
             (if (displayedNight) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
         @Suppress("DEPRECATION")
-        return Resources(assets, displayMetrics, updated)
+        val overridden = Resources(assets, displayMetrics, updated)
+        synchronized(nightOverrides) { nightOverrides[this] = NightOverride(Configuration(base), displayedNight, overridden) }
+        return overridden
     }
 }

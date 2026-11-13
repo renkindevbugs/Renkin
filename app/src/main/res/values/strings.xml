@@ -1130,7 +1130,7 @@
     <string name="sourceSecondaryNotNeeded">Not needed</string>
     <string name="enlargeNewIconPreview">Enlarge new icon preview</string>
     <string name="reduceIconMotion">Reduce icon motion</string>
-    <string name="reduceIconMotionSummary">Open and close the editor without flying icons. Loading indicators stay visible.</string>
+    <string name="reduceIconMotionSummary">Open and close the editor without flying icons and keep the editor tab icons still. Loading indicators stay visible.</string>
     <string name="settingsLastBackup">Last backup: %1$s</string>
     <string name="watchNotificationSummaryLine">%1$s · %2$s</string>
     <plurals name="watchNotificationAvailableCount">

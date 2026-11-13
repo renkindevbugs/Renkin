@@ -42,6 +42,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.renkinProject.renkin.OptionsViewModel
 import dev.renkinProject.renkin.feature.online.OnlineImageImport
 import android.graphics.Bitmap
 import dev.renkinProject.renkin.icon.creator.materialYouSchemes
@@ -194,6 +196,9 @@ internal fun OptionsDialog(
     globalLayer: EditorGlobalLayer? = null
 ) {
     val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
+    val optionsViewModel: OptionsViewModel = hiltViewModel()
+    val preferenceSnapshot by optionsViewModel.preferenceSnapshot.collectAsStateWithLifecycle()
+    val reduceIconMotion = preferenceSnapshot.getBooleanValue(ReduceIconMotionKey)
     val app = session.application
     val interactionAllowed = canInteract()
 
@@ -922,6 +927,7 @@ internal fun OptionsDialog(
                     OptionsBottomBar(
                         selectedTab = selectedTab,
                         modifierEnabled = draft.hasIcon,
+                        reduceMotion = reduceIconMotion,
                         onSelectTab = { selectedTab = it },
                         onModifierBlocked = {
                             toaster.show(selectIconMessage)
@@ -1396,10 +1402,10 @@ private fun PackBrowserToolbar(packBrowser: PackBrowserChrome) {
 private fun OptionsBottomBar(
     selectedTab: Int,
     modifierEnabled: Boolean,
+    reduceMotion: Boolean,
     onSelectTab: (Int) -> Unit,
     onModifierBlocked: () -> Unit
 ) {
-    val reduceMotion = getPreferences().getBooleanValue(ReduceIconMotionKey)
     NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         NavigationBarItem(
             selected = selectedTab == 0,

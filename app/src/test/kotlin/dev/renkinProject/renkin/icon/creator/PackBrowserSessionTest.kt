@@ -281,4 +281,58 @@ class PackBrowserSessionTest {
         assertTrue("A thumbnail must not capture 750px export layers", largestLayer in 1..192)
         assertEquals(bounds, source.bounds)
     }
+
+    @Test fun calendarNamesSortNaturallyInBothDirections() = runBlocking {
+        val pack = pack()
+        val source = Catalog().apply { put(pack, "cal_10" to 10, "cal_2" to 2, "cal_1" to 1, "calendar" to 4) }
+        val session = session(source)
+
+        assertEquals(listOf("cal_1", "cal_2", "cal_10", "calendar"), results(session, listOf(pack)).getValue(pack.packageName).names)
+        assertEquals(listOf("calendar", "cal_10", "cal_2", "cal_1"),
+            results(session, listOf(pack), sort = IconSortOrder.NAME_DESC).getValue(pack.packageName).names)
+    }
+
+    @Test fun queryIgnoresCaseAndMatchesSpacesAsUnderscores() = runBlocking {
+        val pack = pack()
+        val source = Catalog().apply { put(pack, "gmail" to 1, "google_maps" to 2, "maps_pin" to 3) }
+        val session = session(source)
+
+        assertEquals(listOf("google_maps", "maps_pin"), results(session, listOf(pack), "MAP").getValue(pack.packageName).names)
+        assertEquals(listOf("google_maps"), results(session, listOf(pack), "google maps").getValue(pack.packageName).names)
+    }
+
+    @Test fun appMappedNameLeadsOnceInBothSortOrdersWhenTheQueryAlsoMatchesIt() = runBlocking {
+        val pack = pack()
+        val source = Catalog().apply { put(pack, "gmail" to 1, "google_maps" to 2, "maps_pin" to 3) }
+        val session = session(source, listOf("google_maps"))
+        val app = InstalledApplication("com.google.maps", "Main", 0)
+
+        for (sort in IconSortOrder.entries) {
+            val names = results(session, listOf(pack), "map", app, sort).getValue(pack.packageName).names
+            assertEquals("google_maps", names.first())
+            assertEquals(names.distinct(), names)
+            assertEquals(setOf("google_maps", "maps_pin"), names.toSet())
+        }
+    }
+
+    @Test fun appMappedNameLeadsEvenWhenTheQueryExcludesIt() = runBlocking {
+        val pack = pack()
+        val source = Catalog().apply { put(pack, "calendar" to 1, "google_maps" to 2, "maps_pin" to 3) }
+        val session = session(source, listOf("calendar"))
+        val names = results(session, listOf(pack), "map", InstalledApplication("com.calendar", "Main", 0))
+            .getValue(pack.packageName).names
+
+        assertEquals(listOf("calendar", "google_maps", "maps_pin"), names)
+    }
+
+    @Test fun cacheIdentitySurvivesRotationButFollowsLocale() {
+        val index = PackBrowserIndex(context, Catalog()).also { indexes.add(it) }
+        val portrait = index.configurationSignature()
+
+        RuntimeEnvironment.setQualifiers("+land")
+        assertEquals(portrait, index.configurationSignature())
+
+        RuntimeEnvironment.setQualifiers("fr")
+        assertNotEquals(portrait, index.configurationSignature())
+    }
 }
