@@ -13,6 +13,11 @@ internal fun packageSigningFlags(): Int = if (Build.VERSION.SDK_INT >= Build.VER
     PackageManager.GET_SIGNING_CERTIFICATES
 } else PackageManager.GET_SIGNATURES
 
+// Android 9 and 10 collect an APK file's certificates only for GET_SIGNATURES; with
+// GET_SIGNING_CERTIFICATES alone their archive parser returns no signingInfo at all.
+@Suppress("DEPRECATION")
+internal fun archiveSigningFlags(): Int = packageSigningFlags() or PackageManager.GET_SIGNATURES
+
 /**
  * Whether [apkPath] can update the installed [packageName] in place: true when nothing is
  * installed or the installed signer is in the new APK's signing lineage, false on a definite
@@ -27,7 +32,7 @@ internal fun canUpdateWithSameSigner(packageManager: PackageManager, packageName
         } catch (_: PackageManager.NameNotFoundException) {
             return true
         }
-        val built = packageManager.getPackageArchiveInfo(apkPath, flags) ?: return null
+        val built = packageManager.getPackageArchiveInfo(apkPath, archiveSigningFlags()) ?: return null
         val installedSigners = currentSigners(installed) ?: return null
         val builtLineage = signingLineage(built) ?: return null
         builtLineage.containsAll(installedSigners)

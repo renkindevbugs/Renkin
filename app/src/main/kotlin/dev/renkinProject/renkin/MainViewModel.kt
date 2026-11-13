@@ -980,9 +980,10 @@ class MainViewModel @Inject constructor(
     fun dismissBuildOutcome() = buildCoordinator.dismissBuildOutcome()
 
     data class InstallFailureInfo(val summary: String, val report: String, val missingSystemInstaller: Boolean,
-        val canSaveApk: Boolean)
+        val canSaveApk: Boolean, @get:StringRes val buildFailureAdvice: Int? = null)
     val installFailure: InstallFailureInfo? get() = (buildState as? BuildInstallState.Failed)?.let {
-        InstallFailureInfo(it.summary, it.report, it.result == ApkInstallResult.NO_SYSTEM_INSTALLER, it.pack != null)
+        InstallFailureInfo(it.summary, it.report, it.result == ApkInstallResult.NO_SYSTEM_INSTALLER, it.pack != null,
+            it.advice)
     }
     fun dismissInstallFailure() = buildCoordinator.dismissInstallFailure()
     fun beginFailedApkExport(openPicker: (String) -> Unit) = buildCoordinator.beginFailedApkExport(openPicker)

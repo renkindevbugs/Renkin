@@ -726,8 +726,9 @@ internal fun InstallFailureDialog(
     val clipboard = LocalClipboard.current
     val toaster = LocalToaster.current
     val coroutineScope = rememberCoroutineScope()
-    val copiedMessage = stringResource(R.string.installFailureCopied)
-    val reportLabel = stringResource(R.string.installFailureTitle)
+    val buildAdvice = failure.buildFailureAdvice
+    val copiedMessage = stringResource(if (buildAdvice != null) R.string.buildFailureCopied else R.string.installFailureCopied)
+    val reportLabel = stringResource(if (buildAdvice != null) R.string.iconPackBuildFailed else R.string.installFailureTitle)
     val copyReport: () -> Unit = {
         coroutineScope.launch {
             clipboard.copyPlainText(reportLabel, failure.report)
@@ -737,10 +738,12 @@ internal fun InstallFailureDialog(
     MessageDialog(
         onDismissRequest = onDismiss,
         badge = { DialogBadge(Icons.Filled.ErrorOutline, DialogTone.Danger) },
-        title = stringResource(R.string.installFailureTitle),
-        body = AnnotatedString(stringResource(
-            if (failure.missingSystemInstaller) R.string.installNoSystemInstaller else R.string.installFailureText
-        )),
+        title = reportLabel,
+        body = AnnotatedString(stringResource(when {
+            buildAdvice != null -> buildAdvice
+            failure.missingSystemInstaller -> R.string.installNoSystemInstaller
+            else -> R.string.installFailureText
+        })),
         actions = {
             if (failure.missingSystemInstaller) {
                 DialogPrimaryAction(stringResource(R.string.installerSelect), onChooseInstaller)
@@ -762,6 +765,7 @@ internal fun InstallFailureDialog(
                 )
             }
         }
+        if (buildAdvice != null) DialogNote(stringResource(R.string.buildFailureSavedNote))
     }
 }
 

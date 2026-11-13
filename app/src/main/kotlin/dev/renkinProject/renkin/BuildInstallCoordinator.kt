@@ -23,6 +23,8 @@ import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.apk.SIGNATURE_MISMATCH_DETAIL
+import dev.renkinProject.renkin.apk.buildFailureCause
+import dev.renkinProject.renkin.apk.buildFailureReport
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.apk.resolveHomeLauncher
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
@@ -36,6 +38,7 @@ import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.data.dataStore
+import dev.renkinProject.renkin.util.CrashReporter
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -87,8 +90,10 @@ internal sealed interface BuildInstallState {
     data class Conflict(val request: PackInstallRequest, val signatureMismatch: Boolean = false) : BuildInstallState
     data class Done(val wasUpdate: Boolean, val packLabel: String, val installerLabel: String,
         val savingProfile: Boolean = false, val profileSaveFailed: Boolean = false) : BuildInstallState
+    /** [advice] is set only for build failures; installer failures explain themselves in [report]. */
     data class Failed(@get:StringRes val message: Int, val summary: String, val report: String,
-        val result: ApkInstallResult? = null, val pack: BuiltIconPack? = null) : BuildInstallState
+        val result: ApkInstallResult? = null, val pack: BuiltIconPack? = null,
+        @get:StringRes val advice: Int? = null) : BuildInstallState
 }
 
 internal class BuildInstallCoordinator(
@@ -189,8 +194,10 @@ internal class BuildInstallCoordinator(
             } catch (error: ProfileSessionChangedException) {
                 fail(owner, error.userMessage())
             } catch (error: Exception) {
-                Log.error("BuildInstallCoordinator", "Icon pack build failed", error)
-                fail(owner, R.string.iconPackBuildFailed)
+                failBuild(owner, error, progress.value.step)
+            } catch (error: OutOfMemoryError) {
+                // The build's allocations are released while this unwinds; report it instead of crashing.
+                failBuild(owner, error, progress.value.step)
             } finally {
                 progressObserver.cancel()
                 try { pack?.let { releaseUnclaimedBuild(it, owner) } } finally { finishRunning(owner) }
@@ -444,9 +451,7 @@ internal class BuildInstallCoordinator(
             ?: "No additional details were provided by Android."
         val report = buildString {
             appendLine("Renkin icon pack installation report")
-            dev.renkinProject.renkin.util.AppBuildInfo.appendTo(this)
-            appendLine("Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
-            appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+            dev.renkinProject.renkin.util.AppBuildInfo.appendEnvironmentTo(this)
             appendLine("Launcher: " + (launcher?.let { "${it.label} (${it.packageName})" } ?: "no default home app"))
             appendLine("Pack: ${request.pack.packageName}")
             appendLine("Requested installer: ${outcome.requestedMethod.name}")
@@ -459,6 +464,20 @@ internal class BuildInstallCoordinator(
         }
         if (publish(owner, BuildInstallState.Failed(request.failedMessage,
             "${outcome.result.name}: ${installFailureHeadline(detail)}", report, outcome.result, request.pack))) notify(request.failedMessage)
+    }
+
+    private suspend fun failBuild(owner: Long, error: Throwable, phase: String) {
+        Log.error("BuildInstallCoordinator", "Icon pack build failed", error)
+        val cause = error.buildFailureCause()
+        val report = withContext(NonCancellable + Dispatchers.IO) {
+            buildFailureReport(application, error, cause, phase).also { report ->
+                runCatching { CrashReporter.recordHandled(application, report) }
+            }
+        }
+        val summary = "${cause.name}: ${installFailureHeadline(report.substringAfter("\n\n"))}"
+        if (publish(owner, BuildInstallState.Failed(R.string.iconPackBuildFailed, summary, report, advice = cause.advice))) {
+            notify(R.string.iconPackBuildFailed)
+        }
     }
 
     private fun fail(owner: Long, @StringRes message: Int) {

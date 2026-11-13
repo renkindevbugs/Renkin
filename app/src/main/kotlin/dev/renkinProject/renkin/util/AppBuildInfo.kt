@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.util
 
+import android.os.Build
 import dev.renkinProject.renkin.BuildConfig
 
 internal object AppBuildInfo {
@@ -13,5 +14,11 @@ internal object AppBuildInfo {
         report.appendLine("App: $versionLabel")
         report.appendLine("Build: ${BuildConfig.BUILD_TYPE} ${BuildConfig.SOURCE_REVISION}")
         report.appendLine("Package: ${BuildConfig.APPLICATION_ID}")
+    }
+
+    fun appendEnvironmentTo(report: StringBuilder) {
+        appendTo(report)
+        report.appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+        report.appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
     }
 }

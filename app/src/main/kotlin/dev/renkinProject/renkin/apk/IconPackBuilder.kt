@@ -448,7 +448,13 @@ class IconPackBuilder(
 
         textMethod(ctx.resources.getString(R.string.signApk))
         checkActive()
-        signApk(unsignedApk, signedApk)
+        try {
+            signApk(unsignedApk, signedApk)
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            throw PackSigningException("Could not sign the icon pack APK", error)
+        }
         GeneratedPackIdentity.recordBuilt(ctx, iconPackName, signedApk)
         checkActive()
 
@@ -671,7 +677,7 @@ class IconPackBuilder(
     private fun compressBitmap(image: Bitmap, name: String, format: CompressFormat, quality: Int = 100): InputSource {
         val file = stageResDir.resolve(name.removePrefix("res/"))
         // compress reports a failed write only through its result; a truncated image must not be packed.
-        check(file.outputStream().buffered().use { image.compress(format, quality, it) }) { "Could not encode $name" }
+        if (!file.outputStream().buffered().use { image.compress(format, quality, it) }) throw IconEncodingException(name)
         return StagedFileInputSource(file, name)
     }
 

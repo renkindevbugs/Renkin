@@ -46,15 +46,17 @@ object GeneratedPackIdentity {
             .getStringSet(packageName, emptySet()).orEmpty()
         if (recorded.isNotEmpty() && recorded == signers) return true
         // Full backups restore the pack key; no separate ledger is needed to regain ownership.
-        val local = runCatching {
-            val file = PackKeystore.keystoreFile(context.filesDir)
-            if (!file.isFile) return@runCatching null
-            val password = PackKeystore.password(context.filesDir)
-            val keyStore = file.inputStream().use { ApkSigner.readKeyStore(it, password) }
-            keyStore.getCertificate(PackKeystore.KEY_ALIAS)?.encoded?.let(::digest)
-        }.getOrNull()
+        val local = localSigner(context)
         return local != null && signers == setOf(local)
     }
+
+    private fun localSigner(context: Context): String? = runCatching {
+        val file = PackKeystore.keystoreFile(context.filesDir)
+        if (!file.isFile) return@runCatching null
+        val password = PackKeystore.password(context.filesDir)
+        val keyStore = file.inputStream().use { ApkSigner.readKeyStore(it, password) }
+        keyStore.getCertificate(PackKeystore.KEY_ALIAS)?.encoded?.let(::digest)
+    }.getOrNull()
 
     fun hasForeignInstalledPackage(context: Context, packageName: String): Boolean {
         try {
@@ -70,13 +72,21 @@ object GeneratedPackIdentity {
     // The KTX edit {} discards commit()'s result, which decides whether the build may report success.
     @SuppressLint("UseKtx")
     internal fun recordBuilt(context: Context, packageName: String, apk: File) {
-        val info = context.packageManager.getPackageArchiveInfo(apk.path, packageSigningFlags())
-            ?: error("Built APK signing certificate is unavailable")
-        val signers = currentSigners(info)?.map { digest(it.toByteArray()) }?.toSet()
-            ?: error("Built APK has no signing certificate")
+        // Some vendor builds report no signers for an archive they would install; the APK was
+        // just signed with the local pack key, so that certificate is the build's identity.
+        val signers = archiveSigners(context, apk) ?: localSigner(context)?.let(::setOf)
+            ?: throw PackSigningException("Built APK signing certificate is unavailable")
         check(context.getSharedPreferences(LEDGER, Context.MODE_PRIVATE).edit()
             .putStringSet(packageName, signers).commit()) { "Could not retain built pack identity" }
         knownGenerated.add(packageName)
+    }
+
+    private fun archiveSigners(context: Context, apk: File): Set<String>? = try {
+        context.packageManager.getPackageArchiveInfo(apk.path, archiveSigningFlags())
+            ?.let(::currentSigners)?.map { digest(it.toByteArray()) }?.toSet()
+    } catch (error: Exception) {
+        Log.error("GeneratedPackIdentity", "Could not read built APK signing certificate", error)
+        null
     }
 
     private fun installedSigners(context: Context, packageName: String): Set<String>? = try {
