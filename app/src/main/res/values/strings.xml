@@ -689,6 +689,13 @@
     <string name="installFailureApkSaved">APK saved. Install it with any installer; Renkin detects the pack on its next refresh.</string>
     <string name="installFailureApkSaveFailed">The APK could not be saved. Build the pack again to create a new one.</string>
     <string name="installFailureCopied">Installation details copied</string>
+    <string name="buildFailureStorage">Your phone ran out of free storage while Renkin was writing the pack. Free up some space, then build again.</string>
+    <string name="buildFailureMemory">Android ran out of memory for this build. Close other apps and build again. If it keeps failing, try a profile with fewer icons.</string>
+    <string name="buildFailureIconEncoding">One icon image couldn\'t be saved into the pack. This usually means storage is almost full. Free up some space and build again.</string>
+    <string name="buildFailureSigning">Renkin couldn\'t sign the pack or confirm its signature on this device. Copy the details and report it so it can be fixed.</string>
+    <string name="buildFailureUnknown">Something unexpected stopped the build. Try again. If it keeps failing, copy the details and report it.</string>
+    <string name="buildFailureSavedNote">These details are also kept in Settings → Crash logs.</string>
+    <string name="buildFailureCopied">Build details copied</string>
     <string name="installFallbackTitle">Replace existing icon pack?</string>
     <string name="packRecordBlocksReplace">Android still keeps an older copy of %1$s that Renkin can’t see or remove, for example in another user, a work profile or a private space. Allow Shizuku and tap Replace pack again, or connect a computer and run: adb shell pm uninstall %1$s</string>
     <string name="installFallbackText">Android can’t update the installed pack in place.</string>

@@ -1,7 +1,6 @@
 package dev.renkinProject.renkin.util
 
 import android.content.Context
-import android.os.Build
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -53,6 +52,17 @@ object CrashReporter {
             }
             ?.sortedByDescending { it.timestamp }
             ?: emptyList()
+
+    /**
+     * Keeps a handled failure report (for example a failed pack build) in the history. The user
+     * already saw it, so it does not trigger the next launch's crash dialog.
+     */
+    fun recordHandled(context: Context, report: String) {
+        val hadUnseenCrash = hasNewCrash(context)
+        File(crashDir(context), "$FILE_PREFIX${System.currentTimeMillis()}$FILE_SUFFIX").writeText(report)
+        if (!hadUnseenCrash) markCrashesSeen(context)
+        prune(context)
+    }
 
     /** The most recent crash, or null when none is stored. */
     fun latest(context: Context): CrashEntry? = list(context).firstOrNull()
@@ -115,9 +125,7 @@ object CrashReporter {
         val report = buildString {
             appendLine("Renkin crash report")
             appendLine("Time: ${DateFormat.getDateTimeInstance().format(Date(now))}")
-            AppBuildInfo.appendTo(this)
-            appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-            appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+            AppBuildInfo.appendEnvironmentTo(this)
             appendLine()
             append(stack)
         }
