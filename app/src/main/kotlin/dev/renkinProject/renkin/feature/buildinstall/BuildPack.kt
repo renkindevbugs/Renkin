@@ -41,7 +41,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import dev.renkinProject.renkin.data.ReduceIconMotionKey
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -217,7 +216,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
                     .withProfileSession(viewModel.sessionToken)
                     .putStringArrayListExtra(WallpaperPreviewActivity.EXTRA_BUILT_KEYS, ArrayList(viewModel.builtKeys))
                     .putStringArrayListExtra(WallpaperPreviewActivity.EXTRA_UPDATED_KEYS, ArrayList(viewModel.updatedKeys))
-                    .apply { if (animateBuild && landing.fabWindow != Rect.Zero) putBuildFabTarget(buildFabTarget(landing.fabWindow)) }
+                    .apply { if (animateBuild) putAnimateBuild() }
             )
         },
         icon = {
@@ -435,7 +434,7 @@ internal fun BuildPackPreviewContent(
                             .weight(1f)
                             .fillMaxWidth()
                             .drawVerticalScrollbar(previewGridState)
-                            .then(if (iconSource != null) Modifier.onGloballyPositioned(iconSource::onGridPlaced).graphicsLayer { alpha = if (iconSource.flight != null) 0f else 1f } else Modifier),
+                            .then(if (iconSource != null) Modifier.onGloballyPositioned(iconSource::onGridPlaced).graphicsLayer { alpha = if (iconSource.isFlying) 0f else 1f } else Modifier),
                         contentPadding = PaddingValues(12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)

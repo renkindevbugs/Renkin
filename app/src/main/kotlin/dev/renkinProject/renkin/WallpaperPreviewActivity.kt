@@ -6,7 +6,7 @@ import android.os.Bundle
 import android.os.Build
 import androidx.compose.runtime.remember
 import dev.renkinProject.renkin.feature.buildinstall.BuildIconSource
-import dev.renkinProject.renkin.feature.buildinstall.buildFabTarget
+import dev.renkinProject.renkin.feature.buildinstall.animatesBuild
 import dev.renkinProject.renkin.ui.performConfirmHaptic
 import dev.renkinProject.renkin.feature.language.LocalizedActivity
 import androidx.activity.SystemBarStyle
@@ -116,11 +116,10 @@ class WallpaperPreviewActivity : LocalizedActivity() {
             return
         }
 
-        // Present only when Reduce icon motion is off: the icons then fly toward this FAB point.
-        val fabTarget = intent.buildFabTarget()
+        val animateBuild = intent.animatesBuild()
 
         setContent {
-            val iconSource = remember { fabTarget?.let(::BuildIconSource) }
+            val iconSource = remember { if (animateBuild) BuildIconSource() else null }
             val applicationState by appProvider.applicationState.collectAsStateWithLifecycle()
             val runtimeState by appProvider.runtimeState.collectAsStateWithLifecycle()
             val iconPacks by editorOwner.iconPackState.collectAsStateWithLifecycle()
@@ -205,7 +204,7 @@ class WallpaperPreviewActivity : LocalizedActivity() {
             finish()
             return
         }
-        // The build starts on the tap and the icons leave at once; the home screen picks them up mid-flight.
+        // The build starts on the tap and the animation starts at once; the home screen picks it up mid-way.
         if (!owner.build(expected)) return
         window.decorView.performConfirmHaptic()
         val started = Intent().withProfileSession(expected).putExtra(EXTRA_BUILD_STARTED, true)
