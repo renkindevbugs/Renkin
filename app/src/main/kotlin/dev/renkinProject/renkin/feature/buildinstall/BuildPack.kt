@@ -41,6 +41,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
+import dev.renkinProject.renkin.data.ReduceIconMotionKey
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -58,9 +65,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.ui.theme.OnWallpaperTextShadow
@@ -88,13 +93,10 @@ import dev.renkinProject.renkin.ui.performConfirmHaptic
 import dev.renkinProject.renkin.ui.performTapHaptic
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.ChangedOrange
-import dev.renkinProject.renkin.data.ExportThemedKey
-import dev.renkinProject.renkin.data.getBackgroundColor
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.PackageVersion
 import dev.renkinProject.renkin.packages.canPostNotifications
-import dev.renkinProject.renkin.packages.supportDynamicColors
 
 internal data class BuildPreviewApps(
     val applications: List<PackageInfoStruct>,
@@ -150,6 +152,11 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
     val buildProgress = viewModel.buildProgress
     val profileAction by viewModel.profileActionProgress.collectAsStateWithLifecycle()
     if (profileAction?.profileTarget != null) return
+    val options: OptionsViewModel = hiltViewModel()
+    val preferences by options.preferenceSnapshot.collectAsStateWithLifecycle()
+    val animateBuild = !preferences.getBooleanValue(ReduceIconMotionKey)
+    val landing = rememberBuildIconLanding(viewModel)
+    val landingIconBackground = previewIconBackground(preferences)
 
     // The preview lives in its own activity (WallpaperPreviewActivity) so the real wallpaper can
     // show behind it; RESULT_OK = the user pressed Build there.
@@ -162,8 +169,11 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
         previewOwnerId = null
         if (result.resultCode == Activity.RESULT_OK) {
             val expected = result.data?.profileSession() ?: return@rememberLauncherForActivityResult
-            view.performConfirmHaptic()
-            viewModel.build(expected)
+            if (result.data?.getBooleanExtra(WallpaperPreviewActivity.EXTRA_BUILD_STARTED, false) != true) {
+                view.performConfirmHaptic()
+                viewModel.build(expected)
+            }
+            BuildIconStarts.from(result.data)?.let(landing::catch)
             if (PackageVersion.is33OrMore() && !canPostNotifications(context)) {
                 notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
@@ -207,6 +217,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
                     .withProfileSession(viewModel.sessionToken)
                     .putStringArrayListExtra(WallpaperPreviewActivity.EXTRA_BUILT_KEYS, ArrayList(viewModel.builtKeys))
                     .putStringArrayListExtra(WallpaperPreviewActivity.EXTRA_UPDATED_KEYS, ArrayList(viewModel.updatedKeys))
+                    .apply { if (animateBuild && landing.fabWindow != Rect.Zero) putBuildFabTarget(buildFabTarget(landing.fabWindow)) }
             )
         },
         icon = {
@@ -238,7 +249,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
             }
         },
         expanded = expanded || buildStep != null || ready,
-        modifier = modifier,
+        modifier = modifier.buildIconLanding(landing, landingIconBackground),
         containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer
     )
@@ -302,12 +313,13 @@ internal fun BuildProgressDialog(
  * The Build button reports back (RESULT_OK) and the launching side runs the build.
  */
 @Composable
-fun BuildPackPreviewContent(
+internal fun BuildPackPreviewContent(
     applications: List<PackageInfoStruct>,
     builtKeys: Set<String>,
     updatedKeys: Set<String>,
     loadCalendarWarnings: suspend (Preferences) -> List<ApplicationProvider.CalendarWarning>,
     onEditIcon: ((PackageInfoStruct) -> Unit)? = null,
+    iconSource: BuildIconSource? = null,
     onDismiss: () -> Unit,
     onBuild: () -> Unit
 ) {
@@ -323,18 +335,13 @@ fun BuildPackPreviewContent(
         previewApps.applications.sortedBy { openingOrder[it.key] ?: Int.MAX_VALUE }
     }
     val newCount = previewApps.newCount
+    if (iconSource != null) SideEffect { iconSource.apps = themedApps }
 
     // Warn (before building) about calendar apps whose source pack lacks some 1..31 day
     // drawables — those days fall back to a repeated icon instead of rotating.
     val optionsViewModel: OptionsViewModel = hiltViewModel()
     val preferences by optionsViewModel.preferenceSnapshot.collectAsStateWithLifecycle()
-    val themed = preferences.getBooleanValue(ExportThemedKey)
-    val context = LocalContext.current
-    val themedBackground = when {
-        !themed -> null
-        supportDynamicColors() -> colorResource(R.color.icon_background_color)
-        else -> preferences.getBackgroundColor(context)
-    }
+    val themedBackground = previewIconBackground(preferences)
     var calendarWarnings by remember { mutableStateOf<List<ApplicationProvider.CalendarWarning>>(emptyList()) }
     LaunchedEffect(themedApps.size, preferences) {
         calendarWarnings = loadCalendarWarnings(preferences)
@@ -347,7 +354,7 @@ fun BuildPackPreviewContent(
             // the icon grid; only the top chrome and the bottom build bar get an opaque surface.
             color = Color.Transparent
         ) {
-            Column(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().then(if (iconSource != null) Modifier.graphicsLayer { alpha = iconSource.chromeAlpha } else Modifier)) {
                 Column(
                     Modifier
                         .fillMaxWidth()
@@ -427,19 +434,22 @@ fun BuildPackPreviewContent(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
-                            .drawVerticalScrollbar(previewGridState),
+                            .drawVerticalScrollbar(previewGridState)
+                            .then(if (iconSource != null) Modifier.onGloballyPositioned(iconSource::onGridPlaced).graphicsLayer { alpha = if (iconSource.flight != null) 0f else 1f } else Modifier),
                         contentPadding = PaddingValues(12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(themedApps, key = { it.key }) { app ->
                             val key = app.key
+                            if (iconSource != null) DisposableEffect(iconSource, key) { onDispose { iconSource.onIconRemoved(key) } }
                             BuildPreviewItem(
                                 app = app,
                                 isNew = key !in builtKeys,
                                 isChanged = key in builtKeys && key in updatedKeys,
                                 themedBackground = themedBackground,
-                                onEdit = onEditIcon?.let { edit -> { edit(app) } }
+                                onEdit = onEditIcon?.let { edit -> { edit(app) } },
+                                onIconPlaced = iconSource?.let { source -> { coordinates -> source.onIconPlaced(key, coordinates) } }
                             )
                         }
                     }
@@ -472,6 +482,7 @@ fun BuildPackPreviewContent(
                 }
             }
         }
+        iconSource?.let { BuildIconDepartureOverlay(it, themedBackground) }
     }
 }
 
@@ -481,7 +492,8 @@ private fun BuildPreviewItem(
     isNew: Boolean = false,
     isChanged: Boolean = false,
     themedBackground: Color? = null,
-    onEdit: (() -> Unit)? = null
+    onEdit: (() -> Unit)? = null,
+    onIconPlaced: ((LayoutCoordinates) -> Unit)? = null
 ) {
     Column(
         modifier = if (onEdit == null) Modifier else Modifier.tappableIcon(onEdit),
@@ -494,6 +506,7 @@ private fun BuildPreviewItem(
                     contentDescription = app.appName,
                     modifier = Modifier
                         .size(56.dp)
+                        .then(if (onIconPlaced != null) Modifier.onGloballyPositioned(onIconPlaced) else Modifier)
                         .clip(IconShape)
                         .background(themedBackground ?: Color.Transparent)
                 )

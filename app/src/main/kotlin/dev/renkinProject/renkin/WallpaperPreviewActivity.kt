@@ -3,6 +3,11 @@ package dev.renkinProject.renkin
 import android.content.pm.ActivityInfo
 import android.content.Intent
 import android.os.Bundle
+import android.os.Build
+import androidx.compose.runtime.remember
+import dev.renkinProject.renkin.feature.buildinstall.BuildIconSource
+import dev.renkinProject.renkin.feature.buildinstall.buildFabTarget
+import dev.renkinProject.renkin.ui.performConfirmHaptic
 import dev.renkinProject.renkin.feature.language.LocalizedActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -64,6 +69,9 @@ class WallpaperPreviewActivity : LocalizedActivity() {
         const val EXTRA_SESSION_CHANGED = "sessionChanged"
         const val EXTRA_EDITOR_OWNER = "editorOwner"
 
+        /** Set on RESULT_OK when the preview already started the build itself. */
+        const val EXTRA_BUILD_STARTED = "buildStarted"
+
         /** Set on a CANCELED result when the process died under the preview (see onCreate). */
         const val EXTRA_SESSION_LOST = "sessionLost"
     }
@@ -108,7 +116,11 @@ class WallpaperPreviewActivity : LocalizedActivity() {
             return
         }
 
+        // Present only when Reduce icon motion is off: the icons then fly toward this FAB point.
+        val fabTarget = intent.buildFabTarget()
+
         setContent {
+            val iconSource = remember { fabTarget?.let(::BuildIconSource) }
             val applicationState by appProvider.applicationState.collectAsStateWithLifecycle()
             val runtimeState by appProvider.runtimeState.collectAsStateWithLifecycle()
             val iconPacks by editorOwner.iconPackState.collectAsStateWithLifecycle()
@@ -156,15 +168,9 @@ class WallpaperPreviewActivity : LocalizedActivity() {
                                     updatedKeys = updatedKeys + editorOwner.updatedKeys,
                                     loadCalendarWarnings = { preferences -> appProvider.calendarWarnings(preferences) },
                                     onEditIcon = { editingKey = it.key },
+                                    iconSource = iconSource,
                                     onDismiss = { finish() },
-                                    onBuild = {
-                                        if (appProvider.isCurrentSession(expected)) {
-                                            setResult(RESULT_OK, Intent().withProfileSession(expected))
-                                            finish()
-                                        } else {
-                                            cancelExpiredPreview(expected)
-                                        }
-                                    }
+                                    onBuild = { build(expected, editorOwner, iconSource) }
                                 )
                                 editingKey?.let { key ->
                                     val app = applicationState.applications.firstOrNull { it.key == key }
@@ -189,6 +195,32 @@ class WallpaperPreviewActivity : LocalizedActivity() {
     override fun onDestroy() {
         if (!isChangingConfigurations) PackPreviewEditorOwners.release(intent.getStringExtra(EXTRA_EDITOR_OWNER))
         super.onDestroy()
+    }
+
+    private fun build(expected: ProfileSessionToken, owner: MainViewModel, iconSource: BuildIconSource?) {
+        if (isFinishing) return
+        if (!appProvider.isCurrentSession(expected)) return cancelExpiredPreview(expected)
+        if (iconSource == null) {
+            setResult(RESULT_OK, Intent().withProfileSession(expected))
+            finish()
+            return
+        }
+        // The build starts on the tap and the icons leave at once; the home screen picks them up mid-flight.
+        if (!owner.build(expected)) return
+        window.decorView.performConfirmHaptic()
+        val started = Intent().withProfileSession(expected).putExtra(EXTRA_BUILD_STARTED, true)
+        setResult(RESULT_OK, iconSource.launch().writeTo(started))
+        finishToHome()
+    }
+
+    private fun finishToHome() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, R.anim.preview_close_to_home)
+            finish()
+        } else {
+            finish()
+            @Suppress("DEPRECATION") overridePendingTransition(0, R.anim.preview_close_to_home)
+        }
     }
 
     private fun cancelExpiredPreview(expected: ProfileSessionToken) {

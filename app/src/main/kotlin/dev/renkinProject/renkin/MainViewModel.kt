@@ -1005,28 +1005,22 @@ class MainViewModel @Inject constructor(
     }
     fun dismissInstallFallback() = buildCoordinator.dismissInstallFallback()
 
-    fun build(expected: ProfileSessionToken) {
-        if (foregroundProfileActions.progress.value != null) {
-            _toastEvents.trySend(R.string.profileActionBusy)
-            return
+    /** Starts the build, or explains with a toast why it cannot start now. */
+    fun build(expected: ProfileSessionToken): Boolean {
+        val refusal = when {
+            foregroundProfileActions.progress.value != null -> R.string.profileActionBusy
+            buildCoordinator.busy -> R.string.buildOperationPending
+            longOperationRunning -> R.string.profileRenderBusy
+            !startupComplete || isProfileSwitching -> R.string.profileStillLoading
+            !appProvider.isCurrentSession(expected) -> expected.expiredSessionMessage(sessionToken)
+            else -> null
         }
-        if (buildCoordinator.busy) {
-            _toastEvents.trySend(R.string.buildOperationPending)
-            return
-        }
-        if (longOperationRunning) {
-            _toastEvents.trySend(R.string.profileRenderBusy)
-            return
-        }
-        if (!startupComplete || isProfileSwitching) {
-            _toastEvents.trySend(R.string.profileStillLoading)
-            return
-        }
-        if (!appProvider.isCurrentSession(expected)) {
-            _toastEvents.trySend(expected.expiredSessionMessage(sessionToken))
-            return
+        if (refusal != null) {
+            _toastEvents.trySend(refusal)
+            return false
         }
         buildSession.startBuild(expected)
+        return true
     }
 
     // Records that [app] was hand-edited this session (so the build preview marks it "changed").

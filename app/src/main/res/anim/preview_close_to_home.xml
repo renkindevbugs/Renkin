@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pack preview stops redrawing once it closes, so its last frame freezes the departing icons
+     while the home screen already flies them on. A short fade keeps that frozen copy invisible. -->
+<alpha xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="60"
+    android:fromAlpha="1"
+    android:interpolator="@android:anim/linear_interpolator"
+    android:toAlpha="0" />
