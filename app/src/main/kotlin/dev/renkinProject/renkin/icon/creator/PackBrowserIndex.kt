@@ -2,13 +2,13 @@ package dev.renkinProject.renkin.icon.creator
 
 import android.content.Context
 import android.content.pm.PackageManager
-import android.content.res.Configuration
 import android.util.AtomicFile
 import androidx.core.content.pm.PackageInfoCompat
+import androidx.core.os.ConfigurationCompat
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.writeVerified
 import dev.renkinProject.renkin.extension.toLowerHex
-import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.PackageResourceResolver
 import dev.renkinProject.renkin.packages.PackBrowserDataSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -54,17 +54,17 @@ internal class PackBrowserIndex(context: Context, private val appMan: PackBrowse
     }
 
     internal fun configurationSignature(includePalette: Boolean = true): String {
-        val configuration = Configuration(context.resources.configuration)
-        val night = ApplicationManager.displayedNightMode
-            ?: (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES)
-        configuration.uiMode = (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
-            (if (night) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
+        val configuration = context.resources.configuration
+        val night = PackageResourceResolver.isNightDisplayed(configuration)
         val palette = if (includePalette && android.os.Build.VERSION.SDK_INT >= 31) {
             listOf(android.R.color.system_accent1_500, android.R.color.system_accent2_500,
                 android.R.color.system_accent3_500, android.R.color.system_neutral1_500,
                 android.R.color.system_neutral2_500).joinToString(",") { context.getColor(it).toString() }
         } else ""
-        return "$configuration|$night|$palette"
+        // Only what selects a pack resource: Configuration.toString() also carries a sequence
+        // number and window bounds that change on every rotation and would drop every cache.
+        val locales = ConfigurationCompat.getLocales(configuration).toLanguageTags()
+        return "$locales|$night|${configuration.densityDpi}|$palette"
     }
 
     private fun currentIdentity(pack: IconPack, includePalette: Boolean = true): String {

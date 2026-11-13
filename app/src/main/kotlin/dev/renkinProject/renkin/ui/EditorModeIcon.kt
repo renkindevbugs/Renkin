@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
@@ -66,17 +67,20 @@ internal fun EditorModeIcon(
         }
     }
 
-    Canvas(modifier.size(24.dp)) {
+    // Overlapping strokes drawn with a translucent tint would darken where they cross, so the
+    // glyph is drawn opaque and the tint's alpha is applied to the whole layer at once.
+    val opaqueTint = tint.copy(alpha = 1f)
+    Canvas(modifier.size(24.dp).graphicsLayer { alpha = tint.alpha }) {
         val phase = if (reduceMotion) 1f else progress.value
         val fillAlpha = if (reduceMotion) {
             if (selected) 0.17f else 0f
         } else fill.value
         scale(size.width / 24f, size.height / 24f, pivot = Offset.Zero) {
             when (mode) {
-                EditorMode.CREATE -> drawCreateIcon(phase, selected, fillAlpha, tint)
-                EditorMode.UPLOAD -> drawUploadIcon(phase, fillAlpha, tint)
-                EditorMode.VECTOR -> drawVectorIcon(phase, fillAlpha, tint, curve, nodeMask)
-                EditorMode.MODIFIER -> drawModifierIcon(phase, tint)
+                EditorMode.CREATE -> drawCreateIcon(phase, selected, fillAlpha, opaqueTint)
+                EditorMode.UPLOAD -> drawUploadIcon(phase, fillAlpha, opaqueTint)
+                EditorMode.VECTOR -> drawVectorIcon(phase, fillAlpha, opaqueTint, curve, nodeMask)
+                EditorMode.MODIFIER -> drawModifierIcon(phase, opaqueTint)
             }
         }
     }

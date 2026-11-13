@@ -10,6 +10,7 @@ import dev.renkinProject.renkin.data.RawCalendar
 import dev.renkinProject.renkin.data.RawDynamicClock
 import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.RawItem
+import dev.renkinProject.renkin.data.drawableNamesFor
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.extension.getIdentifierByName
@@ -38,10 +39,6 @@ class AppFilterIndex internal constructor(
 ) {
     internal val drawableNamesByPackage: Map<String, Map<String, String>> =
         elementsByPackage.mapValues { (_, elements) -> indexAppDrawableNames(elements) }
-    private val browserNamesByPackage = elementsByPackage.mapValues { (_, elements) ->
-        elements.filterIsInstance<RawItem>().groupBy({ it.component }, { it.drawableLink })
-            .mapValues { (_, names) -> names.distinct() }
-    }
     private val components = applications.mapTo(mutableSetOf()) { it.toComponentInfo() }
 
     internal fun elementsFor(packageName: String, requestedApps: List<InstalledApplication>): List<RawElement>? =
@@ -52,11 +49,8 @@ class AppFilterIndex internal constructor(
 
     internal fun covers(app: InstalledApplication): Boolean = app.toComponentInfo() in components
 
-    internal fun browserNamesFor(packageName: String, app: InstalledApplication): List<String>? {
-        if (!covers(app)) return null
-        val names = browserNamesByPackage[packageName] ?: return null
-        return names[app.toComponentInfo()].orEmpty()
-    }
+    internal fun browserNamesFor(packageName: String, app: InstalledApplication): List<String>? =
+        elementsFor(packageName, listOf(app))?.drawableNamesFor(app)
 }
 
 /**

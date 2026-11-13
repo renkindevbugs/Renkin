@@ -1452,8 +1452,8 @@ Three earlier notes also need an explicit disposition:
   refresh plan, then rejecting commits after a change; the captured recipe does not currently
   carry that configuration independently. Do not fold a behavior fix into this documentation.
 - Review preview-cache visual keys during performance work: distinguish visual changes from
-  bookkeeping-only option changes and mutable drawable identity/revision. PackBrowserPreviews
-  already keys displayed night mode, pack version and Material You capability; this is not a
+  bookkeeping-only option changes and mutable drawable identity/revision. PackBrowserIndex
+  already keys locale, displayed night mode, density, pack revision and Material You capability; this is not a
   claim that every preview cache lacks those inputs. Global/app/pack caches need separate checks.
 
 The proposed editor-session-checks document has no tracked history or current file to reconcile;

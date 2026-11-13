@@ -257,36 +257,6 @@ class IconGenerationService(
             iconPackCatalog = iconPackCatalog
         ).packBrowserBitmap(iconPackName, resource, size)
     }
-
-    suspend fun getIconPackIcons(
-        iconPackName: String,
-        options: GenerationOptions,
-        drawables: List<ResourceDrawable>
-    ): Map<ResourceDrawable, IconPackDrawable?> = withContext(Dispatchers.Default) {
-        val exportDrawables = mutableMapOf<ResourceDrawable, IconPackDrawable?>()
-
-        val pack = IconPackContainer("", emptyMap())
-
-        val builder = IconGenerator(
-            context,
-            options,
-            pack,
-            pack,
-            iconPackCatalog = iconPackCatalog
-        )
-        for (drawable in drawables) {
-            // A superseded search cancels this batch; stop before the next icon instead of finishing it.
-            ensureActive()
-            // One broken icon must not take the whole pack down (#119)
-            exportDrawables[drawable] = try {
-                builder.colorizeFromIconPack(iconPackName, drawable)
-            } catch (_: Exception) {
-                null
-            }
-        }
-
-        exportDrawables
-    }
 }
 
 internal fun iconSourceChanged(expectedHash: String?, currentHash: String?): Boolean =

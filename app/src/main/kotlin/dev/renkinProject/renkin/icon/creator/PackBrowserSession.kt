@@ -6,8 +6,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
-import dev.renkinProject.renkin.data.RawItem
-import dev.renkinProject.renkin.data.toComponentInfo
+import dev.renkinProject.renkin.data.drawableNamesFor
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.extension.normalizeIconSearchQuery
 import dev.renkinProject.renkin.packages.PackBrowserDataSource
@@ -109,10 +108,8 @@ internal class PackBrowserSession(
             try {
                 identity = "$generation|${index.identity(pack)}"
                 exact = component?.let { app ->
-                    indexedNames(pack.packageName, app) ?: source.getAppFilterRawElements(pack.packageName, listOf(app))
-                        .filterIsInstance<RawItem>()
-                        .filter { it.component == app.toComponentInfo() }
-                        .map { it.drawableLink }.distinct()
+                    indexedNames(pack.packageName, app)
+                        ?: source.getAppFilterRawElements(pack.packageName, listOf(app)).drawableNamesFor(app)
                 }.orEmpty()
                 exact = displayNames(pack, exact)
                 if (exact.isNotEmpty()) publish(pack, PackSearchResult(exact, identity = identity))

@@ -1682,9 +1682,6 @@ class ApplicationProvider internal constructor(
         stagedApplications = stagedApplications.set(index, newApp)
     }
 
-    suspend fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, IconPackDrawable?> =
-        iconGenService.getIconPackIcons(iconPackName, options, drawables)
-
     internal fun packBrowserPreviews(): PackBrowserSession =
         PackBrowserSession(
             PackBrowserIndex(context, appManager), appManager,
