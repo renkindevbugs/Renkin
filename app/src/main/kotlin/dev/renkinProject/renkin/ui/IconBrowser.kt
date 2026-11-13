@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -331,6 +332,15 @@ internal fun CreateTab(
                                 .padding(horizontal = 32.dp)
                         )
                     }
+                } else if (orderedPacks.isEmpty()) {
+                    EmptyState(
+                        text = stringResource(R.string.createNoIconPacks),
+                        icon = Icons.Filled.HideImage,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(contentPadding)
+                            .padding(32.dp)
+                    )
                 } else {
                     Column(Modifier.fillMaxSize()) {
                         val headerInset = contentPadding.calculateTopPadding()
