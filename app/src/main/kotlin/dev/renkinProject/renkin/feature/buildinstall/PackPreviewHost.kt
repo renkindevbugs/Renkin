@@ -24,6 +24,9 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -81,6 +84,14 @@ internal fun PackPreviewHost(
         morph.animateTo(if (session != null) 1f else 0f, spec)
     }
     val previewOnScreen by remember { derivedStateOf { morph.value > 0f } }
+    val galaxyRadius = galaxyRadius()
+    val density = LocalDensity.current
+    LaunchedEffect(session != null, galaxyRadius) {
+        if (session == null) swirl.galaxyTexture = null
+        else if (swirl.galaxyTexture?.radius != galaxyRadius) {
+            swirl.galaxyTexture = withContext(Dispatchers.Default) { renderGalaxyTexture(galaxyRadius, density) }
+        }
+    }
     WallpaperBehindWindow(shown = session != null || swirl.isRunning || previewOnScreen)
     if (swirl.isRunning) DisposableEffect(Unit) { onDispose { viewModel.holdInstallForBuildAnimation(false) } }
 

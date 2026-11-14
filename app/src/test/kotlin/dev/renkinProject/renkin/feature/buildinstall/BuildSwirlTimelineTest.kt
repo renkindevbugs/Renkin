@@ -76,4 +76,20 @@ class BuildSwirlTimelineTest {
         assertEquals(centre.x, BuildSwirl.dustPosition(start, centre, 1f).x, 0.01f)
         assertEquals(centre.y, BuildSwirl.dustPosition(start, centre, 1f).y, 0.01f)
     }
+
+    @Test
+    fun precomputedFragmentFlightMatchesTheDirectOne() {
+        val start = Offset(120f, 640f)
+        val centre = Offset(540f, 1200f)
+        val from = start - centre
+        listOf(0f, 0.3f, 0.7f, 1f).forEach { u ->
+            val direct = BuildSwirl.dustPosition(start, centre, u)
+            val precomputed = BuildSwirl.dustPosition(centre, from.getDistance(), kotlin.math.atan2(from.y, from.x), u)
+            assertEquals(direct.x, precomputed.x, 0.01f)
+            assertEquals(direct.y, precomputed.y, 0.01f)
+        }
+        val order = BuildSwirl.fragmentOrder(row = 3, column = 5, grid = 9, seed = 42)
+        assertTrue(order in 0f..1f)
+        assertEquals(BuildSwirl.fragmentProgress(900f, 3, 5, 9, 42), BuildSwirl.fragmentProgress(900f, order), 0f)
+    }
 }

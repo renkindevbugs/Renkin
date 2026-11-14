@@ -36,11 +36,16 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -179,21 +184,30 @@ internal object BuildSwirl {
      * Flight progress of one icon fragment: negative while it still sits in the icon, 0..1 on its
      * way to the core, above 1 once absorbed. Fragments break off from the top corner diagonally.
      */
-    fun fragmentProgress(t: Float, row: Int, column: Int, grid: Int, seed: Int): Float {
-        val order = (row + (grid - 1 - column) + noise(seed) * 3f) / (2f * (grid - 1) + 3f)
-        return (t - SHATTER_START - ICON_DETACH_SPREAD * order) / DUST_FLIGHT
-    }
+    fun fragmentProgress(t: Float, row: Int, column: Int, grid: Int, seed: Int): Float =
+        fragmentProgress(t, fragmentOrder(row, column, grid, seed))
+
+    /** When a fragment breaks off within its icon (0 = first, 1 = last): diagonally, slightly shuffled. */
+    fun fragmentOrder(row: Int, column: Int, grid: Int, seed: Int): Float =
+        (row + (grid - 1 - column) + noise(seed) * 3f) / (2f * (grid - 1) + 3f)
+
+    fun fragmentProgress(t: Float, order: Float): Float = (t - SHATTER_START - ICON_DETACH_SPREAD * order) / DUST_FLIGHT
 
     /** Below 0 when the fragment starts trembling just before it breaks off. */
     fun isShaking(progress: Float) = progress > -FRAGMENT_SHAKE / DUST_FLIGHT && progress < 0f
 
     /** The fragment spirals in with the galaxy's turn, speeding up as it nears the core. */
     fun dustPosition(start: Offset, centre: Offset, u: Float): Offset {
-        val pull = u * u * (3f - 2f * u)
         val from = start - centre
-        val radius = from.getDistance() * (1f - pull)
-        val angle = atan2(from.y, from.x) + DUST_TURNS * 2f * PI.toFloat() * pull
-        return centre + Offset(cos(angle) * radius, sin(angle) * radius)
+        return dustPosition(centre, from.getDistance(), atan2(from.y, from.x), u)
+    }
+
+    /** The same flight for a fragment whose start is already known as distance and angle from the centre. */
+    fun dustPosition(centre: Offset, startDistance: Float, startAngle: Float, u: Float): Offset {
+        val pull = u * u * (3f - 2f * u)
+        val radius = startDistance * (1f - pull)
+        val angle = startAngle + DUST_TURNS * 2f * PI.toFloat() * pull
+        return Offset(centre.x + cos(angle) * radius, centre.y + sin(angle) * radius)
     }
 }
 
@@ -220,6 +234,8 @@ internal class BuildSwirlState {
     internal val bump = Animatable(1f)
     /** 0 = home screen with the Build FAB, 1 = Pack preview with the Build button. */
     internal val previewMorph = Animatable(0f)
+    // Painted off the main thread while the preview is open, so it is ready by the Build tap.
+    internal var galaxyTexture by mutableStateOf<GalaxyTexture?>(null)
     // Off with Reduce icon motion: the two controls then simply crossfade with their screens.
     var pillEnabled by mutableStateOf(true)
     internal val fab = PillEnd()
@@ -294,6 +310,7 @@ internal fun BuildSwirlOverlay(state: BuildSwirlState, iconBackground: Color?, o
     val flight = state.flight ?: return
     val painters = flight.apps.map { it.createdIcon?.getPainter() }
     val fragments = rememberFragments(painters, iconBackground)
+    val fragmentBatch = remember { FragmentBatch() }
     val galaxyRadius = galaxyRadius()
     val symbol = painterResource(R.drawable.renkinpack_ic_launcher_foreground)
     val symbolSpots = remember(symbol) { sampleSymbol(symbol) }
@@ -303,8 +320,8 @@ internal fun BuildSwirlOverlay(state: BuildSwirlState, iconBackground: Color?, o
         val t = state.time
         val fab = state.fabBounds
         val fabIconSlot = if (fab.width > fab.height * 1.3f) Offset(fab.left + 28.dp.toPx(), fab.center.y) else fab.center
-        drawIconStreams(flight.bounds, painters, fragments, iconBackground, t, center)
-        drawGalaxyArms(center, t, galaxyRadius)
+        drawIconStreams(flight.bounds, painters, fragments, fragmentBatch, iconBackground, t, center)
+        drawGalaxyArms(center, t, galaxyRadius, state.galaxyTexture)
         drawGalaxyCore(center, t)
         drawSymbolAssembly(symbolSpots, center, t, galaxyRadius)
         drawPackSymbol(symbol, center, fabIconSlot, t)
@@ -416,17 +433,48 @@ internal fun Modifier.buildSwirlTarget(state: BuildSwirlState?): Modifier =
             alpha = if (state.isMorphing) 0f else 1f
         }
 
-private class IconFragments(val grid: Int, val cells: List<Color?>)
+/** One piece of an icon: its cell, its own colour, the gold dust it turns into and when it breaks off (0..1). */
+private class Fragment(val row: Int, val column: Int, val color: Color, val gold: Color, val order: Float, val seed: Int)
+
+/**
+ * An icon as pieces. Everything that does not change during the flight is worked out once —
+ * thousands of pieces are drawn every frame, so the frame itself only blends and places them.
+ */
+private class IconFragments(val grid: Int, val pieces: List<Fragment>) {
+    private var placedFor: Rect? = null
+    private var placedAround = Offset.Unspecified
+    // Each piece's start as distance and angle from the galaxy centre.
+    var distances = FloatArray(0)
+        private set
+    var angles = FloatArray(0)
+        private set
+
+    fun placeAround(icon: Rect, centre: Offset) {
+        if (placedFor == icon && placedAround == centre) return
+        val cell = icon.width / grid
+        distances = FloatArray(pieces.size)
+        angles = FloatArray(pieces.size)
+        pieces.forEachIndexed { index, piece ->
+            val x = icon.left + (piece.column + 0.5f) * cell - centre.x
+            val y = icon.top + (piece.row + 0.5f) * cell - centre.y
+            distances[index] = hypot(x, y)
+            angles[index] = atan2(y, x)
+        }
+        placedFor = icon
+        placedAround = centre
+    }
+}
 
 // Fewer, larger fragments when many icons shatter at once (tablets), to keep the frame cheap.
 private fun fragmentGrid(iconCount: Int) = if (iconCount > 30) 7 else 9
 private const val FRAGMENT_SAMPLES = 4
 
 /**
- * The icon as a coarse grid of its own colours (null = empty cell), so it can shatter into them.
- * Each cell averages several pixels: thin line icons would otherwise sample as empty and vanish.
+ * The icon as a coarse grid of its own colours, so it can shatter into them. Each cell averages
+ * several pixels: thin line icons would otherwise sample as empty and vanish. Null when there is
+ * nothing to sample (the preview painter has not loaded yet, or the icon is empty).
  */
-private fun sampleFragments(painter: Painter, background: Color?, grid: Int): IconFragments {
+private fun sampleFragments(painter: Painter, background: Color?, grid: Int, iconIndex: Int): IconFragments? {
     val side = grid * FRAGMENT_SAMPLES
     val bitmap = ImageBitmap(side, side)
     val size = Size(side.toFloat(), side.toFloat())
@@ -437,7 +485,8 @@ private fun sampleFragments(painter: Painter, background: Color?, grid: Int): Ic
         }
     }
     val pixels = bitmap.toPixelMap()
-    val cells = List(grid * grid) { cell ->
+    val pieces = ArrayList<Fragment>()
+    for (cell in 0 until grid * grid) {
         var red = 0f
         var green = 0f
         var blue = 0f
@@ -449,12 +498,15 @@ private fun sampleFragments(painter: Painter, background: Color?, grid: Int): Ic
             blue += pixel.blue * pixel.alpha
             coverage += pixel.alpha
         }
-        if (coverage < 0.05f * FRAGMENT_SAMPLES * FRAGMENT_SAMPLES) null
-        else Color(red / coverage, green / coverage, blue / coverage, (coverage / (FRAGMENT_SAMPLES * FRAGMENT_SAMPLES) * 2.5f).coerceAtMost(1f))
+        if (coverage < 0.05f * FRAGMENT_SAMPLES * FRAGMENT_SAMPLES) continue
+        val color = Color(red / coverage, green / coverage, blue / coverage, (coverage / (FRAGMENT_SAMPLES * FRAGMENT_SAMPLES) * 2.5f).coerceAtMost(1f))
+        val row = cell / grid
+        val column = cell % grid
+        val seed = (iconIndex * grid * grid + cell) * 7
+        pieces += Fragment(row, column, color, dustColor(noise(seed + 3)), BuildSwirl.fragmentOrder(row, column, grid, seed), seed)
     }
-    return IconFragments(grid, cells)
+    return if (pieces.isEmpty()) null else IconFragments(grid, pieces)
 }
-
 
 /**
  * Sampled per painter: icon previews load asynchronously, so the first painter can still be empty
@@ -464,69 +516,132 @@ private fun sampleFragments(painter: Painter, background: Color?, grid: Int): Ic
 private fun rememberFragments(painters: List<Painter?>, background: Color?): List<IconFragments?> {
     val grid = fragmentGrid(painters.size)
     return painters.mapIndexed { index, painter ->
-        key(index) {
-            remember(painter, background, grid) {
-                painter?.let { sampleFragments(it, background, grid) }?.takeIf { fragments -> fragments.cells.any { it != null } }
-            }
-        }
+        key(index) { remember(painter, background, grid) { painter?.let { sampleFragments(it, background, grid, index) } } }
     }
 }
 
 /** Big enough to read as a galaxy rather than a glow: it spans most of the screen's short side. */
 @Composable
-private fun galaxyRadius(): Float {
+internal fun galaxyRadius(): Float {
     val configuration = LocalConfiguration.current
     return with(LocalDensity.current) { (minOf(configuration.screenWidthDp, configuration.screenHeightDp) * 0.58f).dp.toPx() }
+}
+
+/**
+ * Every fragment square of a frame as one mesh. Thousands of separate draw calls cost most of a
+ * frame; one call with reused arrays does not. The platform draws coloured meshes on
+ * hardware-accelerated canvases from API 29, so older versions fall back to single rectangles.
+ */
+private class FragmentBatch {
+    private var positions = FloatArray(0)
+    private var colors = IntArray(0)
+    private var indices = ShortArray(0)
+    private var squares = 0
+    private val paint = android.graphics.Paint()
+    val supported = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
+
+    fun start(maxSquares: Int) {
+        squares = 0
+        val capacity = maxSquares.coerceAtMost(MAX_SQUARES)
+        if (positions.size >= capacity * 8) return
+        positions = FloatArray(capacity * 8)
+        // The platform reads one colour per vertex but checks the array against the position count.
+        colors = IntArray(capacity * 8)
+        indices = ShortArray(capacity * 6) { i ->
+            val corner = (i / 6) * 4
+            (corner + SQUARE_CORNERS[i % 6]).toShort()
+        }
+    }
+
+    fun add(left: Float, top: Float, side: Float, argb: Int) {
+        if (squares * 8 >= positions.size) return
+        val p = squares * 8
+        positions[p] = left; positions[p + 1] = top
+        positions[p + 2] = left + side; positions[p + 3] = top
+        positions[p + 4] = left + side; positions[p + 5] = top + side
+        positions[p + 6] = left; positions[p + 7] = top + side
+        val c = squares * 4
+        colors[c] = argb; colors[c + 1] = argb; colors[c + 2] = argb; colors[c + 3] = argb
+        squares++
+    }
+
+    fun draw(canvas: android.graphics.Canvas) {
+        if (squares == 0) return
+        canvas.drawVertices(
+            android.graphics.Canvas.VertexMode.TRIANGLES, squares * 8, positions, 0,
+            null, 0, colors, 0, indices, 0, squares * 6, paint
+        )
+    }
+
+    private companion object {
+        // Short indices address 65536 vertices, four per square.
+        const val MAX_SQUARES = 16_000
+        val SQUARE_CORNERS = intArrayOf(0, 1, 2, 0, 2, 3)
+    }
 }
 
 private fun DrawScope.drawIconStreams(
     bounds: List<Rect>,
     painters: List<Painter?>,
     fragments: List<IconFragments?>,
+    batch: FragmentBatch,
     background: Color?,
     t: Float,
     centre: Offset
 ) {
+    // Every piece has reached the core: nothing left to walk through for the rest of the animation.
+    if (BuildSwirl.fragmentProgress(t, order = 1f) >= 1f) return
+    if (!BuildSwirl.shattered(t)) {
+        bounds.forEachIndexed { index, icon -> painters.getOrNull(index)?.let { drawStreamIcon(icon, it, background, 1f) } }
+        return
+    }
+    // A piece is at most its square plus a glow square.
+    batch.start(fragments.sumOf { (it?.pieces?.size ?: 0) * 2 })
     bounds.forEachIndexed { index, icon ->
         val painter = painters.getOrNull(index) ?: return@forEachIndexed
         val iconFragments = fragments.getOrNull(index)
-        when {
-            !BuildSwirl.shattered(t) -> drawStreamIcon(icon, painter, background, 1f)
-            iconFragments == null -> drawStreamIcon(icon, painter, background, BuildSwirl.unsampledIconAlpha(t))
-            else -> drawIconFragments(index, icon, iconFragments, t, centre)
-        }
+        if (iconFragments == null) drawStreamIcon(icon, painter, background, BuildSwirl.unsampledIconAlpha(t))
+        else drawIconFragments(icon, iconFragments, batch, t, centre)
     }
+    drawIntoCanvas { batch.draw(it.nativeCanvas) }
 }
 
 /** Each fragment keeps the icon's own colour as it breaks off, then turns to gold dust near the core. */
-private fun DrawScope.drawIconFragments(index: Int, icon: Rect, fragments: IconFragments, t: Float, centre: Offset) {
-    val grid = fragments.grid
-    val cell = icon.width / grid
+private fun DrawScope.drawIconFragments(icon: Rect, fragments: IconFragments, batch: FragmentBatch, t: Float, centre: Offset) {
+    fragments.placeAround(icon, centre)
+    val cell = icon.width / fragments.grid
     val grain = 3.dp.toPx()
-    fragments.cells.forEachIndexed { slot, color ->
-        if (color == null) return@forEachIndexed
-        val row = slot / grid
-        val column = slot % grid
-        val seed = (index * grid * grid + slot) * 7
-        val u = BuildSwirl.fragmentProgress(t, row, column, grid, seed)
+    val distances = fragments.distances
+    val angles = fragments.angles
+    fun square(left: Float, top: Float, side: Float, color: Color) {
+        if (batch.supported) batch.add(left, top, side, color.toArgb()) else drawRect(color, Offset(left, top), Size(side, side))
+    }
+    fragments.pieces.forEachIndexed { index, piece ->
+        val u = BuildSwirl.fragmentProgress(t, piece.order)
         if (u >= 1f) return@forEachIndexed
-        val home = Offset(icon.left + (column + 0.5f) * cell, icon.top + (row + 0.5f) * cell)
         if (u < 0f) {
-            val shake = if (BuildSwirl.isShaking(u)) {
+            var left = icon.left + piece.column * cell
+            var top = icon.top + piece.row * cell
+            if (BuildSwirl.isShaking(u)) {
                 val beat = (t / 30f).toInt()
-                Offset(noise(seed + beat) - 0.5f, noise(seed + beat + 1) - 0.5f) * (cell * 0.3f)
-            } else Offset.Zero
-            drawRect(color, home + shake - Offset(cell / 2f, cell / 2f), Size(cell, cell))
+                left += (noise(piece.seed + beat) - 0.5f) * cell * 0.3f
+                top += (noise(piece.seed + beat + 1) - 0.5f) * cell * 0.3f
+            }
+            square(left, top, cell, piece.color)
             return@forEachIndexed
         }
-        val position = BuildSwirl.dustPosition(home, centre, u)
+        val position = BuildSwirl.dustPosition(centre, distances[index], angles[index], u)
         val gold = ((u - 0.25f) / 0.55f).coerceIn(0f, 1f)
-        val tint = lerp(color, dustColor(noise(seed + 3)), gold)
+        val tint = mixColor(piece.color, piece.gold, gold)
         val side = cell + (grain - cell) * (u / 0.4f).coerceAtMost(1f)
         val fade = 1f - ((u - 0.85f) / 0.15f).coerceIn(0f, 1f)
-        val alpha = (color.alpha + (1f - color.alpha) * gold) * fade
-        if (gold > 0f) drawCircle(tint.copy(alpha = 0.3f * gold * fade), side * 1.8f, position)
-        drawRect(tint.copy(alpha = alpha), position - Offset(side / 2f, side / 2f), Size(side, side))
+        val alpha = (piece.color.alpha + (1f - piece.color.alpha) * gold) * fade
+        // Every other grain of gold dust glows.
+        if (gold > 0f && index % 2 == 0) {
+            val glow = side * 3.2f
+            square(position.x - glow / 2f, position.y - glow / 2f, glow, tint.copy(alpha = 0.22f * gold * fade))
+        }
+        square(position.x - side / 2f, position.y - side / 2f, side, tint.copy(alpha = alpha))
     }
 }
 
@@ -551,11 +666,19 @@ private const val GALAXY_SPARKLES = 10
 private const val GALAXY_FLATTEN = 0.9f
 
 /** A point on trail [arm] at [along] (0 = core, 1 = rim): a logarithmic spiral trailing the spin. */
-private fun spiralPoint(centre: Offset, radius: Float, spin: Float, arm: Int, along: Float, drift: Float = 0f): Offset {
+private fun spiralPoint(
+    centre: Offset,
+    radius: Float,
+    spin: Float,
+    arm: Int,
+    along: Float,
+    drift: Float = 0f,
+    flatten: Float = GALAXY_FLATTEN
+): Offset {
     val distance = radius * GALAXY_INNER_RADIUS * exp(ln(1f / GALAXY_INNER_RADIUS) * along) + drift
     val degrees = spin + arm * 360f / GALAXY_ARMS - along * GALAXY_ARM_WIND_DEGREES
     val angle = Math.toRadians(degrees.toDouble())
-    return centre + Offset((cos(angle) * distance).toFloat(), (sin(angle) * distance * GALAXY_FLATTEN).toFloat())
+    return centre + Offset((cos(angle) * distance).toFloat(), (sin(angle) * distance * flatten).toFloat())
 }
 
 /** White near the core, through pale gold and gold, to copper at the rim. */
@@ -566,20 +689,16 @@ private fun armColor(along: Float): Color = when {
 }
 
 /**
- * A whirling galaxy of gold light. Each of the five trails is light, not a line: overlapping soft
- * glows that widen toward the rim, filled with drifting gold dust, among twinkling stars.
+ * The five trails at rest: each is light, not a line — overlapping soft glows that widen toward
+ * the rim, filled with gold dust. Drawn round (unflattened) and unspun, for [renderGalaxyTexture].
  */
-private fun DrawScope.drawGalaxyArms(centre: Offset, t: Float, fullRadius: Float) {
-    val strength = BuildSwirl.arms(t)
-    if (strength <= 0f) return
-    val radius = fullRadius * BuildSwirl.galaxyScale(t)
-    val spin = BuildSwirl.angle(t)
+private fun DrawScope.drawGalaxyTrails(centre: Offset, radius: Float) {
     for (arm in 0 until GALAXY_ARMS) for (i in 0 until GALAXY_ARM_GLOWS) {
         val along = (i + 0.5f) / GALAXY_ARM_GLOWS
-        val position = spiralPoint(centre, radius, spin, arm, along)
+        val position = spiralPoint(centre, radius, 0f, arm, along, flatten = 1f)
         val glow = radius * (0.035f + 0.11f * along)
         val color = armColor(along)
-        val alpha = strength * (1f - 0.65f * along)
+        val alpha = 1f - 0.65f * along
         drawCircle(color.copy(alpha = 0.05f * alpha), glow * 1.7f, position)
         drawCircle(color.copy(alpha = 0.08f * alpha), glow, position)
         drawCircle(color.copy(alpha = 0.14f * alpha), glow * 0.45f, position)
@@ -591,13 +710,60 @@ private fun DrawScope.drawGalaxyArms(centre: Offset, t: Float, fullRadius: Float
         // Bell-shaped spread: most dust hugs the middle of the trail, a little strays to its edges.
         val spread = (noise(seed + 1) + noise(seed + 2) + noise(seed + 6)) / 3f - 0.5f
         val drift = spread * radius * (0.06f + 0.3f * along)
-        val position = spiralPoint(centre, radius, spin, arm, along, drift)
-        val alpha = strength * (1f - 0.55f * along) * (0.45f + 0.55f * noise(seed + 3))
+        val position = spiralPoint(centre, radius, 0f, arm, along, drift, flatten = 1f)
+        val alpha = (1f - 0.55f * along) * (0.45f + 0.55f * noise(seed + 3))
         val color = if (along < 0.2f) SwirlWhite else dustColor(noise(seed + 4))
         val size = grainRadius * (0.45f + 1.1f * noise(seed + 5))
         if (i % 4 == 0) drawCircle(color.copy(alpha = alpha * 0.2f), size * 4f, position)
         drawCircle(color.copy(alpha = alpha), size, position)
     }
+}
+
+// Glows and stray dust reach past the nominal radius.
+private const val GALAXY_TEXTURE_REACH = 1.27f
+private const val GALAXY_TEXTURE_SCALE = 0.75f
+private const val GALAXY_TEXTURE_MAX_PX = 1280f
+
+/** The galaxy's trails as one image for a galaxy of [radius] px. */
+internal class GalaxyTexture(val image: ImageBitmap, val radius: Float)
+
+/**
+ * The trails only ever turn as a whole, so they are painted once (off the main thread) and each
+ * frame just rotates the image: drawing their ~1300 translucent circles live cost most of a frame.
+ */
+internal fun renderGalaxyTexture(radius: Float, density: Density): GalaxyTexture {
+    val side = (radius * GALAXY_TEXTURE_REACH * 2f * GALAXY_TEXTURE_SCALE).coerceIn(1f, GALAXY_TEXTURE_MAX_PX).toInt()
+    val textureRadius = side / (2f * GALAXY_TEXTURE_REACH)
+    val image = ImageBitmap(side, side)
+    // Scaled density keeps the dust grains in proportion to the smaller image.
+    val scaled = Density(density.density * textureRadius / radius, density.fontScale)
+    CanvasDrawScope().draw(scaled, LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(image), Size(side.toFloat(), side.toFloat())) {
+        drawGalaxyTrails(center, textureRadius)
+    }
+    return GalaxyTexture(image, radius)
+}
+
+/** A whirling galaxy of gold light: the five trails turning as one, among twinkling stars. */
+private fun DrawScope.drawGalaxyArms(centre: Offset, t: Float, fullRadius: Float, texture: GalaxyTexture?) {
+    val strength = BuildSwirl.arms(t)
+    if (strength <= 0f) return
+    val radius = fullRadius * BuildSwirl.galaxyScale(t)
+    val spin = BuildSwirl.angle(t)
+    if (texture != null) {
+        val half = radius * GALAXY_TEXTURE_REACH
+        withTransform({
+            scale(1f, GALAXY_FLATTEN, pivot = centre)
+            rotate(spin, pivot = centre)
+        }) {
+            drawImage(
+                image = texture.image,
+                dstOffset = IntOffset((centre.x - half).toInt(), (centre.y - half).toInt()),
+                dstSize = IntSize((half * 2f).toInt(), (half * 2f).toInt()),
+                alpha = strength
+            )
+        }
+    }
+    val grainRadius = 1.6.dp.toPx()
     repeat(GALAXY_FIELD_STARS) { k ->
         val seed = 70000 + k * 7
         val distance = radius * (0.15f + 0.95f * noise(seed))
@@ -637,8 +803,28 @@ private const val SYMBOL_GRID = 52
 // The adaptive foreground keeps the symbol inside its middle ~60%, so it is drawn larger.
 private const val SYMBOL_SIZE_DP = 150
 
-/** One spot of the Renkin Pack symbol: where it sits (-0.5..0.5), its colour, and how far from the centre (0..1). */
-private class SymbolSpot(val x: Float, val y: Float, val color: Color, val order: Float)
+/**
+ * One spot of the Renkin Pack symbol: where it sits (-0.5..0.5), its colour, how far from the
+ * centre (0..1), and the grain of galaxy dust that will fill it — its colour and its place on a
+ * trail of a unit-radius galaxy at rest. All fixed, so a frame only turns and blends them.
+ */
+private class SymbolSpot(
+    val x: Float,
+    val y: Float,
+    val color: Color,
+    val order: Float,
+    val dust: Color,
+    val fromX: Float,
+    val fromY: Float
+)
+
+/** Cheap straight blend for per-grain use every frame (the library lerp converts through Oklab). */
+private fun mixColor(from: Color, to: Color, share: Float) = Color(
+    from.red + (to.red - from.red) * share,
+    from.green + (to.green - from.green) * share,
+    from.blue + (to.blue - from.blue) * share,
+    from.alpha + (to.alpha - from.alpha) * share
+)
 
 /** The symbol as a cloud of spots, so grains of light can fly in and build it from the centre outward. */
 private fun sampleSymbol(symbol: Painter): List<SymbolSpot> {
@@ -648,16 +834,19 @@ private fun sampleSymbol(symbol: Painter): List<SymbolSpot> {
         with(symbol) { draw(size) }
     }
     val pixels = bitmap.toPixelMap()
-    val spots = ArrayList<SymbolSpot>()
+    val places = ArrayList<Triple<Float, Float, Color>>()
     for (row in 0 until SYMBOL_GRID) for (column in 0 until SYMBOL_GRID) {
         val color = pixels[column, row]
         if (color.alpha < 0.5f) continue
-        val x = (column + 0.5f) / SYMBOL_GRID - 0.5f
-        val y = (row + 0.5f) / SYMBOL_GRID - 0.5f
-        spots += SymbolSpot(x, y, color.copy(alpha = 1f), hypot(x, y))
+        places += Triple((column + 0.5f) / SYMBOL_GRID - 0.5f, (row + 0.5f) / SYMBOL_GRID - 0.5f, color.copy(alpha = 1f))
     }
-    val reach = spots.maxOfOrNull { it.order } ?: return spots
-    return spots.map { SymbolSpot(it.x, it.y, it.color, it.order / reach) }
+    val reach = places.maxOfOrNull { hypot(it.first, it.second) } ?: return emptyList()
+    return places.mapIndexed { index, (x, y, color) ->
+        val seed = 200000 + index * 5
+        val along = 0.2f + 0.75f * noise(seed)
+        val from = spiralPoint(Offset.Zero, 1f, 0f, index % GALAXY_ARMS, along, (noise(seed + 1) - 0.5f) * 0.2f * along, flatten = 1f)
+        SymbolSpot(x, y, color, hypot(x, y) / reach, dustColor(noise(seed + 2)), from.x, from.y)
+    }
 }
 
 // The sharpening pulse travels from the symbol's centre to the rim of its glow.
@@ -675,25 +864,27 @@ private fun DrawScope.drawSymbolAssembly(spots: List<SymbolSpot>, centre: Offset
     val sharpened = pulseRadius(t)
     val size = SYMBOL_SIZE_DP.dp.toPx()
     val grain = size / SYMBOL_GRID * 0.62f
-    val spin = BuildSwirl.angle(t)
-    val turn = Math.toRadians((spin - BuildSwirl.restAngle).toDouble())
+    val spin = Math.toRadians(BuildSwirl.angle(t).toDouble())
+    val spinCos = cos(spin).toFloat()
+    val spinSin = sin(spin).toFloat()
+    val turn = Math.toRadians((BuildSwirl.angle(t) - BuildSwirl.restAngle).toDouble())
     val turnCos = cos(turn).toFloat()
     val turnSin = sin(turn).toFloat()
     val radius = galaxyRadius * BuildSwirl.galaxyScale(t)
+    val halo = SwirlPale
     spots.forEachIndexed { index, spot ->
         val u = BuildSwirl.formProgress(t, spot.order)
         if (u <= 0f) return@forEachIndexed
         val arrived = IconFlightEasing.transform(u.coerceAtMost(1f))
-        val seed = 200000 + index * 5
-        val target = centre + Offset(spot.x * turnCos - spot.y * turnSin, spot.x * turnSin + spot.y * turnCos) * size
-        val along = 0.2f + 0.75f * noise(seed)
-        val from = spiralPoint(centre, radius, spin, index % GALAXY_ARMS, along, (noise(seed + 1) - 0.5f) * radius * 0.2f * along)
-        val position = from + (target - from) * arrived
+        val targetX = centre.x + (spot.x * turnCos - spot.y * turnSin) * size
+        val targetY = centre.y + (spot.x * turnSin + spot.y * turnCos) * size
+        val fromX = centre.x + (spot.fromX * spinCos - spot.fromY * spinSin) * radius
+        val fromY = centre.y + (spot.fromX * spinSin + spot.fromY * spinCos) * radius * GALAXY_FLATTEN
+        val position = Offset(fromX + (targetX - fromX) * arrived, fromY + (targetY - fromY) * arrived)
         if ((position - centre).getDistance() < sharpened) return@forEachIndexed
         val alpha = (u / 0.15f).coerceAtMost(1f)
-        val color = lerp(dustColor(noise(seed + 2)), spot.color, arrived)
-        if (index % 3 == 0) drawCircle(SwirlPale.copy(alpha = 0.16f * alpha), grain * 3.5f, position)
-        drawCircle(color.copy(alpha = alpha), grain * (1.7f - 0.7f * arrived), position)
+        if (index % 3 == 0) drawCircle(halo.copy(alpha = 0.16f * alpha), grain * 3.5f, position)
+        drawCircle(mixColor(spot.dust, spot.color, arrived).copy(alpha = alpha), grain * (1.7f - 0.7f * arrived), position)
     }
 }
 
