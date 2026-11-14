@@ -53,6 +53,7 @@ import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
+import dev.renkinProject.renkin.feature.buildinstall.PackPreviewSession
 import dev.renkinProject.renkin.apk.ProfilePackIdentityException
 import dev.renkinProject.renkin.apk.ProfilePackIdentityError
 import dev.renkinProject.renkin.data.IconPack
@@ -198,7 +199,23 @@ class MainViewModel @Inject constructor(
     val installedIcons = appProvider.installedIcons
     val runtimeState = appProvider.runtimeState
     val startupProfile = appProvider.startupProfile
-    internal var packPreviewOpen by mutableStateOf(false)
+    /** The open Pack preview, hosted inside the home window (PackPreviewHost). */
+    internal var packPreview by mutableStateOf<PackPreviewSession?>(null)
+        private set
+    internal val packPreviewOpen: Boolean get() = packPreview != null
+
+    internal fun openPackPreview() {
+        packPreview = PackPreviewSession(sessionToken, builtKeys, updatedKeys)
+    }
+
+    internal fun holdInstallForBuildAnimation(held: Boolean) = buildCoordinator.holdInstall(held)
+
+    internal fun closePackPreview() {
+        packPreview = null
+    }
+
+    internal fun isCurrentSession(token: ProfileSessionToken): Boolean = appProvider.isCurrentSession(token)
+    internal suspend fun calendarWarnings(preferences: Preferences) = appProvider.calendarWarnings(preferences)
     /** Action-time snapshot only; composables collect [applicationState]. */
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
 
@@ -1005,28 +1022,22 @@ class MainViewModel @Inject constructor(
     }
     fun dismissInstallFallback() = buildCoordinator.dismissInstallFallback()
 
-    fun build(expected: ProfileSessionToken) {
-        if (foregroundProfileActions.progress.value != null) {
-            _toastEvents.trySend(R.string.profileActionBusy)
-            return
+    /** Starts the build, or explains with a toast why it cannot start now. */
+    fun build(expected: ProfileSessionToken): Boolean {
+        val refusal = when {
+            foregroundProfileActions.progress.value != null -> R.string.profileActionBusy
+            buildCoordinator.busy -> R.string.buildOperationPending
+            longOperationRunning -> R.string.profileRenderBusy
+            !startupComplete || isProfileSwitching -> R.string.profileStillLoading
+            !appProvider.isCurrentSession(expected) -> expected.expiredSessionMessage(sessionToken)
+            else -> null
         }
-        if (buildCoordinator.busy) {
-            _toastEvents.trySend(R.string.buildOperationPending)
-            return
-        }
-        if (longOperationRunning) {
-            _toastEvents.trySend(R.string.profileRenderBusy)
-            return
-        }
-        if (!startupComplete || isProfileSwitching) {
-            _toastEvents.trySend(R.string.profileStillLoading)
-            return
-        }
-        if (!appProvider.isCurrentSession(expected)) {
-            _toastEvents.trySend(expected.expiredSessionMessage(sessionToken))
-            return
+        if (refusal != null) {
+            _toastEvents.trySend(refusal)
+            return false
         }
         buildSession.startBuild(expected)
+        return true
     }
 
     // Records that [app] was hand-edited this session (so the build preview marks it "changed").

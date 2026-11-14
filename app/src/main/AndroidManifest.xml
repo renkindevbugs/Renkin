@@ -85,11 +85,6 @@
             android:name=".service.PackBuildForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
-        <!-- Fullscreen pack preview drawn over the real wallpaper (windowShowWallpaper theme). -->
-        <activity
-            android:name=".WallpaperPreviewActivity"
-            android:exported="false"
-            android:theme="@style/Theme.Renkin.WallpaperPreview" />
         <!-- Global options: the icon grid previews over the real wallpaper (same theme trick). -->
         <activity
             android:name=".GlobalOptionsActivity"

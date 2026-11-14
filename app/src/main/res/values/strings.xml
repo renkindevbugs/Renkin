@@ -639,7 +639,6 @@
     <string name="buildPreviewTitle">Pack preview</string>
     <string name="buildPreviewEmpty">No icons yet — assign some to your apps first</string>
     <string name="buildPreviewCount">%d icons</string>
-    <string name="buildPreviewSessionLost">Renkin was closed by the system — preview cancelled, reopen it to build</string>
     <string name="watchApplyFailed">Could not apply the icon — the suggestion was kept so you can try again</string>
     <string name="linkOpenFailed">No app on this device can open that link</string>
     <string name="shareFailed">No app on this device can share that</string>
