@@ -58,6 +58,8 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.drawable.toImageVectorDrawable
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.packages.PackageVersion
+import dev.renkinProject.renkin.packages.supportDynamicColors
+import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.vector.PathConverter.Companion.toNodes
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyAndRemoveGroup
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.editStrokePaths
@@ -638,7 +640,8 @@ class IconGenerator(
         }
 
         if (imageEdit == ImageEdit.NONE) return IconSourceStage(
-            getDefaultIcon(bitmapIcon, parsedIcon), ModifierInputPipeline.IMAGE_EDIT, imageEdit, retainable
+            getDefaultIcon(bitmapIcon, parsedIcon, preserveAdaptiveAppearance),
+            ModifierInputPipeline.IMAGE_EDIT, imageEdit, retainable
         )
 
         // Generic modifiers run on ONE canonical frame — the pixels ImageEdit.NONE would show —
@@ -794,6 +797,12 @@ class IconGenerator(
                 if (preserveAdaptiveAppearance && !export.themed) {
                     renderAdaptivePackIcon(parsedIcon)?.let { return it }
                 }
+                // A Material You pack is already a themed icon: keep its own inset and vector
+                // instead of Renkin's themed inset, which shrank it (Lawnicons) and turned it into
+                // a bitmap whose colour could no longer follow the wallpaper.
+                if (preserveAdaptiveAppearance && export.themed) {
+                    themedPackForeground(parsedIcon)?.let { return it }
+                }
                 // The bitmap path already unwraps and normalises the adaptive foreground. In
                 // themed mode, feeding the pack-authored foreground inset back into the standard
                 // themed inset applied it twice and made the comparison preview microscopic.
@@ -808,6 +817,30 @@ class IconGenerator(
             else -> getDefaultBitmapIcon(bitmapIcon)
         }
     }
+
+    /**
+     * The pack's vector foreground in its own adaptive inset, drawn in the themed glyph colour.
+     * The export replaces that colour with `@color/icon_color`; this one is what Renkin previews.
+     */
+    private fun themedPackForeground(icon: AdaptiveIconDrawable): IconPackDrawable? {
+        val foreground = icon.foreground
+        val vector = when (foreground) {
+            is InsetIconDrawable -> foreground.drawable as? ImageVectorDrawable
+            is ImageVectorDrawable -> foreground
+            else -> null
+        } ?: return null
+        // Themed parsing keeps strokes at a fixed pixel width (Renkin's own themed stroke). The
+        // pack's strokes are part of its design and must shrink with the icon, as on the launcher.
+        val glyph = ImageVectorDrawable(vector.toImageVector(), scaleStrokesWithBounds = true).also {
+            it.root.setReferenceColorPaths(SolidColor(Color(themedGlyphColor())))
+            it.tintColor = Color.Unspecified
+        }
+        return if (foreground is InsetIconDrawable) foreground.newDrawable(glyph) else glyph
+    }
+
+    private fun themedGlyphColor(): Int =
+        if (supportDynamicColors()) ctx.resources.getColor(R.color.icon_color, null)
+        else modifiers.effect.colorizer.firstColor
 
     private fun getDefaultBitmapIcon(bitmap: Bitmap): IconPackDrawable {
         return if (export.themed) {

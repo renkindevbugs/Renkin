@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Must match the themed colours IconPackBuilder writes into the pack (dark mode). -->
+    <color name="icon_color">@android:color/system_accent1_200</color>
+    <color name="icon_background_color">@android:color/system_accent2_800</color>
+</resources>

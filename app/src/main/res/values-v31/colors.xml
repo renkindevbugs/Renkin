@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="icon_color">@android:color/system_accent1_100</color>
-    <color name="icon_background_color">@android:color/system_accent1_800</color>
+    <!-- Must match the themed colours IconPackBuilder writes into the pack (light mode). -->
+    <color name="icon_color">@android:color/system_accent1_700</color>
+    <color name="icon_background_color">@android:color/system_accent1_100</color>
 </resources>

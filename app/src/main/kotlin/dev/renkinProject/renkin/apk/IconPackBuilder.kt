@@ -23,6 +23,7 @@ import dev.renkinProject.renkin.drawable.InsetIconDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.getDrawableOrNull
 import dev.renkinProject.renkin.extension.toByteArray
+import dev.renkinProject.renkin.extension.isSingleColorGlyph
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.packages.CHANGES_WITH_MATERIAL_YOU_COLORS
 import dev.renkinProject.renkin.packages.PackageInfoStruct
@@ -37,6 +38,7 @@ import dev.renkinProject.renkin.xml.file.AppMapXml
 import dev.renkinProject.renkin.xml.file.ThemeResourcesXml
 import dev.renkinProject.renkin.xml.file.DrawableXml
 import dev.renkinProject.renkin.xml.file.LayerListXml
+import dev.renkinProject.renkin.xml.file.TintedBitmapXml
 import dev.renkinProject.renkin.xml.file.VectorXml
 import dev.renkinProject.renkin.xml.file.XmlMemoryFile
 import com.reandroid.apk.ApkModule
@@ -247,8 +249,12 @@ class IconPackBuilder(
         createColorResource(packageBlock, "icon_color", iconColor)
         createColorResource(packageBlock, "icon_background_color", backgroundColor)
 
-        createRefColor31Resource(packageBlock, "icon_color", "@android:color/system_accent1_100")
-        createRefColor31Resource(packageBlock, "icon_background_color", "@android:color/system_accent1_800")
+        // Themed icons follow light and dark mode like system themed icons. The pairs are the ones
+        // Lawnicons uses, so Renkin and Lawnicons glyphs look alike side by side.
+        createRefColor31Resource(packageBlock, "icon_color", "@android:color/system_accent1_700")
+        createRefColor31Resource(packageBlock, "icon_background_color", "@android:color/system_accent1_100")
+        createRefColor31Resource(packageBlock, "icon_color", "@android:color/system_accent1_200", night = true)
+        createRefColor31Resource(packageBlock, "icon_background_color", "@android:color/system_accent2_800", night = true)
 
         textMethod(ctx.resources.getString(R.string.writingElement))
         val drawableXml = DrawableXml()
@@ -329,7 +335,7 @@ class IconPackBuilder(
                             } else {
                                 if (insetDrawable is BitmapIconDrawable) {
                                     adaptive.insetDrawable(appFileName + "_foreground")
-                                    createBitmapResource(apkModule, packageBlock, insetDrawable.toBitmap(), appFileName + "_foreground")
+                                    createGlyphResource(apkModule, packageBlock, insetDrawable.toBitmap(), appFileName + "_foreground", themed)
                                 }
                             }
 
@@ -345,7 +351,7 @@ class IconPackBuilder(
 
                         else -> {
                             adaptive.foreground(appFileName)
-                            createBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground")
+                            createGlyphResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground", themed)
                         }
                     }
 
@@ -668,6 +674,21 @@ class IconPackBuilder(
             bitmap.recycle()
         }
 
+    /**
+     * A themed one-colour glyph is written as an alpha mask under [name] tinted with
+     * `@color/icon_color`, so it follows wallpaper and dark-mode changes like a vector glyph does.
+     * Any other bitmap keeps its own colours.
+     */
+    private fun createGlyphResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, themed: Boolean) {
+        if (!themed || !bitmap.isSingleColorGlyph()) {
+            createBitmapResource(apkModule, packageBlock, bitmap, name)
+            return
+        }
+        val mask = "${name}_mask"
+        createBitmapResource(apkModule, packageBlock, bitmap, mask)
+        createXmlDrawableResource(apkModule, packageBlock, TintedBitmapXml(mask, "@color/icon_color"), name)
+    }
+
     private fun generateBitmap(image: Bitmap, name: String): InputSource {
         return if (PackageVersion.is30OrMore()) {
             generateLosslessWebp(image, name)
@@ -705,8 +726,8 @@ class IconPackBuilder(
         res.setValueAsRaw(coder.valueType, coder.value)
     }
 
-    private fun createRefColor31Resource(packageBlock: PackageBlock, name: String, reference: String) {
-        val res = packageBlock.getOrCreate("v31", "color", name)
+    private fun createRefColor31Resource(packageBlock: PackageBlock, name: String, reference: String, night: Boolean = false) {
+        val res = packageBlock.getOrCreate(if (night) "night-v31" else "v31", "color", name)
         val coder = ValueCoder.encodeReference(packageBlock, reference)
         res.setValueAsRaw(coder.valueType, coder.value)
     }

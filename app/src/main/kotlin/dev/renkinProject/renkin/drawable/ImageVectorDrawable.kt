@@ -180,7 +180,7 @@ class ImageVectorDrawable(imageVector: ImageVector, internal val scaleStrokesWit
     }
 
     override fun toDbString(): String {
-        val bytes = toImageVector().toXml()
+        val bytes = toImageVector().toXml(scalingStrokes = scaleStrokesWithBounds)
         return Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 
