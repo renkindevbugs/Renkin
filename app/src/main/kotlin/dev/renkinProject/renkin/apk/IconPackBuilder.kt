@@ -111,7 +111,7 @@ class IconPackBuilder(
 
         // Smali class assets compiled into the pack's classes.dex; their class package must stay
         // MAIN_ACTIVITY's. The preview screen reads the renkin_preview_* resources by name.
-        private val PACK_SMALI_ASSETS = listOf("MainActivity", "IconAdapter", "BuildConfig")
+        private val PACK_SMALI_ASSETS = listOf("MainActivity", "IconAdapter", "IconLoader", "BuildConfig")
 
         /**
          * The pack-signing keystore in filesDir. Backups carry it (with its password file,
