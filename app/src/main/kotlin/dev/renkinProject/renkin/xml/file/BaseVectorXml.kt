@@ -10,6 +10,18 @@ abstract class BaseVectorXml: XmlMemoryFile() {
         attribute("viewportHeight", viewportHeight.toString(), androidNamespace)
     }
 
+    /**
+     * Stored icons only: Renkin's renderer otherwise keeps strokes at a fixed pixel width, and a
+     * pack's own strokes (Lawnicons) drew far too thick in small previews after a restart.
+     */
+    fun markScalingStrokes() {
+        attribute(SCALING_STROKES_ATTRIBUTE, "true")
+    }
+
+    companion object {
+        const val SCALING_STROKES_ATTRIBUTE = "renkinScalingStrokes"
+    }
+
     protected open fun startVector() {
         startTag("vector")
     }

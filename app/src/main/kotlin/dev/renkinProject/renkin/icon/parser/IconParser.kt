@@ -7,6 +7,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.InsetDrawable
+import android.graphics.drawable.LayerDrawable
 import android.graphics.drawable.VectorDrawable
 import android.os.Build
 import android.util.Xml
@@ -50,6 +51,7 @@ class IconParser(private val resources: Resources, private val preserveFramework
             is BitmapDrawable -> BitmapIconDrawable(drawable)
             is VectorDrawable -> parseVector(drawableId, parser) ?: drawable
             is InsetDrawable -> parseInset(drawable, parser) ?: drawable
+            is LayerDrawable -> parseSingleLayer(drawable, parser) ?: drawable
             is ColorDrawable -> drawable
             else -> drawable
         }
@@ -107,6 +109,22 @@ class IconParser(private val resources: Resources, private val preserveFramework
         } else null
         return if (copy != null) copy.apply { setDrawable(drawable) }
         else InsetIconDrawable.from(insetDrawable, drawable)
+    }
+
+    /**
+     * A one-item `<layer-list>` is only a wrapper: Lawnicons (2.x) puts its `<inset>` vector
+     * foreground in one, and left unparsed the whole foreground stayed an opaque framework drawable.
+     * Lists with several items or with item offsets are real compositions and are kept as they are.
+     */
+    private fun parseSingleLayer(layers: LayerDrawable, parser: XmlResourceParser?): Drawable? {
+        if (layers.numberOfLayers != 1) return null
+        val layer = layers.getDrawable(0) ?: return null
+        val offset = layers.getLayerInsetLeft(0) or layers.getLayerInsetTop(0) or
+            layers.getLayerInsetRight(0) or layers.getLayerInsetBottom(0)
+        if (offset != 0) return null
+        if (parser == null) return parseDrawable(layer)
+        if (!parser.parseUntil("item")) return null
+        return parseReferenceOrInnerDrawable(layer, parser)
     }
 
     private fun parseVector(drawableId: Int, parser: XmlResourceParser?): ImageVectorDrawable? {

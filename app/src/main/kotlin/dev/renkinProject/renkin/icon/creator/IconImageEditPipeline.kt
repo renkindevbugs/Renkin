@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import dev.alembiconsProject.imagetracer.ImageTracer
 import dev.alembiconsProject.tgCannyEdgeCompose.CannyEdgeDetector
 import dev.alembiconsProject.tgCannyEdgeCompose.DetectionOptions
+import dev.renkinProject.renkin.packages.PackageVersion
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.drawable.ADAPTIVE_ICON_SCALE
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
@@ -383,7 +384,11 @@ internal class IconImageEditPipeline(
     private fun addBackground(image: Bitmap): Bitmap {
         if (!export.themed) return image
         val shader = export.background.shader(image.width, image.height)
-            ?: return image.changeBackgroundColor(export.background.color)
+        // A solid themed background is the adaptive icon's own background layer from Android 8 on,
+        // and it follows the wallpaper. Baking it into the glyph left a square of the old colour
+        // there after a wallpaper change, and kept the glyph from exporting as a tintable mask.
+        if (shader == null && PackageVersion.is26OrMore()) return image
+        shader ?: return image.changeBackgroundColor(export.background.color)
         val result = image.emptyLike()
         Canvas(result).apply {
             drawRect(

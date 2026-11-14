@@ -12,6 +12,7 @@ import android.graphics.drawable.Drawable
 import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
+import kotlin.math.abs
 
 /**
  * Creates a blank ARGB_8888 bitmap of [width]×[height], runs [draw] on a Canvas backed by it and
@@ -188,6 +189,36 @@ fun Bitmap.contentBounds(): Rect? {
     val right = colCounts.indexOfLast { it >= colFloor }
     val bottom = rowCounts.indexOfLast { it >= rowFloor }
     return Rect(left, top, right + 1, bottom + 1)
+}
+
+/**
+ * True for a glyph drawn in one colour over transparency, such as a colourized themed icon: its
+ * shape lives entirely in the alpha channel, so a launcher can recolour it with a tint. Faint
+ * antialias pixels are skipped, their unpremultiplied colour is not exact.
+ */
+fun Bitmap.isSingleColorGlyph(tolerance: Int = 8): Boolean {
+    val w = width
+    val h = height
+    if (w <= 0 || h <= 0) return false
+    val px = IntArray(w * h)
+    getPixels(px, 0, w, 0, 0, w, h)
+    var reference = -1
+    var hasTransparency = false
+    for (pixel in px) {
+        val alpha = pixel ushr 24
+        if (alpha == 0) hasTransparency = true
+        if (alpha < 64) continue
+        val rgb = pixel and 0xFFFFFF
+        if (reference < 0) {
+            reference = rgb
+            continue
+        }
+        if (abs((rgb shr 16) - (reference shr 16)) > tolerance ||
+            abs(((rgb shr 8) and 0xFF) - ((reference shr 8) and 0xFF)) > tolerance ||
+            abs((rgb and 0xFF) - (reference and 0xFF)) > tolerance
+        ) return false
+    }
+    return hasTransparency && reference >= 0
 }
 
 fun Bitmap.changeBackgroundColor(color: Int): Bitmap {

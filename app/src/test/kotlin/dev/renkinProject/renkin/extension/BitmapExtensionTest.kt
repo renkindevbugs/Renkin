@@ -4,6 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -151,5 +152,18 @@ class BitmapExtensionTest {
         assertEquals(0, out[2])  // ...followed across
         assertEquals(red, out[3]) // glyph kept
         assertEquals(0, out[6])  // gradient end erased from the other side
+    }
+
+    @Test
+    fun isSingleColorGlyph_acceptsOneColourOverTransparency() {
+        val glyph = bitmapOf(2, 2, intArrayOf(red, 0, 0x80FF0000.toInt(), red))
+
+        assertTrue(glyph.isSingleColorGlyph())
+    }
+
+    @Test
+    fun isSingleColorGlyph_rejectsTwoColoursAndBakedBackground() {
+        assertFalse(bitmapOf(2, 2, intArrayOf(red, 0, 0, blue)).isSingleColorGlyph())
+        assertFalse(bitmapOf(2, 2, intArrayOf(red, blue, blue, blue)).isSingleColorGlyph())
     }
 }
