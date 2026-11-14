@@ -13,6 +13,7 @@ import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
 import dev.renkinProject.renkin.data.LastAutoBackupDigestKey
 import dev.renkinProject.renkin.data.LastAutoBackupDocumentUriKey
+import dev.renkinProject.renkin.data.LastAutoBackupFailedAtKey
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getLongValue
 import dev.renkinProject.renkin.data.getStringValue
@@ -44,6 +45,11 @@ class AutoBackupManager @Inject constructor(
         it.getLongValue(LastAutoBackupAtKey)
     }
 
+    /** When the newest automatic backup attempt failed, or 0 when the last one succeeded. */
+    val lastFailureAt: Flow<Long> = context.dataStore.observePreferences().map {
+        it.getLongValue(LastAutoBackupFailedAtKey)
+    }
+
     suspend fun setInterval(hours: Int): Unit = StorageOperationGate.run {
         val normalized = normalizeAutoBackupInterval(hours)
         context.dataStore.setIntValue(AutoBackupIntervalKey, normalized)
@@ -61,6 +67,8 @@ class AutoBackupManager @Inject constructor(
                 preferences.remove(LastAutoBackupDocumentUriKey)
             }
             preferences[AutoBackupTreeUriKey] = uri.toString()
+            // A newly chosen folder gets a fresh attempt; the old failure no longer describes it.
+            preferences.remove(LastAutoBackupFailedAtKey)
         }
         setInterval(intervalHours)
         AutoBackupWorker.runNow(context)

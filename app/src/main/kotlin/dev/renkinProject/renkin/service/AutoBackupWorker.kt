@@ -19,6 +19,7 @@ import dev.renkinProject.renkin.data.AutoBackupTreeUriKey
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
 import dev.renkinProject.renkin.data.LastAutoBackupDigestKey
 import dev.renkinProject.renkin.data.LastAutoBackupDocumentUriKey
+import dev.renkinProject.renkin.data.LastAutoBackupFailedAtKey
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.normalizeAutoBackupInterval
@@ -72,6 +73,7 @@ class AutoBackupWorker(appContext: Context, params: WorkerParameters) :
                             current[LastAutoBackupDigestKey] = digest
                             current[LastAutoBackupDocumentUriKey] = outputUri?.toString() ?: previousDocument
                             current[LastAutoBackupAtKey] = System.currentTimeMillis()
+                            current.remove(LastAutoBackupFailedAtKey)
                         }
                     }
                 }
@@ -96,11 +98,26 @@ class AutoBackupWorker(appContext: Context, params: WorkerParameters) :
         } catch (e: SecurityException) {
             outputUri?.let(::deleteDocument)
             Log.error("AutoBackupWorker", "Automatic backup folder is no longer accessible", e)
+            recordFailure()
             Result.failure()
         } catch (e: Exception) {
             outputUri?.let(::deleteDocument)
             Log.error("AutoBackupWorker", "Automatic backup failed", e)
+            recordFailure()
             Result.retry()
+        }
+    }
+
+    // Settings otherwise kept showing the last successful date while no backups were made.
+    private suspend fun recordFailure() {
+        try {
+            StorageOperationGate.run {
+                applicationContext.dataStore.edit { it[LastAutoBackupFailedAtKey] = System.currentTimeMillis() }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.error("AutoBackupWorker", "Could not record the failed backup", error)
         }
     }
 

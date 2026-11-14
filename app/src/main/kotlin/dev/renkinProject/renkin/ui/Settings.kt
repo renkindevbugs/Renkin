@@ -150,6 +150,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     val autoBackupInterval by viewModel.autoBackupIntervalHours.collectAsStateWithLifecycle()
     val autoBackupTreeUri by viewModel.autoBackupTreeUri.collectAsStateWithLifecycle()
     val lastAutoBackupAt by viewModel.lastAutoBackupAt.collectAsStateWithLifecycle()
+    val lastAutoBackupFailedAt by viewModel.lastAutoBackupFailedAt.collectAsStateWithLifecycle()
     val autoBackupFolderName by produceState<String?>(null, autoBackupTreeUri) {
         value = autoBackupTreeUri?.let { viewModel.autoBackupFolderName(it) }
     }
@@ -284,6 +285,17 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     ) {
                         pendingAutoBackupInterval = autoBackupInterval
                         autoBackupFolderLauncher.launch(autoBackupTreeUri)
+                    }
+                    if (lastAutoBackupFailedAt != 0L) {
+                        SettingsRow(
+                            Icons.Filled.Warning,
+                            stringResource(R.string.autoBackupFailed),
+                            tint = MaterialTheme.colorScheme.error,
+                            subtitle = stringResource(R.string.autoBackupFailedHint)
+                        ) {
+                            pendingAutoBackupInterval = autoBackupInterval
+                            autoBackupFolderLauncher.launch(autoBackupTreeUri)
+                        }
                     }
                 }
                 BackupExportRow(

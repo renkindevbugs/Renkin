@@ -1751,6 +1751,7 @@ class MainViewModel @Inject constructor(
     val autoBackupIntervalHours get() = backupCoordinator.autoBackupIntervalHours
     val autoBackupTreeUri get() = backupCoordinator.autoBackupTreeUri
     val lastAutoBackupAt get() = backupCoordinator.lastAutoBackupAt
+    val lastAutoBackupFailedAt get() = backupCoordinator.lastAutoBackupFailedAt
     val previousStateAvailable get() = backupCoordinator.previousStateAvailable
     val previousStateStored get() = backupCoordinator.previousStateStored
     val abandonedRecoveryAvailable get() = backupCoordinator.abandonedRecoveryAvailable
