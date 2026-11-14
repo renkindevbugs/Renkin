@@ -7,10 +7,18 @@
 # cell at mdpi: the pack's rasters sit in the unqualified (mdpi) bucket, so loading at screen
 # density would upscale every bitmap and large packs would run out of memory. A drawable that
 # fails to inflate (e.g. adaptive XML on API 21-25) leaves its cell empty instead of crashing.
+# Grid cells get their icon from IconLoader off the main thread, rendered at the cell's size and
+# kept in `cache` (icon index -> Bitmap), so scrolling back shows them at once.
 
 
 # instance fields
+.field public final cache:Landroid/util/LruCache;
+
 .field private final context:Landroid/content/Context;
+
+.field private final executor:Ljava/util/concurrent/Executor;
+
+.field public final handler:Landroid/os/Handler;
 
 .field private final iconSize:I
 
@@ -70,6 +78,32 @@
     const/4 v1, -0x1
 
     iput v1, p0, Ldev/renkinProject/renkinpack/IconAdapter;->textColor:I
+
+    new-instance v0, Landroid/util/LruCache;
+
+    const/16 v1, 0x78    # 120 icons at cell size, about 13 MB at 3x density
+
+    invoke-direct {v0, v1}, Landroid/util/LruCache;-><init>(I)V
+
+    iput-object v0, p0, Ldev/renkinProject/renkinpack/IconAdapter;->cache:Landroid/util/LruCache;
+
+    const/4 v0, 0x2
+
+    invoke-static {v0}, Ljava/util/concurrent/Executors;->newFixedThreadPool(I)Ljava/util/concurrent/ExecutorService;
+
+    move-result-object v0
+
+    iput-object v0, p0, Ldev/renkinProject/renkinpack/IconAdapter;->executor:Ljava/util/concurrent/Executor;
+
+    new-instance v0, Landroid/os/Handler;
+
+    invoke-static {}, Landroid/os/Looper;->getMainLooper()Landroid/os/Looper;
+
+    move-result-object v1
+
+    invoke-direct {v0, v1}, Landroid/os/Handler;-><init>(Landroid/os/Looper;)V
+
+    iput-object v0, p0, Ldev/renkinProject/renkinpack/IconAdapter;->handler:Landroid/os/Handler;
 
     const-string v1, ""
 
@@ -177,6 +211,71 @@
     invoke-virtual {v0, v3}, Landroid/graphics/drawable/Drawable;->draw(Landroid/graphics/Canvas;)V
 
     return-object v2
+.end method
+
+# The icon at `icons[index]` drawn at the cell's size, or null when it is missing or fails to
+# inflate. Called on IconLoader's workers; Resources is safe to use from any thread.
+.method public iconBitmap(I)Landroid/graphics/Bitmap;
+    .locals 5
+
+    :try_start
+    iget-object v0, p0, Ldev/renkinProject/renkinpack/IconAdapter;->context:Landroid/content/Context;
+
+    invoke-virtual {v0}, Landroid/content/Context;->getResources()Landroid/content/res/Resources;
+
+    move-result-object v1
+
+    iget-object v2, p0, Ldev/renkinProject/renkinpack/IconAdapter;->icons:[Ljava/lang/String;
+
+    aget-object v2, v2, p1
+
+    const-string v3, "drawable"
+
+    invoke-virtual {v0}, Landroid/content/Context;->getPackageName()Ljava/lang/String;
+
+    move-result-object v4
+
+    invoke-virtual {v1, v2, v3, v4}, Landroid/content/res/Resources;->getIdentifier(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
+
+    move-result v2
+
+    if-eqz v2, :missing
+
+    const/16 v3, 0xa0    # DisplayMetrics.DENSITY_MEDIUM, see the class comment
+
+    invoke-virtual {v1, v2, v3}, Landroid/content/res/Resources;->getDrawableForDensity(II)Landroid/graphics/drawable/Drawable;
+
+    move-result-object v0
+
+    if-eqz v0, :missing
+
+    iget v1, p0, Ldev/renkinProject/renkinpack/IconAdapter;->iconSize:I
+
+    sget-object v2, Landroid/graphics/Bitmap$Config;->ARGB_8888:Landroid/graphics/Bitmap$Config;
+
+    invoke-static {v1, v1, v2}, Landroid/graphics/Bitmap;->createBitmap(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;
+
+    move-result-object v2
+
+    new-instance v3, Landroid/graphics/Canvas;
+
+    invoke-direct {v3, v2}, Landroid/graphics/Canvas;-><init>(Landroid/graphics/Bitmap;)V
+
+    const/4 v4, 0x0
+
+    invoke-virtual {v0, v4, v4, v1, v1}, Landroid/graphics/drawable/Drawable;->setBounds(IIII)V
+
+    invoke-virtual {v0, v3}, Landroid/graphics/drawable/Drawable;->draw(Landroid/graphics/Canvas;)V
+    :try_end
+    .catch Ljava/lang/Throwable; {:try_start .. :try_end} :failed
+
+    return-object v2
+
+    :missing
+    :failed
+    const/4 v0, 0x0
+
+    return-object v0
 .end method
 
 .method public filter(Ljava/lang/String;)V
@@ -360,12 +459,45 @@
 
     check-cast v2, Landroid/widget/ImageView;
 
-    invoke-direct {p0, p1}, Ldev/renkinProject/renkinpack/IconAdapter;->drawable(I)Landroid/graphics/drawable/Drawable;
+    invoke-direct {p0, p1}, Ldev/renkinProject/renkinpack/IconAdapter;->index(I)I
 
-    move-result-object v3
+    move-result v3
 
-    invoke-virtual {v2, v3}, Landroid/widget/ImageView;->setImageDrawable(Landroid/graphics/drawable/Drawable;)V
+    invoke-static {v3}, Ljava/lang/Integer;->valueOf(I)Ljava/lang/Integer;
 
+    move-result-object v4
+
+    invoke-virtual {v2, v4}, Landroid/widget/ImageView;->setTag(Ljava/lang/Object;)V
+
+    iget-object v5, p0, Ldev/renkinProject/renkinpack/IconAdapter;->cache:Landroid/util/LruCache;
+
+    invoke-virtual {v5, v4}, Landroid/util/LruCache;->get(Ljava/lang/Object;)Ljava/lang/Object;
+
+    move-result-object v5
+
+    check-cast v5, Landroid/graphics/Bitmap;
+
+    if-eqz v5, :load
+
+    invoke-virtual {v2, v5}, Landroid/widget/ImageView;->setImageBitmap(Landroid/graphics/Bitmap;)V
+
+    goto :label
+
+    # A recycled cell must not keep showing its previous icon while this one loads.
+    :load
+    const/4 v5, 0x0
+
+    invoke-virtual {v2, v5}, Landroid/widget/ImageView;->setImageDrawable(Landroid/graphics/drawable/Drawable;)V
+
+    iget-object v5, p0, Ldev/renkinProject/renkinpack/IconAdapter;->executor:Ljava/util/concurrent/Executor;
+
+    new-instance v6, Ldev/renkinProject/renkinpack/IconLoader;
+
+    invoke-direct {v6, p0, v2, v3}, Ldev/renkinProject/renkinpack/IconLoader;-><init>(Ldev/renkinProject/renkinpack/IconAdapter;Landroid/widget/ImageView;I)V
+
+    invoke-interface {v5, v6}, Ljava/util/concurrent/Executor;->execute(Ljava/lang/Runnable;)V
+
+    :label
     const/4 v1, 0x1
 
     invoke-virtual {v0, v1}, Landroid/widget/LinearLayout;->getChildAt(I)Landroid/view/View;
