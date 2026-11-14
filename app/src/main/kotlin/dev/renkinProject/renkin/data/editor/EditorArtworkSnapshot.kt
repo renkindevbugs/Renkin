@@ -57,6 +57,9 @@ internal data class EditorInsetArtwork(
     val fractionLeft: Float, val fractionTop: Float, val fractionRight: Float, val fractionBottom: Float
 ) : EditorArtworkSnapshot
 
+// A themed icon: its glyph mask, which the launcher tints (ThemedGlyphDrawable).
+internal data class EditorThemedArtwork(val glyph: EditorArtworkSnapshot) : EditorArtworkSnapshot
+
 internal data class EditorVectorEntry(val path: EditorVectorPath, val filled: Boolean, val baseStroke: Float)
 internal data class EditorVectorInputs(
     val entries: List<EditorVectorEntry>, val thickness: Float, val autoCenter: Boolean,

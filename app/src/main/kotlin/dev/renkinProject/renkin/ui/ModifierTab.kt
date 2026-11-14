@@ -21,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.BorderStyle
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.Gesture
@@ -116,7 +117,7 @@ internal fun ModifierTab(
     onEditExternally: (toolbox: Boolean) -> Unit
 ) {
     val colorizeBaseBitmap = previews?.colorizeBase
-    val editLabels = getImageEditLabels(includeSegments = colorizeBaseBitmap != null)
+    val editLabels = getImageEditLabels(includeSegments = colorizeBaseBitmap != null, includeThemed = true)
         .filterKeys { allowImageEdits || it == ImageEdit.NONE }
     var colorPickerOpen by remember { mutableStateOf(false) }
     var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
@@ -380,6 +381,12 @@ internal fun ModifierTab(
                                     )
                                 }
 
+                                ImageEdit.THEMED -> Text(
+                                    text = stringResource(R.string.themedEditHint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(8.dp)
+                                )
                                 ImageEdit.NONE -> {}
                             }
                         }
@@ -478,4 +485,5 @@ private fun imageEditIcon(edit: ImageEdit): ImageVector = when (edit) {
     ImageEdit.COLORIZE -> Icons.Filled.Palette
     ImageEdit.COLORIZE_SEGMENTS -> Icons.Filled.FormatColorFill
     ImageEdit.REMOVE_BACKGROUND -> Icons.Filled.LayersClear
+    ImageEdit.THEMED -> Icons.Filled.ColorLens
 }

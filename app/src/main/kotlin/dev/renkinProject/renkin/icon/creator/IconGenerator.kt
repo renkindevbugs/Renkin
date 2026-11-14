@@ -294,7 +294,7 @@ class IconGenerator(
                 else -> it
             }
         }
-        val bitmapIcon = getIconBitmap(icon.drawable) ?: return null
+        val bitmapIcon = getIconBitmap(icon.drawable.copyForRendering()) ?: return null
         val changesWithMaterialYou = packChangesWithMaterialYouColors(iconPackName)
         val parsedIcon = exportIconPackXML(iconPackName, icon).let {
             if (changesWithMaterialYou) styleMaterialYouPackIcon(it) else it
@@ -401,7 +401,9 @@ class IconGenerator(
                 modifiers.materialYouPack.isReplayableOn(adaptiveLayers = true))
         }
 
-        val bitmapIcon = getIconBitmap(resIcon.drawable) ?: return null
+        // A mutated copy: drawables loaded from the pack share one native vector tree, and editor
+        // previews render concurrently. Drawing the shared one from two threads crashed natively.
+        val bitmapIcon = getIconBitmap(resIcon.drawable.copyForRendering()) ?: return null
         val changesWithMaterialYou = packChangesWithMaterialYouColors(iconPack.iconPackName)
         val parsedIcon = exportIconPackXML(iconPack.iconPackName, resIcon).let {
             if (changesWithMaterialYou) styleMaterialYouPackIcon(it) else it

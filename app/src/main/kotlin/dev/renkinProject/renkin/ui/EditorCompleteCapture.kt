@@ -123,6 +123,7 @@ private class ArtworkCollector(private val resourceCount: Int, resourceBytes: Lo
             }
             is InsetIconDrawable -> preflight(icon.drawable as? IconPackDrawable
                 ?: throw IllegalArgumentException("Unsupported editor inset"), budget, depth + 1)
+            is ThemedGlyphDrawable -> bytes(icon.mask.byteCount)
             is ImageVectorDrawable -> Unit // The exact adapter preflights paths before copying them.
             else -> throw IllegalArgumentException("Unsupported editor artwork")
         }

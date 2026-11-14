@@ -12,6 +12,7 @@ import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
+import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
 import dev.renkinProject.renkin.extension.newArgbBitmap
 import dev.renkinProject.renkin.extension.scaleFromCenter
 
@@ -32,6 +33,23 @@ internal class IconAdjustmentPipeline(
     fun apply(icon: IconPackDrawable): IconPackDrawable {
         if (!modifiers.hasAdjustments) return icon
         val transform = modifiers.transform
+
+        // A themed glyph is a mask the launcher tints: only its size and place mean anything.
+        // Shape, outline and shadow would be painted in colours the launcher replaces anyway.
+        if (icon is ThemedGlyphDrawable) {
+            if (transform.isIdentity) return icon
+            val mask = icon.mask
+            return icon.withMask(newArgbBitmap(mask.width, mask.height) { canvas ->
+                canvas.scale(transform.scale, transform.scale, mask.width / 2f, mask.height / 2f)
+                // Offsets are fractions of the 72dp frame; the mask spans the 108dp layer.
+                canvas.drawBitmap(
+                    mask,
+                    transform.offsetX * mask.width / ADAPTIVE_ICON_SCALE,
+                    transform.offsetY * mask.height / ADAPTIVE_ICON_SCALE,
+                    Paint(Paint.FILTER_BITMAP_FLAG)
+                )
+            })
+        }
 
         if (icon is AdaptiveIconPackDrawable && !modifiers.requiresRasterization) {
             val layerModifiers = modifiers.copy(transform = transform.copy(

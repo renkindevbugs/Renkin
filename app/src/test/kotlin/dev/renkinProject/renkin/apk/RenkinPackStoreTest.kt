@@ -18,6 +18,7 @@ import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
 import dev.renkinProject.renkin.drawable.MaterialYouPackEditState
+import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
 import dev.renkinProject.renkin.extension.getBytes
 import dev.renkinProject.renkin.extension.toBase64
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
@@ -178,6 +179,19 @@ class RenkinPackStoreTest {
         assertNull(entry.icon)
         assertTrue(entry.baseIcon is BitmapIconDrawable)
         assertEquals(false, entry.decodeFailed)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun storedThemedGlyphRestoresAsThemedGlyph() {
+        val mask = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { setPixel(3, 3, AndroidColor.WHITE) }
+        val restored = store().decodeStored(ThemedGlyphDrawable(mask).toDbString(), isXml = true, isAdaptive = true, Color.Black)
+
+        assertTrue(restored is ThemedGlyphDrawable)
+        restored as ThemedGlyphDrawable
+        assertTrue(restored.isAdaptiveIcon())
+        assertEquals(AndroidColor.WHITE, restored.mask.getPixel(3, 3))
+        assertEquals(0, restored.mask.getPixel(0, 0))
     }
 
     @Test

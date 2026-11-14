@@ -83,6 +83,14 @@ class EditorArtworkCodecTest {
         assertEquals(STORED_FORMAT_SHA256, hash)
     }
 
+    @Test fun themedGlyphSurvivesCodecAndNativeBinding() = runBlocking<Unit> {
+        val mask = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.WHITE) }
+        val captured = captureEditorArtwork(ThemedGlyphDrawable(mask))
+        assertTrue(captured is EditorThemedArtwork)
+        assertArtwork(captured)
+        assertTrue(restoreEditorArtwork(captured) is ThemedGlyphDrawable)
+    }
+
     @Test fun everyPathCommandAndVectorPropertySurvivesCodecAndNativeBinding() = runBlocking<Unit> {
         assertEquals(19, commands.map { it.javaClass }.distinct().size)
         val value = vector(group(listOf(group().copy(name = "nested", rotation = -21f), path())))

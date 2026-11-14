@@ -119,6 +119,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LayersClear
@@ -981,6 +982,14 @@ internal fun OptionsDialog(
                     keep = session.keepGlobalStyle,
                     onToggle = { session.keepGlobalStyle = it }
                 )
+                // The pack-wide Themed export already keeps such icons live; the card is the
+                // per-icon way to the same result when that export is off.
+                val themedCard = ThemedSelection(
+                    visible = session.purpose == EditorPurpose.APPLICATION && selectedTab == 0 && !themed &&
+                        selectedMaterialYouPackIcon && session.modifierReplay?.allowsImageEdits != false,
+                    enabled = imageEdit == ImageEdit.THEMED,
+                    onToggle = { imageEdit = if (it) ImageEdit.THEMED else ImageEdit.NONE }
+                )
 
                 if (paneLayout != null) {
                     WideOptionsLayout(
@@ -990,6 +999,7 @@ internal fun OptionsDialog(
                         packBrowser = packBrowser,
                         calendar = calendar,
                         globalStyle = globalStyle,
+                        themedCard = themedCard,
                         tabContent = tabContent,
                         bottomSection = bottomSection
                     )
@@ -1001,6 +1011,7 @@ internal fun OptionsDialog(
                         packBrowser = packBrowser,
                         calendar = calendar,
                         globalStyle = globalStyle,
+                        themedCard = themedCard,
                         headerScrollBehavior = headerScrollBehavior,
                         labelExpand = labelExpand,
                         tabContent = tabContent,
@@ -1226,6 +1237,13 @@ private data class CalendarSelection(
     val onToggle: (Boolean) -> Unit
 )
 
+// Shown for an icon from a Material You pack: switches the Themed modifier on or off.
+private data class ThemedSelection(
+    val visible: Boolean,
+    val enabled: Boolean,
+    val onToggle: (Boolean) -> Unit
+)
+
 @Composable
 private fun WideOptionsLayout(
     paneLayout: HorizontalPaneLayout,
@@ -1234,6 +1252,7 @@ private fun WideOptionsLayout(
     packBrowser: PackBrowserChrome,
     calendar: CalendarSelection,
     globalStyle: GlobalStyleSelection,
+    themedCard: ThemedSelection,
     tabContent: @Composable (PaddingValues) -> Unit,
     bottomSection: @Composable () -> Unit
 ) {
@@ -1251,7 +1270,7 @@ private fun WideOptionsLayout(
             onConfirm = actions.onConfirm,
             modifier = Modifier.width(paneLayout.leadingWidth),
             previewVariants = preview.variants,
-            extraCard =if (calendar.visible || globalStyle.layer != null) {
+            extraCard = if (calendar.visible || globalStyle.layer != null || themedCard.visible) {
                 {
                     androidx.compose.foundation.layout.Column {
                         globalStyle.layer?.let { GlobalStyleCard(it, globalStyle.keep, globalStyle.onToggle) }
@@ -1264,6 +1283,7 @@ private fun WideOptionsLayout(
                                 onToggle = calendar.onToggle
                             )
                         }
+                        if (themedCard.visible) ThemedCard(themedCard.enabled, themedCard.onToggle)
                     }
                 }
             } else null
@@ -1286,6 +1306,7 @@ private fun PhoneOptionsLayout(
     packBrowser: PackBrowserChrome,
     calendar: CalendarSelection,
     globalStyle: GlobalStyleSelection,
+    themedCard: ThemedSelection,
     headerScrollBehavior: TopAppBarScrollBehavior,
     labelExpand: Float,
     tabContent: @Composable (PaddingValues) -> Unit,
@@ -1353,6 +1374,9 @@ private fun PhoneOptionsLayout(
                             calendarEnabled = calendar.enabled,
                             onToggle = calendar.onToggle
                         )
+                    }
+                    AnimatedVisibility(visible = themedCard.visible) {
+                        ThemedCard(themedCard.enabled, themedCard.onToggle)
                     }
                 }
             }
@@ -1522,6 +1546,48 @@ private fun GlobalStyleCard(layer: EditorGlobalLayer, keep: Boolean, onToggle: (
             }
             // The whole card toggles, so the switch itself only shows the state.
             Switch(checked = keep, onCheckedChange = null)
+        }
+    }
+}
+
+@Composable
+private fun ThemedCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Surface(
+        shape = dev.renkinProject.renkin.ui.theme.CardShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .toggleable(value = enabled, role = Role.Switch, onValueChange = onToggle)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.ColorLens,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(22.dp)
+            )
+            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.themedIconCard),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = stringResource(R.string.themedIconCardDesc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                )
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = null
+            )
         }
     }
 }
