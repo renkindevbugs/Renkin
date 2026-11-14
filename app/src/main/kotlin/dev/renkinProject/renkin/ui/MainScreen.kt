@@ -463,51 +463,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
         )
     }
 
-    viewModel.installerPromptReason?.let { reason ->
-        InstallerPromptDialog(
-            selected = prefs.getPreferencesValue().installerSelection(),
-            explainSavedChoice = reason == InstallerChoiceReason.FIRST_CHOICE,
-            onSelect = viewModel::confirmInstallerSelection,
-            onDismiss = viewModel::dismissInstallerSelection
-        )
-    }
-
-    var chooseFailureInstaller by rememberSaveable { mutableStateOf(false) }
-    if (chooseFailureInstaller) {
-        InstallerPromptDialog(
-            selected = prefs.getPreferencesValue().installerSelection(),
-            explainSavedChoice = false,
-            onSelect = { selection ->
-                viewModel.setInstallMethod(selection.method, selection.externalComponent)
-                chooseFailureInstaller = false
-            },
-            onDismiss = { chooseFailureInstaller = false }
-        )
-    }
-    val failedApkExport = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(APK_MIME_TYPE)
-    ) { target -> viewModel.finishFailedApkExport(target) }
-    viewModel.installFailure?.let { installFailure ->
-        InstallFailureDialog(
-            failure = installFailure,
-            onChooseInstaller = {
-                viewModel.dismissInstallFailure()
-                chooseFailureInstaller = true
-            },
-            onSaveApk = { viewModel.beginFailedApkExport { failedApkExport.launch(it) } },
-            onDismiss = { viewModel.dismissInstallFailure() }
-        )
-    }
-
-    if (viewModel.installFallbackPending) {
-        InstallFallbackDialog(
-            signatureMismatch = viewModel.installFallbackSignatureMismatch,
-            onConfirm = { viewModel.confirmInstallFallback() },
-            onDismiss = { viewModel.dismissInstallFallback() }
-        )
-    }
-
-    viewModel.buildOutcome?.let { BuildOutcomeDialog(it, onDismiss = { viewModel.dismissBuildOutcome() }) }
+    BuildInstallDialogs(viewModel)
 
     val pressBackMessage = stringResource(R.string.pressBackToExit)
     var lastBackPress by remember { mutableStateOf(0L) }
@@ -714,6 +670,60 @@ internal fun ProfileActionProgressDialog(
         supporting = progress.applicationName,
         actions = {}
     )
+}
+
+/**
+ * Its own restart scope: these read the build state, which changes with build progress, so
+ * reading it in [MainColumn] recomposed the whole home screen during every build.
+ */
+@Composable
+private fun BuildInstallDialogs(viewModel: MainViewModel) {
+    val prefs = getPreferences()
+    viewModel.installerPromptReason?.let { reason ->
+        InstallerPromptDialog(
+            selected = prefs.getPreferencesValue().installerSelection(),
+            explainSavedChoice = reason == InstallerChoiceReason.FIRST_CHOICE,
+            onSelect = viewModel::confirmInstallerSelection,
+            onDismiss = viewModel::dismissInstallerSelection
+        )
+    }
+
+    var chooseFailureInstaller by rememberSaveable { mutableStateOf(false) }
+    if (chooseFailureInstaller) {
+        InstallerPromptDialog(
+            selected = prefs.getPreferencesValue().installerSelection(),
+            explainSavedChoice = false,
+            onSelect = { selection ->
+                viewModel.setInstallMethod(selection.method, selection.externalComponent)
+                chooseFailureInstaller = false
+            },
+            onDismiss = { chooseFailureInstaller = false }
+        )
+    }
+    val failedApkExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(APK_MIME_TYPE)
+    ) { target -> viewModel.finishFailedApkExport(target) }
+    viewModel.installFailure?.let { installFailure ->
+        InstallFailureDialog(
+            failure = installFailure,
+            onChooseInstaller = {
+                viewModel.dismissInstallFailure()
+                chooseFailureInstaller = true
+            },
+            onSaveApk = { viewModel.beginFailedApkExport { failedApkExport.launch(it) } },
+            onDismiss = { viewModel.dismissInstallFailure() }
+        )
+    }
+
+    if (viewModel.installFallbackPending) {
+        InstallFallbackDialog(
+            signatureMismatch = viewModel.installFallbackSignatureMismatch,
+            onConfirm = { viewModel.confirmInstallFallback() },
+            onDismiss = { viewModel.dismissInstallFallback() }
+        )
+    }
+
+    viewModel.buildOutcome?.let { BuildOutcomeDialog(it, onDismiss = { viewModel.dismissBuildOutcome() }) }
 }
 
 @Composable

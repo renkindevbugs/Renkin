@@ -86,6 +86,12 @@ internal fun PackPreviewHost(
     val previewOnScreen by remember { derivedStateOf { morph.value > 0f } }
     val galaxyRadius = galaxyRadius()
     val density = LocalDensity.current
+    val resources = LocalContext.current.resources
+    LaunchedEffect(session != null) {
+        if (session != null && swirl.packSymbol == null) {
+            swirl.packSymbol = withContext(Dispatchers.Default) { loadPackSymbol(resources) }
+        }
+    }
     LaunchedEffect(session != null, galaxyRadius) {
         if (session == null) swirl.galaxyTexture = null
         else if (swirl.galaxyTexture?.radius != galaxyRadius) {

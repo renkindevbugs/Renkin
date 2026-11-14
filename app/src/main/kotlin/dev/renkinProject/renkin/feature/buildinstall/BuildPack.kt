@@ -59,6 +59,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import dev.renkinProject.renkin.ui.rememberCreatedIconBitmap
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.datastore.preferences.core.Preferences
@@ -399,7 +402,8 @@ internal fun BuildPackPreviewContent(
                                 isChanged = key in builtKeys && key in updatedKeys,
                                 themedBackground = themedBackground,
                                 onEdit = onEditIcon?.let { edit -> { edit(app) } },
-                                onIconPlaced = swirl?.let { state -> { coordinates -> state.onIconPlaced(key, coordinates) } }
+                                onIconPlaced = swirl?.let { state -> { coordinates -> state.onIconPlaced(key, coordinates) } },
+                                onIconBitmap = swirl?.let { state -> { bitmap -> state.onIconBitmap(key, bitmap) } }
                             )
                         }
                     }
@@ -445,23 +449,35 @@ private fun BuildPreviewItem(
     isChanged: Boolean = false,
     themedBackground: Color? = null,
     onEdit: (() -> Unit)? = null,
-    onIconPlaced: ((LayoutCoordinates) -> Unit)? = null
+    onIconPlaced: ((LayoutCoordinates) -> Unit)? = null,
+    onIconBitmap: ((ImageBitmap?) -> Unit)? = null
 ) {
     Column(
         modifier = if (onEdit == null) Modifier else Modifier.tappableIcon(onEdit),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box {
-            app.createdIcon?.let { icon ->
-                Image(
-                    painter = icon.getPainter(),
-                    contentDescription = app.appName,
-                    modifier = Modifier
+            // Rasterised at the tile's size, as on the home list: the full 500 px previews missed
+            // their small cache, and the build animation draws and samples this same bitmap.
+            val iconBitmap = rememberCreatedIconBitmap(app, 56.dp)
+            if (onIconBitmap != null) SideEffect { onIconBitmap(iconBitmap) }
+            if (app.createdIcon != null) {
+                // The tile keeps its size and place while the bitmap loads.
+                Box(
+                    Modifier
                         .size(56.dp)
                         .then(if (onIconPlaced != null) Modifier.onGloballyPositioned(onIconPlaced) else Modifier)
                         .clip(IconShape)
                         .background(themedBackground ?: Color.Transparent)
-                )
+                ) {
+                    iconBitmap?.let { bitmap ->
+                        Image(
+                            painter = remember(bitmap) { BitmapPainter(bitmap) },
+                            contentDescription = app.appName,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
             }
             // Green = new (not in last build); orange = edited this session (was already built)
             val dotColor = when {

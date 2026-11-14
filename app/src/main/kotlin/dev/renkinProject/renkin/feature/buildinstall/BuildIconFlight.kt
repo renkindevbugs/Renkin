@@ -1,5 +1,8 @@
 package dev.renkinProject.renkin.feature.buildinstall
 
+import android.content.res.Resources
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -12,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -58,7 +60,8 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -81,6 +84,8 @@ import kotlin.math.ln
 import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.sin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val MAX_FLIGHTS = 64
 
@@ -211,8 +216,11 @@ internal object BuildSwirl {
     }
 }
 
-/** The preview icons captured on the Build tap, in root coordinates and on-screen order. */
-internal class BuildFlight(val apps: List<PackageInfoStruct>, val bounds: List<Rect>)
+/**
+ * The preview icons captured on the Build tap, in root coordinates and on-screen order, with the
+ * bitmaps the preview tiles already show (null for a tile still loading).
+ */
+internal class BuildFlight(val bounds: List<Rect>, val images: List<ImageBitmap?>)
 
 /**
  * The build animation's state. Pack preview and the home screen share one window, so one clock
@@ -224,6 +232,7 @@ internal class BuildSwirlState {
     private var gridViewport: Rect? = null
     // Only read on the Build tap, never while drawing.
     private val iconBounds = HashMap<String, Rect>()
+    private val iconBitmaps = HashMap<String, ImageBitmap>()
     // The preview publishes its current apps here so the tap keeps their on-screen order.
     var apps: List<PackageInfoStruct> = emptyList()
 
@@ -236,6 +245,8 @@ internal class BuildSwirlState {
     internal val previewMorph = Animatable(0f)
     // Painted off the main thread while the preview is open, so it is ready by the Build tap.
     internal var galaxyTexture by mutableStateOf<GalaxyTexture?>(null)
+    // Decoded and sampled off the main thread with the galaxy; it does not depend on the screen.
+    internal var packSymbol by mutableStateOf<PackSymbol?>(null)
     // Off with Reduce icon motion: the two controls then simply crossfade with their screens.
     var pillEnabled by mutableStateOf(true)
     internal val fab = PillEnd()
@@ -267,15 +278,21 @@ internal class BuildSwirlState {
 
     fun onGridPlaced(coordinates: LayoutCoordinates) { gridViewport = coordinates.boundsInRoot() }
     fun onIconPlaced(key: String, coordinates: LayoutCoordinates) { iconBounds[key] = coordinates.boundsInRoot() }
-    fun onIconRemoved(key: String) { iconBounds.remove(key) }
+    fun onIconBitmap(key: String, bitmap: ImageBitmap?) {
+        if (bitmap == null) iconBitmaps.remove(key) else iconBitmaps[key] = bitmap
+    }
+    fun onIconRemoved(key: String) {
+        iconBounds.remove(key)
+        iconBitmaps.remove(key)
+    }
 
     fun launch() {
         val viewport = gridViewport
         val visible = apps.mapNotNull { app ->
-            iconBounds[app.key]?.takeIf { viewport == null || it.overlaps(viewport) }?.let { app to it }
+            iconBounds[app.key]?.takeIf { viewport == null || it.overlaps(viewport) }?.let { app.key to it }
         }.take(MAX_FLIGHTS)
         fabAtBuild = PillPlaces(fab.container, fab.icon, fab.label)
-        flight = BuildFlight(visible.map { it.first }, visible.map { it.second })
+        flight = BuildFlight(visible.map { it.second }, visible.map { iconBitmaps[it.first] })
     }
 
     /**
@@ -297,6 +314,7 @@ internal class BuildSwirlState {
             clockStarted = false
             flight = null
             iconBounds.clear()
+            iconBitmaps.clear()
             fabAtBuild = null
         }
     }
@@ -308,22 +326,23 @@ internal val LocalBuildSwirl = staticCompositionLocalOf<BuildSwirlState?> { null
 @Composable
 internal fun BuildSwirlOverlay(state: BuildSwirlState, iconBackground: Color?, onFinished: () -> Unit) {
     val flight = state.flight ?: return
-    val painters = flight.apps.map { it.createdIcon?.getPainter() }
-    val fragments = rememberFragments(painters, iconBackground)
+    val fragments = rememberFragments(flight, iconBackground)
     val fragmentBatch = remember { FragmentBatch() }
     val galaxyRadius = galaxyRadius()
-    val symbol = painterResource(R.drawable.renkinpack_ic_launcher_foreground)
-    val symbolSpots = remember(symbol) { sampleSymbol(symbol) }
+    val resources = LocalContext.current.resources
+    // Prepared while the preview was open; loading it here is only the fallback for a very fast tap.
+    val packSymbol = state.packSymbol ?: remember { loadPackSymbol(resources) }
+    val symbol = remember(packSymbol) { BitmapPainter(packSymbol.image) }
     val finished by rememberUpdatedState(onFinished)
     LaunchedEffect(flight) { state.play { finished() } }
     Canvas(Modifier.fillMaxSize()) {
         val t = state.time
         val fab = state.fabBounds
         val fabIconSlot = if (fab.width > fab.height * 1.3f) Offset(fab.left + 28.dp.toPx(), fab.center.y) else fab.center
-        drawIconStreams(flight.bounds, painters, fragments, fragmentBatch, iconBackground, t, center)
+        drawIconStreams(flight.bounds, flight.images, fragments, fragmentBatch, iconBackground, t, center)
         drawGalaxyArms(center, t, galaxyRadius, state.galaxyTexture)
         drawGalaxyCore(center, t)
-        drawSymbolAssembly(symbolSpots, center, t, galaxyRadius)
+        drawSymbolAssembly(packSymbol.spots, center, t, galaxyRadius)
         drawPackSymbol(symbol, center, fabIconSlot, t)
     }
 }
@@ -472,16 +491,16 @@ private const val FRAGMENT_SAMPLES = 4
 /**
  * The icon as a coarse grid of its own colours, so it can shatter into them. Each cell averages
  * several pixels: thin line icons would otherwise sample as empty and vanish. Null when there is
- * nothing to sample (the preview painter has not loaded yet, or the icon is empty).
+ * nothing to sample (the icon is empty). Safe off the main thread: it only reads [image].
  */
-private fun sampleFragments(painter: Painter, background: Color?, grid: Int, iconIndex: Int): IconFragments? {
+private fun sampleFragments(image: ImageBitmap, background: Color?, grid: Int, iconIndex: Int): IconFragments? {
     val side = grid * FRAGMENT_SAMPLES
     val bitmap = ImageBitmap(side, side)
     val size = Size(side.toFloat(), side.toFloat())
     CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(bitmap), size) {
         clipPath(Path().apply { addRoundRect(RoundRect(Rect(Offset.Zero, size), CornerRadius(size.width * 0.25f))) }) {
             background?.let { drawRect(it) }
-            with(painter) { draw(size) }
+            drawImage(image, dstSize = IntSize(side, side))
         }
     }
     val pixels = bitmap.toPixelMap()
@@ -509,15 +528,20 @@ private fun sampleFragments(painter: Painter, background: Color?, grid: Int, ico
 }
 
 /**
- * Sampled per painter: icon previews load asynchronously, so the first painter can still be empty
- * and a later one replaces it. An icon with nothing to sample stays whole (null) and just fades.
+ * Sampled once per flight on a worker thread: doing it in the first composition after the tap
+ * cost that frame ~280 ms. Null until ready; the icons stay whole before the shatter anyway.
+ * An icon with nothing to sample gets null and just fades.
  */
 @Composable
-private fun rememberFragments(painters: List<Painter?>, background: Color?): List<IconFragments?> {
-    val grid = fragmentGrid(painters.size)
-    return painters.mapIndexed { index, painter ->
-        key(index) { remember(painter, background, grid) { painter?.let { sampleFragments(it, background, grid, index) } } }
+private fun rememberFragments(flight: BuildFlight, background: Color?): List<IconFragments?>? {
+    var fragments by remember(flight, background) { mutableStateOf<List<IconFragments?>?>(null) }
+    LaunchedEffect(flight, background) {
+        val grid = fragmentGrid(flight.images.size)
+        fragments = withContext(Dispatchers.Default) {
+            flight.images.mapIndexed { index, image -> image?.let { sampleFragments(it, background, grid, index) } }
+        }
     }
+    return fragments
 }
 
 /** Big enough to read as a galaxy rather than a glow: it spans most of the screen's short side. */
@@ -582,8 +606,8 @@ private class FragmentBatch {
 
 private fun DrawScope.drawIconStreams(
     bounds: List<Rect>,
-    painters: List<Painter?>,
-    fragments: List<IconFragments?>,
+    images: List<ImageBitmap?>,
+    fragments: List<IconFragments?>?,
     batch: FragmentBatch,
     background: Color?,
     t: Float,
@@ -591,16 +615,17 @@ private fun DrawScope.drawIconStreams(
 ) {
     // Every piece has reached the core: nothing left to walk through for the rest of the animation.
     if (BuildSwirl.fragmentProgress(t, order = 1f) >= 1f) return
-    if (!BuildSwirl.shattered(t)) {
-        bounds.forEachIndexed { index, icon -> painters.getOrNull(index)?.let { drawStreamIcon(icon, it, background, 1f) } }
+    // Until the fragments are sampled the icons stay whole, even past the shatter start on a slow phone.
+    if (!BuildSwirl.shattered(t) || fragments == null) {
+        bounds.forEachIndexed { index, icon -> images.getOrNull(index)?.let { drawStreamIcon(icon, it, background, 1f) } }
         return
     }
     // A piece is at most its square plus a glow square.
     batch.start(fragments.sumOf { (it?.pieces?.size ?: 0) * 2 })
     bounds.forEachIndexed { index, icon ->
-        val painter = painters.getOrNull(index) ?: return@forEachIndexed
+        val image = images.getOrNull(index) ?: return@forEachIndexed
         val iconFragments = fragments.getOrNull(index)
-        if (iconFragments == null) drawStreamIcon(icon, painter, background, BuildSwirl.unsampledIconAlpha(t))
+        if (iconFragments == null) drawStreamIcon(icon, image, background, BuildSwirl.unsampledIconAlpha(t))
         else drawIconFragments(icon, iconFragments, batch, t, centre)
     }
     drawIntoCanvas { batch.draw(it.nativeCanvas) }
@@ -645,12 +670,17 @@ private fun DrawScope.drawIconFragments(icon: Rect, fragments: IconFragments, ba
     }
 }
 
-private fun DrawScope.drawStreamIcon(rect: Rect, painter: Painter, background: Color?, alpha: Float) {
+private fun DrawScope.drawStreamIcon(rect: Rect, image: ImageBitmap, background: Color?, alpha: Float) {
     if (rect.width <= 0f || alpha <= 0f) return
     val shape = Path().apply { addRoundRect(RoundRect(rect, CornerRadius(rect.width * 0.25f))) }
     clipPath(shape) {
         background?.let { drawRect(it, rect.topLeft, rect.size, alpha = alpha) }
-        translate(rect.left, rect.top) { with(painter) { draw(rect.size, alpha = alpha) } }
+        drawImage(
+            image,
+            dstOffset = IntOffset(rect.left.toInt(), rect.top.toInt()),
+            dstSize = IntSize(rect.width.toInt(), rect.height.toInt()),
+            alpha = alpha
+        )
     }
 }
 
@@ -808,7 +838,7 @@ private const val SYMBOL_SIZE_DP = 150
  * centre (0..1), and the grain of galaxy dust that will fill it — its colour and its place on a
  * trail of a unit-radius galaxy at rest. All fixed, so a frame only turns and blends them.
  */
-private class SymbolSpot(
+internal class SymbolSpot(
     val x: Float,
     val y: Float,
     val color: Color,
@@ -826,17 +856,26 @@ private fun mixColor(from: Color, to: Color, share: Float) = Color(
     from.alpha + (to.alpha - from.alpha) * share
 )
 
+/** The Renkin Pack symbol the animation lands in the FAB, and the spots its grains of light fill. */
+internal class PackSymbol(val image: ImageBitmap, val spots: List<SymbolSpot>)
+
+/** Decodes and samples the symbol; slow enough that it belongs on a worker thread. */
+internal fun loadPackSymbol(resources: Resources): PackSymbol {
+    // Native 432 px is about the size it is drawn at; density scaling would only enlarge it.
+    val options = BitmapFactory.Options().apply { inScaled = false }
+    val decoded = BitmapFactory.decodeResource(resources, R.drawable.renkinpack_ic_launcher_foreground, options)
+    return PackSymbol(decoded.asImageBitmap(), sampleSymbol(decoded))
+}
+
 /** The symbol as a cloud of spots, so grains of light can fly in and build it from the centre outward. */
-private fun sampleSymbol(symbol: Painter): List<SymbolSpot> {
-    val bitmap = ImageBitmap(SYMBOL_GRID, SYMBOL_GRID)
-    val size = Size(SYMBOL_GRID.toFloat(), SYMBOL_GRID.toFloat())
-    CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(bitmap), size) {
-        with(symbol) { draw(size) }
-    }
-    val pixels = bitmap.toPixelMap()
+private fun sampleSymbol(symbol: Bitmap): List<SymbolSpot> {
+    val grid = Bitmap.createScaledBitmap(symbol, SYMBOL_GRID, SYMBOL_GRID, true)
+    val pixels = IntArray(SYMBOL_GRID * SYMBOL_GRID)
+    grid.getPixels(pixels, 0, SYMBOL_GRID, 0, 0, SYMBOL_GRID, SYMBOL_GRID)
+    if (grid !== symbol) grid.recycle()
     val places = ArrayList<Triple<Float, Float, Color>>()
     for (row in 0 until SYMBOL_GRID) for (column in 0 until SYMBOL_GRID) {
-        val color = pixels[column, row]
+        val color = Color(pixels[row * SYMBOL_GRID + column])
         if (color.alpha < 0.5f) continue
         places += Triple((column + 0.5f) / SYMBOL_GRID - 0.5f, (row + 0.5f) / SYMBOL_GRID - 0.5f, color.copy(alpha = 1f))
     }
