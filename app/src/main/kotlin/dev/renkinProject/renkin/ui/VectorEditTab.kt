@@ -594,7 +594,7 @@ fun VectorPathItem(
             IconButton(onClick = { onDelete() }, modifier = Modifier.size(40.dp)) {
                 Icon(
                     imageVector = Icons.Filled.Delete,
-                    contentDescription = stringResource(R.string.clearIcons),
+                    contentDescription = stringResource(R.string.deletePath),
                     tint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.size(20.dp)
                 )

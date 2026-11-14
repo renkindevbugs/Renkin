@@ -179,7 +179,7 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
     val openLink = rememberLinkOpener()
 
     val state = viewModel.draft
-    var showBetaDialog by rememberSaveable { mutableStateOf(true) }
+    val betaNoticeSeen by viewModel.betaNoticeSeen.collectAsStateWithLifecycle()
 
     val applying = viewModel.globalApplyProgress != null
     val previewJobs by viewModel.previewJobs.collectAsStateWithLifecycle()
@@ -260,13 +260,13 @@ fun GlobalOptionsScreen(onClose: () -> Unit) {
 
     val iconEditor = viewModel.iconEditor
 
-    if (showBetaDialog) {
+    if (betaNoticeSeen == false) {
         GlobalBetaDialog(
             onOpenIssues = {
-                showBetaDialog = false
+                viewModel.markBetaNoticeSeen()
                 openLink(githubIssuesUrl)
             },
-            onDismiss = { showBetaDialog = false }
+            onDismiss = { viewModel.markBetaNoticeSeen() }
         )
     }
 

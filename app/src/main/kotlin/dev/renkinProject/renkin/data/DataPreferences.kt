@@ -285,6 +285,9 @@ val LastSeenWhatsNewVersionKey = intPreferencesKey("LAST_SEEN_WHATS_NEW_VERSION"
 // installed on the other device). App-level: it's about the user's understanding, not a profile.
 val HideProfileShareWarningKey = booleanPreferencesKey("HIDE_PROFILE_SHARE_WARNING")
 
+// The Global style beta notice is shown once. App-level, like the share warning.
+val GlobalBetaNoticeSeenKey = booleanPreferencesKey("GLOBAL_BETA_NOTICE_SEEN")
+
 /**
  * Profile fields represented by the typed style and its [Profile.prefsSnapshot]/UI projections.
  * App-level settings (dark mode, watch interval, sort/filter) intentionally stay global.
@@ -345,7 +348,7 @@ private val legacyProfilePreferences = LegacyProfilePreferences(
 private val persistedPreferenceTypes: Map<String, (Any) -> Boolean> = buildMap {
     for (key in ProfileBooleanPrefKeys + listOf(
         AskInstallerEveryTimeKey, InstallerChoiceConfirmedKey, AppFilterNoIconKey,
-        OnboardingSeenKey, HideProfileShareWarningKey, ShowRenkinPacksKey, ReduceIconMotionKey, OledBlackKey, WatchAutomaticChecksKey
+        OnboardingSeenKey, HideProfileShareWarningKey, GlobalBetaNoticeSeenKey, ShowRenkinPacksKey, ReduceIconMotionKey, OledBlackKey, WatchAutomaticChecksKey
     )) put(key.name) { it is Boolean }
     for (key in ProfileIntPrefKeys + listOf(
         DarkModeKey, InstallMethodKey, AppSortOrderKey, WatchCheckIntervalKey,
