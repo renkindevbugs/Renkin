@@ -525,11 +525,18 @@ fun ToastHost(toaster: Toaster) {
             // Android queues toasts, so rapid actions left a stale one on screen long after the
             // action that caused it. Cancelling the previous keeps the newest message honest.
             shown?.cancel()
-            shown = Toast.makeText(context, message, Toast.LENGTH_SHORT).also { it.show() }
+            shown = Toast.makeText(context, message, toastDuration(message)).also { it.show() }
         }
     }
     DisposableEffect(Unit) { onDispose { shown?.cancel() } }
 }
+
+// Short notices keep the quick toast; error messages that also say what to do next run to
+// ~110 characters and could not be read in the short one's ~2 seconds.
+private const val LONG_TOAST_MIN_CHARS = 60
+
+internal fun toastDuration(message: CharSequence): Int =
+    if (message.length > LONG_TOAST_MIN_CHARS) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
 
 /**
  * Forwards ViewModel toast channels to [toaster] for as long as this host is composed: string

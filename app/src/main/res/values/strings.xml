@@ -474,6 +474,7 @@
     <string name="paths">Paths</string>
     <string name="addPath">Add path</string>
     <string name="editPath">Edit path</string>
+    <string name="deletePath">Delete path</string>
     <string name="gradientMakeSolid">Make solid</string>
     <plurals name="gradientSwatchDescription">
         <item quantity="one">Gradient, %1$d colour</item>
