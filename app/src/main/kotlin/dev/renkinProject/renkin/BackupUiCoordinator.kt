@@ -75,6 +75,7 @@ internal class BackupUiCoordinator(
     val autoBackupIntervalHours = autoBackupManager.intervalHours.stateIn(scope, SharingStarted.Eagerly, 0)
     val autoBackupTreeUri = autoBackupManager.treeUri.stateIn(scope, SharingStarted.Eagerly, null)
     val lastAutoBackupAt = autoBackupManager.lastBackupAt.stateIn(scope, SharingStarted.Eagerly, 0L)
+    val lastAutoBackupFailedAt = autoBackupManager.lastFailureAt.stateIn(scope, SharingStarted.Eagerly, 0L)
 
     fun setAutoBackupInterval(hours: Int) = updateAutoBackup("Could not update automatic backup interval") {
         autoBackupManager.setInterval(hours)

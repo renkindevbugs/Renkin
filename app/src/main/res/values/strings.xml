@@ -787,6 +787,8 @@
     <string name="autoBackupNever">Never</string>
     <string name="autoBackupFolder">Backup folder</string>
     <string name="autoBackupChooseFolder">Choose a folder</string>
+    <string name="autoBackupFailed">Last automatic backup failed</string>
+    <string name="autoBackupFailedHint">The backup folder may have been removed or is no longer accessible. Tap to choose it again.</string>
     <string name="autoBackupSetupFailed">Couldn\'t set up automatic backups</string>
     <string name="shareProfile">Share profile</string>
     <string name="profileExported">Profile exported</string>

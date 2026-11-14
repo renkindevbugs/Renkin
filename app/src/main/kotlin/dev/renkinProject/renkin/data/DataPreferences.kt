@@ -270,6 +270,8 @@ val LastAutoBackupAtKey = longPreferencesKey(LAST_AUTO_BACKUP_AT_NAME)
 // Content digest of the newest automatic backup, so an unchanged period writes nothing.
 val LastAutoBackupDigestKey = stringPreferencesKey("LAST_AUTO_BACKUP_DIGEST")
 val LastAutoBackupDocumentUriKey = stringPreferencesKey("LAST_AUTO_BACKUP_DOCUMENT_URI")
+// When the newest automatic backup attempt failed; removed by the next successful one.
+val LastAutoBackupFailedAtKey = longPreferencesKey("LAST_AUTO_BACKUP_FAILED_AT")
 
 // Which profile's icons/preferences are active. Profiles snapshot/restore the keys below.
 val ActiveProfileIdKey = longPreferencesKey("ACTIVE_PROFILE_ID")
@@ -360,7 +362,7 @@ private val persistedPreferenceTypes: Map<String, (Any) -> Boolean> = buildMap {
     )) {
         put(key.name) { it is String }
     }
-    for (key in listOf(ActiveProfileIdKey, LastWatchCheckAtKey, LastAutoBackupAtKey)) put(key.name) { it is Long }
+    for (key in listOf(ActiveProfileIdKey, LastWatchCheckAtKey, LastAutoBackupAtKey, LastAutoBackupFailedAtKey)) put(key.name) { it is Long }
 }
 
 internal fun isValidPersistedPreference(name: String, value: Any): Boolean =
