@@ -47,6 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
@@ -99,6 +100,7 @@ internal sealed interface BuildInstallState {
 }
 
 private const val INSTALL_HOLD_LIMIT_MILLIS = 6_000L
+private const val PROGRESS_PUBLISH_INTERVAL_MILLIS = 100L
 
 internal class BuildInstallCoordinator(
     private val application: Application,
@@ -168,6 +170,9 @@ internal class BuildInstallCoordinator(
             val progressObserver = launch {
                 progress.collect { building ->
                     if (state is BuildInstallState.Building) publish(owner, building)
+                    // The state is read by the home screen while the build animation runs; one
+                    // publish per icon recomposed it ~50 times a second. StateFlow keeps the latest.
+                    delay(PROGRESS_PUBLISH_INTERVAL_MILLIS)
                 }
             }
             try {
