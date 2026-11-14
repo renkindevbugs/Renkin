@@ -1,21 +1,24 @@
 package dev.renkinProject.renkin.feature.buildinstall
 
-import android.content.Intent
-import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -23,11 +26,13 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.Density
@@ -35,21 +40,27 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.lerp
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.datastore.preferences.core.Preferences
-import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.getBackgroundColor
@@ -63,10 +74,10 @@ import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.floor
+import kotlin.math.hypot
 import kotlin.math.sin
 
 private const val MAX_FLIGHTS = 64
-private const val CHROME_FADE_MILLIS = 180f
 
 // Renkin Pack symbol colours: copper into gold into pale gold.
 private val SwirlCopper = Color(0xFFC85028)
@@ -74,7 +85,7 @@ private val SwirlGold = Color(0xFFD5B15B)
 private val SwirlPale = Color(0xFFFFE8A0)
 private val SwirlWhite = Color(0xFFFFF8E6)
 
-/** A stable pseudo-random value in 0..1, identical in both windows so no grain jumps when they swap. */
+/** A stable pseudo-random value in 0..1: the same grain keeps its place from frame to frame. */
 private fun noise(seed: Int): Float {
     val x = sin(seed * 12.9898f) * 43758.547f
     return x - floor(x)
@@ -87,33 +98,41 @@ private fun dustColor(pick: Float) = when {
 }
 
 /**
- * The whole build animation as a function of time since the Build tap, shared by both windows:
- * Pack preview draws its first moments, and the home screen resumes it at the same instant once
- * visible, so nothing jumps when the windows swap.
+ * The whole build animation as a function of time since the Build tap. Pack preview and the home
+ * screen share one window, so a single clock drives the shattering icons, the galaxy, the home
+ * screen surfacing underneath and the symbol landing in the Build FAB.
  */
-private object BuildSwirl {
-    // Icons hold still briefly so the home screen is already visible when they shatter.
-    private const val ICON_HOLD = 200f
-    private const val ICON_STAGGER = 15f
-    // Many icons (tablets) share this span so the last one does not start late.
-    private const val MAX_STAGGER_SPAN = 360f
+internal object BuildSwirl {
+    // Every icon starts to shatter at the same moment, and the preview chrome fades from then on.
+    private const val SHATTER_START = 100f
+    private const val CHROME_FADE = 500f
+    const val CHROME_GONE = SHATTER_START + CHROME_FADE
     // How long one icon takes to come apart, its fragments breaking off one after another.
     private const val ICON_DETACH_SPREAD = 490f
     private const val FRAGMENT_SHAKE = 90f
     private const val DUST_FLIGHT = 825f
     private const val DUST_TURNS = 1.25f
+    private const val HOME_IN_START = 600f
+    private const val HOME_IN_END = 1600f
     private const val GALAXY_IN_START = 225f
     private const val GALAXY_IN_END = 1125f
     private const val SPIN_FAST_UNTIL = 1350f
-    private const val SPIN_STOP = 2400f
-    private const val CONDENSE_START = 1875f
-    private const val CONDENSE_END = 2475f
-    private const val FLOWER_IN_START = 1725f
-    private const val FLOWER_IN_END = 2400f
-    private const val CORE_OUT_START = 2175f
-    private const val CORE_OUT_END = 2550f
-    private const val POP_START = 2850f
-    const val TOTAL = 3150f
+    private const val SPIN_STOP = 2650f
+    // The symbol assembles from the galaxy's own light, from its centre out to the petal tips.
+    private const val FORM_START = 1500f
+    private const val FORM_SPREAD = 700f
+    private const val FORM_FLIGHT = 450f
+    private const val ARMS_OUT_START = 1500f
+    private const val ARMS_OUT_END = 2500f
+    private const val CORE_OUT_START = 1500f
+    private const val CORE_OUT_END = 2200f
+    // A ring of light pulses out from the centre and sharpens the grains into the crisp symbol.
+    private const val PULSE_START = 2650f
+    private const val PULSE_END = 3100f
+    private const val POP_START = 3250f
+    // The Build button reaches the FAB while the home screen is already surfacing, so it never waits there.
+    private const val PILL_HOME = 1100f
+    const val TOTAL = 3550f
     private const val DEGREES_PER_MILLI = 0.45f
 
     private fun ramp(t: Float, from: Float, to: Float) = ((t - from) / (to - from)).coerceIn(0f, 1f)
@@ -129,30 +148,40 @@ private object BuildSwirl {
 
     val restAngle = angle(SPIN_STOP)
 
-    private fun galaxyIn(t: Float) = ease(ramp(t, GALAXY_IN_START, GALAXY_IN_END))
-    private fun condense(t: Float) = ease(ramp(t, CONDENSE_START, CONDENSE_END))
+    fun chrome(t: Float) = 1f - ramp(t, SHATTER_START, CHROME_GONE)
+    fun pillToButton(t: Float) = 1f - ease(ramp(t, SHATTER_START, PILL_HOME))
+    /** The home screen fades in under the galaxy, replacing the wallpaper. */
+    fun home(t: Float) = ease(ramp(t, HOME_IN_START, HOME_IN_END))
 
-    /** The arms fade while the galaxy condenses into the symbol. */
-    fun arms(t: Float) = galaxyIn(t) * (1f - condense(t))
-    fun galaxyScale(t: Float) = 1f - 0.85f * condense(t)
-    /** The bright core outlives the arms and fades last, uncovering the finished symbol. */
-    fun core(t: Float) = galaxyIn(t) * (0.75f + 0.25f * condense(t)) * (1f - ease(ramp(t, CORE_OUT_START, CORE_OUT_END)))
-    // Small while the arms show, it swells only to hide the symbol forming inside.
-    fun coreScale(t: Float) = 0.3f + 0.7f * condense(t)
-    fun symbolGlow(t: Float) = flowerAlpha(t) * (1f - pop(t))
-    fun flowerAlpha(t: Float) = ease(ramp(t, FLOWER_IN_START, FLOWER_IN_END))
+    private fun galaxyIn(t: Float) = ease(ramp(t, GALAXY_IN_START, GALAXY_IN_END))
+    private fun armsOut(t: Float) = ease(ramp(t, ARMS_OUT_START, ARMS_OUT_END))
+
+    /** The arms thin out as their light leaves to build the symbol. */
+    fun arms(t: Float) = galaxyIn(t) * (1f - armsOut(t))
+    fun galaxyScale(t: Float) = 1f - 0.4f * armsOut(t)
+    fun core(t: Float) = galaxyIn(t) * (1f - ease(ramp(t, CORE_OUT_START, CORE_OUT_END)))
+
+    /**
+     * Flight progress of the grain bound for a symbol spot at [order] (0 = centre, 1 = petal tip):
+     * below 0 it is still part of the galaxy, at 1 it sits in the symbol.
+     */
+    fun formProgress(t: Float, order: Float) = (t - FORM_START - FORM_SPREAD * order) / FORM_FLIGHT
+    /** How far the sharpening ring has travelled (0..1), slowing as it nears the rim of the glow. */
+    fun pulse(t: Float) = ramp(t, PULSE_START, PULSE_END).let { 1f - (1f - it) * (1f - it) }
+    fun symbolGlow(t: Float) = pulse(t) * (1f - pop(t))
     fun pop(t: Float) = ease(ramp(t, POP_START, TOTAL))
 
-    private fun shatterStart(index: Int, count: Int) = ICON_HOLD + index * minOf(ICON_STAGGER, MAX_STAGGER_SPAN / count)
-    fun shattered(t: Float, index: Int, count: Int) = t >= shatterStart(index, count)
+    fun shattered(t: Float) = t >= SHATTER_START
+    /** For an icon that could not be sampled into fragments: it simply fades while the others shatter. */
+    fun unsampledIconAlpha(t: Float) = 1f - ramp(t, SHATTER_START, SHATTER_START + ICON_DETACH_SPREAD)
 
     /**
      * Flight progress of one icon fragment: negative while it still sits in the icon, 0..1 on its
      * way to the core, above 1 once absorbed. Fragments break off from the top corner diagonally.
      */
-    fun fragmentProgress(t: Float, index: Int, count: Int, row: Int, column: Int, grid: Int, seed: Int): Float {
+    fun fragmentProgress(t: Float, row: Int, column: Int, grid: Int, seed: Int): Float {
         val order = (row + (grid - 1 - column) + noise(seed) * 3f) / (2f * (grid - 1) + 3f)
-        return (t - shatterStart(index, count) - ICON_DETACH_SPREAD * order) / DUST_FLIGHT
+        return (t - SHATTER_START - ICON_DETACH_SPREAD * order) / DUST_FLIGHT
     }
 
     /** Below 0 when the fragment starts trembling just before it breaks off. */
@@ -168,99 +197,204 @@ private object BuildSwirl {
     }
 }
 
-/** The animation as it crosses windows: tap time, centre and the icons' start bounds (window coordinates). */
-internal class BuildIconStarts(val keys: List<String>, val bounds: List<Rect>, val centre: Offset, val startedAtUptime: Long) {
-    fun writeTo(intent: Intent): Intent = intent
-        .putStringArrayListExtra(EXTRA_KEYS, ArrayList(keys))
-        .putExtra(EXTRA_BOUNDS, bounds.flatMap { listOf(it.left, it.top, it.right, it.bottom) }.toFloatArray())
-        .putExtra(EXTRA_CENTRE, floatArrayOf(centre.x, centre.y))
-        .putExtra(EXTRA_STARTED, startedAtUptime)
-
-    companion object {
-        private const val EXTRA_KEYS = "buildIconKeys"
-        private const val EXTRA_BOUNDS = "buildIconBounds"
-        private const val EXTRA_CENTRE = "buildIconCentre"
-        private const val EXTRA_STARTED = "buildIconStarted"
-
-        fun from(intent: Intent?): BuildIconStarts? {
-            val keys = intent?.getStringArrayListExtra(EXTRA_KEYS) ?: return null
-            val values = intent.getFloatArrayExtra(EXTRA_BOUNDS) ?: return null
-            val centre = intent.getFloatArrayExtra(EXTRA_CENTRE)?.takeIf { it.size == 2 } ?: return null
-            if (values.size != keys.size * 4) return null
-            val bounds = keys.indices.map { i -> Rect(values[i * 4], values[i * 4 + 1], values[i * 4 + 2], values[i * 4 + 3]) }
-            return BuildIconStarts(keys, bounds, Offset(centre[0], centre[1]), intent.getLongExtra(EXTRA_STARTED, SystemClock.uptimeMillis()))
-        }
-    }
-}
-
-private const val EXTRA_ANIMATE_BUILD = "animateBuild"
-
-/** Asks Pack preview to hand the build animation to the home screen (Reduce icon motion is off). */
-internal fun Intent.putAnimateBuild(): Intent = putExtra(EXTRA_ANIMATE_BUILD, true)
-internal fun Intent.animatesBuild(): Boolean = getBooleanExtra(EXTRA_ANIMATE_BUILD, false)
+/** The preview icons captured on the Build tap, in root coordinates and on-screen order. */
+internal class BuildFlight(val apps: List<PackageInfoStruct>, val bounds: List<Rect>)
 
 /**
- * Pack preview side: remembers where each preview icon sits, and on Build starts the animation
- * at once while the preview closes over the home screen.
+ * The build animation's state. Pack preview and the home screen share one window, so one clock
+ * drives everything: the preview reports where its icons sit, the Build FAB reports where it is,
+ * and the overlay above both draws the icons shattering into the galaxy and the symbol landing.
  */
 @Stable
-internal class BuildIconSource {
+internal class BuildSwirlState {
     private var gridViewport: Rect? = null
     // Only read on the Build tap, never while drawing.
     private val iconBounds = HashMap<String, Rect>()
-    private var overlay by mutableStateOf(Rect.Zero)
-    internal val elapsed = Animatable(0f)
     // The preview publishes its current apps here so the tap keeps their on-screen order.
     var apps: List<PackageInfoStruct> = emptyList()
 
-    var flight by mutableStateOf<BuildIconStarts?>(null)
-        private set
-    internal var flightApps by mutableStateOf<List<PackageInfoStruct>>(emptyList())
+    private val elapsed = Animatable(0f)
+    private var clockStarted by mutableStateOf(false)
+    // Zero until this run's clock starts: the Animatable still holds the end of the previous run.
+    internal val time: Float get() = if (clockStarted) elapsed.value else 0f
+    internal val bump = Animatable(1f)
+    /** 0 = home screen with the Build FAB, 1 = Pack preview with the Build button. */
+    internal val previewMorph = Animatable(0f)
+    // Off with Reduce icon motion: the two controls then simply crossfade with their screens.
+    var pillEnabled by mutableStateOf(true)
+    internal val fab = PillEnd()
+    internal val buildButton = PillEnd()
+    internal val fabBounds: Rect get() = fab.container
+    var flight by mutableStateOf<BuildFlight?>(null)
         private set
 
-    // The preview chrome clears quickly so the animation plays over the wallpaper.
-    val chromeAlpha: Float get() = if (flight == null) 1f else 1f - (elapsed.value / CHROME_FADE_MILLIS).coerceIn(0f, 1f)
-
+    val isRunning: Boolean get() = flight != null
     // The grid hides only once the overlay animates, so the frame that composes the overlay icons still shows them.
-    val isFlying: Boolean get() = flight != null && elapsed.value > 0f
+    val isFlying: Boolean get() = flight != null && time > 0f
+    // The preview chrome fades while the icons shatter, leaving them over the bare wallpaper.
+    val chromeAlpha: Float get() = if (flight == null) 1f else BuildSwirl.chrome(time)
+    /** The home screen surfaces under the galaxy while the animation runs. */
+    val homeAlpha: Float get() = if (flight == null) 1f else BuildSwirl.home(time)
 
-    fun onOverlayPlaced(coordinates: LayoutCoordinates) { overlay = coordinates.boundsInWindow() }
-    fun onGridPlaced(coordinates: LayoutCoordinates) { gridViewport = coordinates.boundsInWindow() }
-    fun onIconPlaced(key: String, coordinates: LayoutCoordinates) { iconBounds[key] = coordinates.boundsInWindow() }
+    /** The Build FAB and the preview's Build button are one pill travelling between their two places. */
+    val isMorphing: Boolean get() = pillEnabled && !isRunning && previewMorph.value > 0f && previewMorph.value < 1f
+    // After Build the pill returns to the FAB with the fading chrome, then hands over to the real FAB.
+    internal val pillToButton: Float get() = if (isRunning) BuildSwirl.pillToButton(time) else previewMorph.value
+    // The idle FAB as it stood on the Build tap: once building, the real one swaps its wrench for a spinner.
+    internal var fabAtBuild: PillPlaces? = null
+        private set
+    internal val pillAlpha: Float get() = when {
+        isRunning -> 1f - BuildSwirl.home(time)
+        isMorphing -> 1f
+        else -> 0f
+    }
+
+    fun onGridPlaced(coordinates: LayoutCoordinates) { gridViewport = coordinates.boundsInRoot() }
+    fun onIconPlaced(key: String, coordinates: LayoutCoordinates) { iconBounds[key] = coordinates.boundsInRoot() }
     fun onIconRemoved(key: String) { iconBounds.remove(key) }
 
-    fun launch(): BuildIconStarts {
+    fun launch() {
         val viewport = gridViewport
         val visible = apps.mapNotNull { app ->
             iconBounds[app.key]?.takeIf { viewport == null || it.overlaps(viewport) }?.let { app to it }
         }.take(MAX_FLIGHTS)
-        val started = BuildIconStarts(visible.map { it.first.key }, visible.map { it.second }, overlay.center, SystemClock.uptimeMillis())
-        flightApps = visible.map { it.first }
-        flight = started
-        return started
+        fabAtBuild = PillPlaces(fab.container, fab.icon, fab.label)
+        flight = BuildFlight(visible.map { it.first }, visible.map { it.second })
     }
 
-    internal suspend fun play() = elapsed.animateTo(BuildSwirl.TOTAL, tween(BuildSwirl.TOTAL.toInt(), easing = LinearEasing))
-
-    internal fun local(rect: Rect) = rect.translate(-overlay.topLeft)
-    internal fun local(point: Offset) = point - overlay.topLeft
+    /**
+     * Runs the whole animation. The faded-out preview stays composed until [onFinished]: tearing
+     * its grid down mid-animation cost a visible frame just as the home screen surfaced.
+     */
+    internal suspend fun play(onFinished: () -> Unit) {
+        try {
+            elapsed.snapTo(0f)
+            clockStarted = true
+            elapsed.animateTo(BuildSwirl.TOTAL, tween(BuildSwirl.TOTAL.toInt(), easing = LinearEasing))
+            bump.animateTo(1.08f, tween(90))
+            bump.animateTo(1f, tween(180, easing = IconFlightEasing))
+            // The home screen is already back, so the preview must not morph closed afterwards.
+            previewMorph.snapTo(0f)
+        } finally {
+            // Also on cancellation: a stuck flight would keep the home screen transparent.
+            onFinished()
+            clockStarted = false
+            flight = null
+            iconBounds.clear()
+            fabAtBuild = null
+        }
+    }
 }
 
-/** Draws the icons streaming into the spinning light above Pack preview, which hides its own grid. */
+internal val LocalBuildSwirl = staticCompositionLocalOf<BuildSwirlState?> { null }
+
+/** Draws the build animation above both Pack preview and the home screen. */
 @Composable
-internal fun BuildIconDepartureOverlay(source: BuildIconSource, iconBackground: Color?) {
-    val flight = source.flight
-    val painters = source.flightApps.map { it.createdIcon?.getPainter() }
-    val fragments = rememberFragments(source.flightApps, painters, iconBackground)
+internal fun BuildSwirlOverlay(state: BuildSwirlState, iconBackground: Color?, onFinished: () -> Unit) {
+    val flight = state.flight ?: return
+    val painters = flight.apps.map { it.createdIcon?.getPainter() }
+    val fragments = rememberFragments(painters, iconBackground)
     val galaxyRadius = galaxyRadius()
-    if (flight != null) LaunchedEffect(flight) { source.play() }
-    Canvas(Modifier.fillMaxSize().onGloballyPositioned(source::onOverlayPlaced)) {
-        val started = source.flight ?: return@Canvas
-        val t = source.elapsed.value
-        val centre = source.local(started.centre)
-        drawIconStreams(started, painters, fragments, iconBackground, t, source::local, centre)
-        drawGalaxyArms(centre, t, galaxyRadius)
-        drawGalaxyCore(centre, t)
+    val symbol = painterResource(R.drawable.renkinpack_ic_launcher_foreground)
+    val symbolSpots = remember(symbol) { sampleSymbol(symbol) }
+    val finished by rememberUpdatedState(onFinished)
+    LaunchedEffect(flight) { state.play { finished() } }
+    Canvas(Modifier.fillMaxSize()) {
+        val t = state.time
+        val fab = state.fabBounds
+        val fabIconSlot = if (fab.width > fab.height * 1.3f) Offset(fab.left + 28.dp.toPx(), fab.center.y) else fab.center
+        drawIconStreams(flight.bounds, painters, fragments, iconBackground, t, center)
+        drawGalaxyArms(center, t, galaxyRadius)
+        drawGalaxyCore(center, t)
+        drawSymbolAssembly(symbolSpots, center, t, galaxyRadius)
+        drawPackSymbol(symbol, center, fabIconSlot, t)
+    }
+}
+
+private const val FAB_CORNER_DP = 16
+private const val BUTTON_CONTAINER_HEIGHT_DP = 40
+private const val MIN_TOUCH_TARGET_DP = 48
+
+internal class PillPlaces(val container: Rect, val icon: Rect, val label: Rect)
+
+/** Where one end of the pill morph (the FAB or the Build button) keeps its container, wrench and label. */
+@Stable
+internal class PillEnd {
+    var container by mutableStateOf(Rect.Zero)
+    var icon by mutableStateOf(Rect.Zero)
+    var label by mutableStateOf(Rect.Zero)
+    var labelStyle by mutableStateOf<TextStyle?>(null)
+
+    fun onContainerPlaced(coordinates: LayoutCoordinates) { container = coordinates.boundsInRoot() }
+    fun onIconPlaced(coordinates: LayoutCoordinates) { icon = coordinates.boundsInRoot() }
+    fun onLabelPlaced(coordinates: LayoutCoordinates) { label = coordinates.boundsInRoot() }
+}
+
+/** Reports the wrench or label of one pill end; the pill is drawn from these measured places, never from guesses. */
+internal fun Modifier.pillPart(onPlaced: ((LayoutCoordinates) -> Unit)?): Modifier =
+    if (onPlaced == null) this else onGloballyPositioned(onPlaced)
+
+private fun mixRect(from: Rect, to: Rect, share: Float) = Rect(
+    from.left + (to.left - from.left) * share,
+    from.top + (to.top - from.top) * share,
+    from.right + (to.right - from.right) * share,
+    from.bottom + (to.bottom - from.bottom) * share
+)
+
+/**
+ * The Build FAB and the preview's Build button drawn as one pill while it travels between their
+ * two places; both real controls hide for that time. Every end value is measured from the real
+ * control (container, wrench, label, text style), so the pill lands exactly on it.
+ */
+@Composable
+internal fun BuildPillMorph(state: BuildSwirlState) {
+    val label = stringResource(R.string.buildIconPack)
+    val wrench = rememberVectorPainter(Icons.Filled.Build)
+    val measurer = rememberTextMeasurer()
+    val fallbackStyle = MaterialTheme.typography.labelLarge
+    val fabColor = MaterialTheme.colorScheme.primaryContainer
+    val onFabColor = MaterialTheme.colorScheme.onPrimaryContainer
+    val buttonColor = MaterialTheme.colorScheme.primary
+    val onButtonColor = MaterialTheme.colorScheme.onPrimary
+    Canvas(Modifier.fillMaxSize()) {
+        val alpha = state.pillAlpha
+        val fab = state.fab
+        val button = state.buildButton
+        if (alpha <= 0f || fab.container.isEmpty || button.container.isEmpty || button.icon.isEmpty) return@Canvas
+        val toButton = state.pillToButton
+
+        // A button shorter than the minimum touch target reports the padded target, not its visible container.
+        val buttonContainer = button.container.let { outer ->
+            if (outer.height > MIN_TOUCH_TARGET_DP.dp.toPx() + 1f) outer
+            else Rect(outer.left, outer.center.y - BUTTON_CONTAINER_HEIGHT_DP.dp.toPx() / 2f, outer.right, outer.center.y + BUTTON_CONTAINER_HEIGHT_DP.dp.toPx() / 2f)
+        }
+        val pill = mixRect(fab.container, buttonContainer, toButton)
+        // While building, keep the idle FAB's wrench and label, moved along with the live (wider) container.
+        val idle = state.fabAtBuild
+        val shift = if (idle == null) Offset.Zero else Offset(fab.container.left - idle.container.left, fab.container.center.y - idle.container.center.y)
+        val fabIconPlace = idle?.icon?.translate(shift) ?: fab.icon
+        val fabLabelPlace = idle?.label?.translate(shift) ?: fab.label
+        val corner = FAB_CORNER_DP.dp.toPx() + (buttonContainer.height / 2f - FAB_CORNER_DP.dp.toPx()) * toButton
+        drawRoundRect(lerp(fabColor, buttonColor, toButton).copy(alpha = alpha), pill.topLeft, pill.size, CornerRadius(corner))
+
+        val content = lerp(onFabColor, onButtonColor, toButton)
+        val fabIcon = fabIconPlace.takeUnless { it.isEmpty } ?: Rect(fab.container.center, button.icon.width / 2f)
+        val icon = mixRect(fabIcon, button.icon, toButton)
+        translate(icon.left, icon.top) {
+            with(wrench) { draw(icon.size, alpha = alpha, colorFilter = ColorFilter.tint(content)) }
+        }
+
+        // A collapsed FAB shows the wrench alone; its label then appears on the way to the button.
+        val fabHasLabel = !fabLabelPlace.isEmpty && fabLabelPlace.overlaps(fab.container)
+        val buttonStyle = button.labelStyle ?: fallbackStyle
+        val fabStyle = fab.labelStyle ?: buttonStyle
+        val text = measurer.measure(label, lerp(fabStyle, buttonStyle, toButton))
+        val fabLabelStart = if (fabHasLabel) fabLabelPlace.topLeft else Offset(fabIcon.right, fabIcon.center.y - text.size.height / 2f)
+        val labelStart = fabLabelStart + (button.label.topLeft - fabLabelStart) * toButton
+        val labelAlpha = alpha * if (fabHasLabel) 1f else toButton
+        if (labelAlpha > 0f) clipRect(pill.left, pill.top, pill.right, pill.bottom) {
+            drawText(text, content, labelStart, alpha = labelAlpha)
+        }
     }
 }
 
@@ -272,83 +406,15 @@ internal fun previewIconBackground(preferences: Preferences): Color? = when {
     else -> preferences.getBackgroundColor(LocalContext.current)
 }
 
-/**
- * Home side: resumes the animation at the moment the home screen becomes visible (time since the
- * tap). The light slows down, the Renkin Pack symbol settles in it and pops into the Build FAB.
- */
-@Stable
-internal class BuildIconLanding(private val appsFor: (List<String>) -> List<PackageInfoStruct>) {
-    internal val elapsed = Animatable(0f)
-    internal val bump = Animatable(1f)
-    internal var fabWindow by mutableStateOf(Rect.Zero)
-    var starts by mutableStateOf<BuildIconStarts?>(null)
-        private set
-    internal var apps by mutableStateOf<List<PackageInfoStruct?>>(emptyList())
-        private set
-
-    fun catch(caught: BuildIconStarts) {
-        val found = appsFor(caught.keys)
-        apps = caught.keys.map { key -> found.firstOrNull { it.key == key } }
-        starts = caught
-    }
-
-    internal suspend fun land() {
-        val caught = starts ?: return
-        val now = (SystemClock.uptimeMillis() - caught.startedAtUptime).toFloat().coerceIn(0f, BuildSwirl.TOTAL)
-        elapsed.snapTo(now)
-        elapsed.animateTo(BuildSwirl.TOTAL, tween((BuildSwirl.TOTAL - now).toInt(), easing = LinearEasing))
-        bump.animateTo(1.08f, tween(90))
-        bump.animateTo(1f, tween(180, easing = IconFlightEasing))
-        // Cleared last: clearing it leaves the LaunchedEffect that runs this landing.
-        starts = null
-    }
-
-    internal fun local(rect: Rect) = rect.translate(-fabWindow.topLeft)
-    internal fun local(point: Offset) = point - fabWindow.topLeft
-}
-
-@Composable
-internal fun rememberBuildIconLanding(viewModel: MainViewModel): BuildIconLanding {
-    val landing = remember(viewModel) {
-        BuildIconLanding { keys ->
-            val wanted = keys.toHashSet()
-            viewModel.applicationState.value.applications.filter { it.key in wanted }
-        }
-    }
-    val caught = landing.starts
-    if (caught != null) LaunchedEffect(caught) { landing.land() }
-    return landing
-}
-
-/**
- * Draws the animation from the FAB's own draw pass, outside its bounds and above the home content,
- * and applies the arrival bump. Painters are resolved here because they are composable.
- */
-@Composable
-internal fun Modifier.buildIconLanding(landing: BuildIconLanding, iconBackground: Color?): Modifier {
-    val painters = landing.apps.map { it?.createdIcon?.getPainter() }
-    val fragments = rememberFragments(landing.apps, painters, iconBackground)
-    val galaxyRadius = galaxyRadius()
-    val symbol = painterResource(R.drawable.renkinpack_ic_launcher_foreground)
-    return this
-        .onGloballyPositioned { landing.fabWindow = it.boundsInWindow() }
-        .drawWithContent {
-            drawContent()
-            val caught = landing.starts ?: return@drawWithContent
-            val t = landing.elapsed.value
-            val centre = landing.local(caught.centre)
-            val iconSlot = if (size.width > size.height * 1.3f) Offset(16.dp.toPx() + 12.dp.toPx(), size.height / 2f)
-                else Offset(size.width / 2f, size.height / 2f)
-            drawIconStreams(caught, painters, fragments, iconBackground, t, landing::local, centre)
-            drawGalaxyArms(centre, t, galaxyRadius)
-            drawPackSymbol(symbol, centre, iconSlot, t)
-            drawGalaxyCore(centre, t)
-        }
+/** The Build FAB reports where the symbol lands and bumps when it arrives. */
+internal fun Modifier.buildSwirlTarget(state: BuildSwirlState?): Modifier =
+    if (state == null) this else this
+        .onGloballyPositioned(state.fab::onContainerPlaced)
         .graphicsLayer {
-            scaleX = landing.bump.value
-            scaleY = landing.bump.value
+            scaleX = state.bump.value
+            scaleY = state.bump.value
+            alpha = if (state.isMorphing) 0f else 1f
         }
-}
 
 private class IconFragments(val grid: Int, val cells: List<Color?>)
 
@@ -389,12 +455,22 @@ private fun sampleFragments(painter: Painter, background: Color?, grid: Int): Ic
     return IconFragments(grid, cells)
 }
 
+
+/**
+ * Sampled per painter: icon previews load asynchronously, so the first painter can still be empty
+ * and a later one replaces it. An icon with nothing to sample stays whole (null) and just fades.
+ */
 @Composable
-private fun rememberFragments(apps: List<Any?>, painters: List<Painter?>, background: Color?): List<IconFragments?> =
-    remember(apps, background) {
-        val grid = fragmentGrid(painters.size)
-        painters.map { painter -> painter?.let { sampleFragments(it, background, grid) } }
+private fun rememberFragments(painters: List<Painter?>, background: Color?): List<IconFragments?> {
+    val grid = fragmentGrid(painters.size)
+    return painters.mapIndexed { index, painter ->
+        key(index) {
+            remember(painter, background, grid) {
+                painter?.let { sampleFragments(it, background, grid) }?.takeIf { fragments -> fragments.cells.any { it != null } }
+            }
+        }
     }
+}
 
 /** Big enough to read as a galaxy rather than a glow: it spans most of the screen's short side. */
 @Composable
@@ -404,29 +480,26 @@ private fun galaxyRadius(): Float {
 }
 
 private fun DrawScope.drawIconStreams(
-    flight: BuildIconStarts,
+    bounds: List<Rect>,
     painters: List<Painter?>,
     fragments: List<IconFragments?>,
     background: Color?,
     t: Float,
-    local: (Rect) -> Rect,
     centre: Offset
 ) {
-    val count = flight.bounds.size
-    flight.bounds.forEachIndexed { index, window ->
-        val icon = local(window)
+    bounds.forEachIndexed { index, icon ->
         val painter = painters.getOrNull(index) ?: return@forEachIndexed
         val iconFragments = fragments.getOrNull(index)
-        if (iconFragments == null || !BuildSwirl.shattered(t, index, count)) {
-            drawStreamIcon(icon, painter, background)
-            return@forEachIndexed
+        when {
+            !BuildSwirl.shattered(t) -> drawStreamIcon(icon, painter, background, 1f)
+            iconFragments == null -> drawStreamIcon(icon, painter, background, BuildSwirl.unsampledIconAlpha(t))
+            else -> drawIconFragments(index, icon, iconFragments, t, centre)
         }
-        drawIconFragments(index, count, icon, iconFragments, t, centre)
     }
 }
 
 /** Each fragment keeps the icon's own colour as it breaks off, then turns to gold dust near the core. */
-private fun DrawScope.drawIconFragments(index: Int, count: Int, icon: Rect, fragments: IconFragments, t: Float, centre: Offset) {
+private fun DrawScope.drawIconFragments(index: Int, icon: Rect, fragments: IconFragments, t: Float, centre: Offset) {
     val grid = fragments.grid
     val cell = icon.width / grid
     val grain = 3.dp.toPx()
@@ -435,7 +508,7 @@ private fun DrawScope.drawIconFragments(index: Int, count: Int, icon: Rect, frag
         val row = slot / grid
         val column = slot % grid
         val seed = (index * grid * grid + slot) * 7
-        val u = BuildSwirl.fragmentProgress(t, index, count, row, column, grid, seed)
+        val u = BuildSwirl.fragmentProgress(t, row, column, grid, seed)
         if (u >= 1f) return@forEachIndexed
         val home = Offset(icon.left + (column + 0.5f) * cell, icon.top + (row + 0.5f) * cell)
         if (u < 0f) {
@@ -457,12 +530,12 @@ private fun DrawScope.drawIconFragments(index: Int, count: Int, icon: Rect, frag
     }
 }
 
-private fun DrawScope.drawStreamIcon(rect: Rect, painter: Painter, background: Color?) {
-    if (rect.width <= 0f) return
+private fun DrawScope.drawStreamIcon(rect: Rect, painter: Painter, background: Color?, alpha: Float) {
+    if (rect.width <= 0f || alpha <= 0f) return
     val shape = Path().apply { addRoundRect(RoundRect(rect, CornerRadius(rect.width * 0.25f))) }
     clipPath(shape) {
-        background?.let { drawRect(it, rect.topLeft, rect.size) }
-        translate(rect.left, rect.top) { with(painter) { draw(rect.size) } }
+        background?.let { drawRect(it, rect.topLeft, rect.size, alpha = alpha) }
+        translate(rect.left, rect.top) { with(painter) { draw(rect.size, alpha = alpha) } }
     }
 }
 
@@ -541,11 +614,11 @@ private fun DrawScope.drawGalaxyArms(centre: Offset, t: Float, fullRadius: Float
     }
 }
 
-/** The white-hot core: small while the arms show, it swells to hide the Renkin Pack symbol forming inside. */
+/** The white-hot core: small and strong, it dims as the symbol starts to assemble where it burned. */
 private fun DrawScope.drawGalaxyCore(centre: Offset, t: Float) {
     val strength = BuildSwirl.core(t)
     if (strength <= 0f) return
-    val core = 110.dp.toPx() * BuildSwirl.coreScale(t)
+    val core = 36.dp.toPx()
     drawCircle(
         Brush.radialGradient(
             0f to SwirlWhite.copy(alpha = strength),
@@ -560,36 +633,104 @@ private fun DrawScope.drawGalaxyCore(centre: Offset, t: Float) {
     )
 }
 
-private fun DrawScope.drawSparkle(centre: Offset, length: Float, alpha: Float) {
-    if (alpha <= 0f) return
-    val color = SwirlWhite.copy(alpha = alpha)
-    val width = 1.2.dp.toPx()
-    drawLine(color, centre - Offset(length, 0f), centre + Offset(length, 0f), width, StrokeCap.Round)
-    drawLine(color, centre - Offset(0f, length), centre + Offset(0f, length), width, StrokeCap.Round)
-    drawCircle(color, width * 1.5f, centre)
+private const val SYMBOL_GRID = 52
+// The adaptive foreground keeps the symbol inside its middle ~60%, so it is drawn larger.
+private const val SYMBOL_SIZE_DP = 150
+
+/** One spot of the Renkin Pack symbol: where it sits (-0.5..0.5), its colour, and how far from the centre (0..1). */
+private class SymbolSpot(val x: Float, val y: Float, val color: Color, val order: Float)
+
+/** The symbol as a cloud of spots, so grains of light can fly in and build it from the centre outward. */
+private fun sampleSymbol(symbol: Painter): List<SymbolSpot> {
+    val bitmap = ImageBitmap(SYMBOL_GRID, SYMBOL_GRID)
+    val size = Size(SYMBOL_GRID.toFloat(), SYMBOL_GRID.toFloat())
+    CanvasDrawScope().draw(Density(1f), LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(bitmap), size) {
+        with(symbol) { draw(size) }
+    }
+    val pixels = bitmap.toPixelMap()
+    val spots = ArrayList<SymbolSpot>()
+    for (row in 0 until SYMBOL_GRID) for (column in 0 until SYMBOL_GRID) {
+        val color = pixels[column, row]
+        if (color.alpha < 0.5f) continue
+        val x = (column + 0.5f) / SYMBOL_GRID - 0.5f
+        val y = (row + 0.5f) / SYMBOL_GRID - 0.5f
+        spots += SymbolSpot(x, y, color.copy(alpha = 1f), hypot(x, y))
+    }
+    val reach = spots.maxOfOrNull { it.order } ?: return spots
+    return spots.map { SymbolSpot(it.x, it.y, it.color, it.order / reach) }
+}
+
+// The sharpening pulse travels from the symbol's centre to the rim of its glow.
+private const val SYMBOL_GLOW_REACH = 0.75f
+
+private fun DrawScope.pulseRadius(t: Float) = SYMBOL_SIZE_DP.dp.toPx() * SYMBOL_GLOW_REACH * BuildSwirl.pulse(t)
+
+/**
+ * Grains of the galaxy's light leave its arms and settle into the Renkin Pack symbol, the centre
+ * first and the petal tips last, while the whole shape turns with the slowing galaxy. The pulse
+ * then sweeps them away: inside its ring the crisp symbol has already taken over.
+ */
+private fun DrawScope.drawSymbolAssembly(spots: List<SymbolSpot>, centre: Offset, t: Float, galaxyRadius: Float) {
+    if (BuildSwirl.pulse(t) >= 1f) return
+    val sharpened = pulseRadius(t)
+    val size = SYMBOL_SIZE_DP.dp.toPx()
+    val grain = size / SYMBOL_GRID * 0.62f
+    val spin = BuildSwirl.angle(t)
+    val turn = Math.toRadians((spin - BuildSwirl.restAngle).toDouble())
+    val turnCos = cos(turn).toFloat()
+    val turnSin = sin(turn).toFloat()
+    val radius = galaxyRadius * BuildSwirl.galaxyScale(t)
+    spots.forEachIndexed { index, spot ->
+        val u = BuildSwirl.formProgress(t, spot.order)
+        if (u <= 0f) return@forEachIndexed
+        val arrived = IconFlightEasing.transform(u.coerceAtMost(1f))
+        val seed = 200000 + index * 5
+        val target = centre + Offset(spot.x * turnCos - spot.y * turnSin, spot.x * turnSin + spot.y * turnCos) * size
+        val along = 0.2f + 0.75f * noise(seed)
+        val from = spiralPoint(centre, radius, spin, index % GALAXY_ARMS, along, (noise(seed + 1) - 0.5f) * radius * 0.2f * along)
+        val position = from + (target - from) * arrived
+        if ((position - centre).getDistance() < sharpened) return@forEachIndexed
+        val alpha = (u / 0.15f).coerceAtMost(1f)
+        val color = lerp(dustColor(noise(seed + 2)), spot.color, arrived)
+        if (index % 3 == 0) drawCircle(SwirlPale.copy(alpha = 0.16f * alpha), grain * 3.5f, position)
+        drawCircle(color.copy(alpha = alpha), grain * (1.7f - 0.7f * arrived), position)
+    }
 }
 
 private const val SYMBOL_ORBIT_GRAINS = 22
 
-/** The Renkin Pack symbol grows inside the condensing galaxy, comes to rest upright and pops into the FAB. */
+/**
+ * A ring of light pulses out from the centre and wherever it has passed the grains are the crisp
+ * symbol; the ring fades out at the rim of the glow. The finished symbol then pops into the FAB.
+ */
 private fun DrawScope.drawPackSymbol(symbol: Painter, centre: Offset, fabSlot: Offset, t: Float) {
-    val alpha = BuildSwirl.flowerAlpha(t)
-    if (alpha <= 0f) return
+    val pulse = BuildSwirl.pulse(t)
+    if (pulse <= 0f) return
     val pop = BuildSwirl.pop(t)
     if (pop >= 1f) return
-    // The adaptive foreground keeps the symbol inside its middle ~60%, so draw it larger.
-    val restSize = 150.dp.toPx() * (0.4f + 0.6f * alpha)
+    val restSize = SYMBOL_SIZE_DP.dp.toPx()
     val endSize = 40.dp.toPx()
     val size = restSize + (endSize - restSize) * pop
     val u = 1f - pop
     val control = Offset(centre.x, fabSlot.y)
     val position = centre * (u * u) + control * (2f * u * pop) + fabSlot * (pop * pop)
     drawSymbolAura(position, size, t, BuildSwirl.symbolGlow(t))
-    rotate(BuildSwirl.angle(t) - BuildSwirl.restAngle, pivot = position) {
-        translate(position.x - size / 2f, position.y - size / 2f) {
-            with(symbol) { draw(Size(size, size), alpha = alpha * (1f - ((pop - 0.85f) / 0.15f).coerceIn(0f, 1f))) }
+    val sharpened = pulseRadius(t)
+    val drawSymbol: DrawScope.() -> Unit = {
+        rotate(BuildSwirl.angle(t) - BuildSwirl.restAngle, pivot = position) {
+            translate(position.x - size / 2f, position.y - size / 2f) {
+                with(symbol) { draw(Size(size, size), alpha = 1f - ((pop - 0.85f) / 0.15f).coerceIn(0f, 1f)) }
+            }
         }
     }
+    if (pulse >= 1f) {
+        drawSymbol()
+        return
+    }
+    clipPath(Path().apply { addOval(Rect(centre, sharpened)) }) { drawSymbol() }
+    val ring = 1f - pulse
+    drawCircle(SwirlPale.copy(alpha = 0.35f * ring), sharpened, centre, style = Stroke(10.dp.toPx()))
+    drawCircle(SwirlWhite.copy(alpha = ring), sharpened, centre, style = Stroke(3.dp.toPx()))
 }
 
 /** An ethereal galactic glow around the finished symbol: a soft breathing halo with gold dust orbiting it. */
@@ -620,4 +761,13 @@ private fun DrawScope.drawSymbolAura(position: Offset, size: Float, t: Float, st
         drawCircle(color.copy(alpha = 0.25f * strength * twinkle), grainRadius * 3.5f, grain)
         drawCircle(color.copy(alpha = strength * twinkle), grainRadius * (0.6f + 0.6f * noise(seed + 4)), grain)
     }
+}
+
+private fun DrawScope.drawSparkle(centre: Offset, length: Float, alpha: Float) {
+    if (alpha <= 0f) return
+    val color = SwirlWhite.copy(alpha = alpha)
+    val width = 1.2.dp.toPx()
+    drawLine(color, centre - Offset(length, 0f), centre + Offset(length, 0f), width, StrokeCap.Round)
+    drawLine(color, centre - Offset(0f, length), centre + Offset(0f, length), width, StrokeCap.Round)
+    drawCircle(color, width * 1.5f, centre)
 }

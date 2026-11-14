@@ -392,26 +392,25 @@ current activity. A new activity must extend `LocalizedActivity`.
   recreates it in a cold process without MainActivity/MainViewModel. Its editor remains tied to
   the original session: activity recreation in the same process preserves ownership, but a cold
   recreation closes the expired editor and reports that unsaved changes must be repeated.
-- **WallpaperPreviewActivity** — the pack preview before a build. Its theme sets
-  `windowShowWallpaper` + a transparent background so the system draws the real wallpaper
-  behind it (the launcher trick — no permission; `WallpaperManager.getDrawable` is locked
-  behind MANAGE_EXTERNAL_STORAGE since Android 13). It must be an activity: dialog windows
-  never become the wallpaper target. It reads shared state from the `ApplicationProvider`
-  singleton directly — deliberately **not** through a new `MainViewModel`, whose init would
-  re-run provider initialization and drop unsaved icons. RESULT_OK = "user pressed Build";
-  the launching side (BuildPackFab) runs the build. If Android recreates it alone over a killed
-  process (`savedInstanceState != null` while `startupComplete == false`), the reviewed session
-  no longer exists — `onCreate` closes it with `RESULT_CANCELED` + `EXTRA_SESSION_LOST` *before*
-  `setContent`, rather than initializing the provider and silently reviewing the last *saved*
-  state instead.
-  The launch intent and successful result carry the original `ProfileSessionToken`; the preview
-  and build both reject a changed session, including reload/clear and returning to the same
-  profile. This guards session ownership, not an immutable revision of every icon edit.
-  Icon tiles open the normal editor over the preview. `PackPreviewEditorOwners` lends a weak
-  reference to the existing home ViewModel; editor composables read `LocalIconEditorOwner`
-  instead of constructing another home owner. Preview editor/session recovery owners remain
-  activity-scoped. Apply waits for the matching receipt before closing, while the grid keeps its
-  opening order and scroll state. Home pauses its shared toast collector while preview owns it.
+- **Pack preview (`PackPreviewHost`)** — the pack preview before a build, hosted **inside the
+  home window**, not in its own activity. `MainActivity` gives its window a transparent
+  background in `onCreate` (the composition always paints its own), and the host toggles
+  `FLAG_SHOW_WALLPAPER` only while the preview is on screen, so the system draws the real
+  wallpaper behind the transparent icon grid (the launcher trick — no permission;
+  `WallpaperManager.getDrawable` is locked behind MANAGE_EXTERNAL_STORAGE since Android 13).
+  The home content stays composed but invisible (alpha 0, semantics cleared). One window is the
+  point: the Build FAB travels into the preview's Build button and back (`BuildPillMorph`), and
+  the build animation (`BuildSwirlOverlay`, one clock in `BuildSwirlState`) plays above both
+  while the home screen surfaces underneath — none of which two activities could share.
+  `MainViewModel.packPreview` holds the open `PackPreviewSession`: the `ProfileSessionToken` it
+  reviews plus the built/updated keys at opening. The preview and the build both reject a
+  changed session (a watch deep link can switch the profile underneath); this guards session
+  ownership, not an immutable revision of every icon edit. A killed process simply loses the
+  session and the preview with it. Icon tiles open the normal editor over the preview with the
+  same home ViewModel. Apply waits for the matching receipt before closing, while the grid keeps
+  its opening order and scroll state. During the build animation the preview stays composed
+  (faded out) until the animation ends, and `BuildInstallCoordinator.holdInstall` keeps a
+  finished build from opening an installer or dialog before then (bounded by a timeout).
 
 ## Profiles
 
@@ -1326,9 +1325,9 @@ this package/import-only move.
 **7D6 (verified)** groups the build/install presentation in
 `feature.buildinstall`: `BuildPack`, `InstallerPickerScreen` and `PackChangesSheet`.
 MainScreen imports the Build action and installer prompt, Settings imports the installer picker,
-and HeroPackCard imports the pending-changes sheet. WallpaperPreviewActivity retains its class,
-manifest registration, wallpaper theme, session/result handoff and activity-owned state; only
-its preview-content import changes. The preview list ordering helper moves with its screen.
+and HeroPackCard imports the pending-changes sheet. Pack preview has since moved from its own
+activity into the home window (`PackPreviewHost`, see Activities); its content composable and
+the preview list ordering helper live with the Build action in this package.
 The shared summary test retains its package/scenarios and imports that helper explicitly.
 Shared icon previews, editor entry point, dialogs, scrolling, haptics and shape tokens remain
 in UI. MainViewModel/BuildInstallCoordinator retain build/install ownership and preferences;
@@ -2618,7 +2617,7 @@ Renkin cannot reproduce that launcher-only selection through the standard resour
 - `ic_launcher_monochrome` PNGs are alpha glyphs (Material You tints alpha only) — don't
   replace them with opaque images.
 - Composition locals (`LocalToaster`, `LocalMainActivity`) are provided per-activity — a new
-  activity hosting shared composables must provide its own (see WallpaperPreviewActivity).
+  activity hosting shared composables must provide its own (see GlobalOptionsActivity).
 
 
 ### Global style Apply history

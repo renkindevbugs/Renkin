@@ -53,6 +53,7 @@ import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
+import dev.renkinProject.renkin.feature.buildinstall.PackPreviewSession
 import dev.renkinProject.renkin.apk.ProfilePackIdentityException
 import dev.renkinProject.renkin.apk.ProfilePackIdentityError
 import dev.renkinProject.renkin.data.IconPack
@@ -198,7 +199,23 @@ class MainViewModel @Inject constructor(
     val installedIcons = appProvider.installedIcons
     val runtimeState = appProvider.runtimeState
     val startupProfile = appProvider.startupProfile
-    internal var packPreviewOpen by mutableStateOf(false)
+    /** The open Pack preview, hosted inside the home window (PackPreviewHost). */
+    internal var packPreview by mutableStateOf<PackPreviewSession?>(null)
+        private set
+    internal val packPreviewOpen: Boolean get() = packPreview != null
+
+    internal fun openPackPreview() {
+        packPreview = PackPreviewSession(sessionToken, builtKeys, updatedKeys)
+    }
+
+    internal fun holdInstallForBuildAnimation(held: Boolean) = buildCoordinator.holdInstall(held)
+
+    internal fun closePackPreview() {
+        packPreview = null
+    }
+
+    internal fun isCurrentSession(token: ProfileSessionToken): Boolean = appProvider.isCurrentSession(token)
+    internal suspend fun calendarWarnings(preferences: Preferences) = appProvider.calendarWarnings(preferences)
     /** Action-time snapshot only; composables collect [applicationState]. */
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
 

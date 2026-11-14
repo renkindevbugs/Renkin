@@ -427,7 +427,6 @@
     <string name="buildPreviewTitle">图标包预览</string>
     <string name="buildPreviewEmpty">暂无图标——先为你的应用分配一些</string>
     <string name="buildPreviewCount">%d 个图标</string>
-    <string name="buildPreviewSessionLost">Renkin 被系统关闭——预览已取消，请重新打开以构建</string>
     <string name="watchApplyFailed">无法应用图标——建议已保留，你可以重试</string>
     <string name="linkOpenFailed">设备上没有可打开该链接的应用</string>
     <string name="shareFailed">设备上没有可分享内容的应用</string>

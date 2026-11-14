@@ -411,7 +411,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
         toaster, optionsViewModel.toastEvents,
         texts = listOf(viewModel.installToastEvents, watchViewModel.toastEvents)
     )
-    if (!viewModel.packPreviewOpen) CollectToasts(toaster, viewModel.toastEvents)
+    CollectToasts(toaster, viewModel.toastEvents)
 
     // Undoable changes get a snackbar instead of a toast: a toast cannot be acted on, and the
     // whole point is the action. Only the newest offer is on screen, matching the single step

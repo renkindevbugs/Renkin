@@ -50,9 +50,11 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 enum class InstallerChoiceReason { FIRST_CHOICE, ASK_EVERY_TIME }
 
@@ -95,6 +97,8 @@ internal sealed interface BuildInstallState {
         val result: ApkInstallResult? = null, val pack: BuiltIconPack? = null,
         @get:StringRes val advice: Int? = null) : BuildInstallState
 }
+
+private const val INSTALL_HOLD_LIMIT_MILLIS = 6_000L
 
 internal class BuildInstallCoordinator(
     private val application: Application,
@@ -147,6 +151,13 @@ internal class BuildInstallCoordinator(
         else -> false
     }
 
+    private val installHeld = MutableStateFlow(false)
+
+    /** The build animation asks a finished build to wait before it opens an installer or a dialog. */
+    fun holdInstall(held: Boolean) {
+        installHeld.value = held
+    }
+
     fun build(expected: ProfileSessionToken) {
         if (closed || busy) return
         val owner = ++operation
@@ -174,6 +185,8 @@ internal class BuildInstallCoordinator(
                     preferences.getBooleanValue(AskInstallerEveryTimeKey),
                     preferences.getBooleanValue(InstallerChoiceConfirmedKey)
                 )
+                // Bounded: a hold that is never released must not strand a finished pack.
+                withTimeoutOrNull(INSTALL_HOLD_LIMIT_MILLIS) { installHeld.first { !it } }
                 if (!installImmediately()) {
                     progress.update { it.copy(step = application.getString(R.string.buildSavingReady), progress = null) }
                     val readyPack = provider.retainReadyBuild(built)

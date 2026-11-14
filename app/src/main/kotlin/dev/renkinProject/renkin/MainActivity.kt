@@ -11,7 +11,11 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import android.graphics.drawable.ColorDrawable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import dev.renkinProject.renkin.feature.buildinstall.PackPreviewHost
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
@@ -70,6 +74,11 @@ class MainActivity : LocalizedActivity() {
         // default exit fade let the plum show through and dimmed the symbol for a frame.
         installSplashScreen().setOnExitAnimationListener { it.remove() }
         super.onCreate(savedInstanceState)
+
+        // Pack preview shows the real wallpaper behind this window (PackPreviewHost toggles
+        // FLAG_SHOW_WALLPAPER). The window is transparent from the start so opening the preview
+        // never has to swap the surface format; the composition always paints its own background.
+        window.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
 
         // Start loading before handling launch intents or composing the startup shell.
         viewModel
@@ -157,23 +166,26 @@ class MainActivity : LocalizedActivity() {
                             RenkinTheme(darkMode) {
                                 Surface(
                                     modifier = Modifier.fillMaxSize(),
-                                    color = MaterialTheme.colorScheme.background
+                                    // Transparent: each screen below paints the background itself, so Pack
+                                    // preview can leave it out and reveal the wallpaper.
+                                    color = Color.Transparent,
+                                    contentColor = MaterialTheme.colorScheme.onBackground
                                 ) {
                                     ToastHost(toaster)
                                     // The overlay hides the home screen until the fire settles; composing
                                     // it earlier stalled the animation mid-burn.
                                     // Published startup metadata is read after recovery, even if its outer gate still says CHECKING.
                                     if (startupLoading || !viewModel.launchFireSettled) {
-                                        MainStartupScreen(
+                                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) { MainStartupScreen(
                                             profile = startupProfile,
                                             showProfileSkeletons = viewModel.launchFireSettled &&
                                                 (recoveryState == StorageRecoveryState.READY ||
                                                     (recoveryState == StorageRecoveryState.CHECKING &&
                                                         !runtimeState.startupComplete && startupProfile != null)),
                                             loadIcon = viewModel::profileSwitchArtwork
-                                        )
+                                        ) }
                                     } else {
-                                        MainColumn(iconPackState.packs)
+                                        PackPreviewHost(viewModel, iconPackState.packs) { MainColumn(iconPackState.packs) }
                                     }
 
                                     if (crashPending && !startupLoading && !launchFireVisible) {
