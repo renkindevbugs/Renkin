@@ -172,6 +172,9 @@ class AdaptiveIconPackDrawable internal constructor(
             canvas.drawBitmap(renderedBackground, null, target, paint)
             canvas.drawBitmap(renderedForeground, null, target, paint)
         }
+        // Decoded only for this software draw; freeing them now keeps a build's native peak down.
+        renderedBackground.recycle()
+        renderedForeground.recycle()
     }
 
     private fun maskToLauncherShape(artwork: Bitmap): Bitmap {

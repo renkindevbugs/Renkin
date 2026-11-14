@@ -316,7 +316,7 @@ class IconPackBuilder(
                     when (app.createdIcon) {
                         is AdaptiveIconPackDrawable -> {
                             adaptive.foreground(appFileName)
-                            createBitmapResource(apkModule, packageBlock, app.createdIcon.foreground, appFileName + "_foreground")
+                            createOwnedBitmapResource(apkModule, packageBlock, app.createdIcon.foreground, appFileName + "_foreground")
                         }
                         is InsetIconDrawable -> {
                             adaptive.startForeground()
@@ -364,7 +364,7 @@ class IconPackBuilder(
                                 // the same scaled copy so the icon keeps its size.
                                 if (exportCopy.hasGradientBrush()) {
                                     insetXml.insetDrawable(appFileName + "_foreground")
-                                    createBitmapResource(apkModule, packageBlock, exportCopy.toBitmap(), appFileName + "_foreground")
+                                    createOwnedBitmapResource(apkModule, packageBlock, exportCopy.toBitmap(), appFileName + "_foreground")
                                 } else {
                                     exportVectorIcon(insetXml, exportCopy)
                                 }
@@ -378,7 +378,12 @@ class IconPackBuilder(
 
                         createXmlDrawableResource(apkModule, packageBlock, insetXml, appFileName)
                     } else {
-                        createBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName)
+                        // Only these render a new bitmap; a stored icon hands out the one the UI shows.
+                        if (app.createdIcon is AdaptiveIconPackDrawable || app.createdIcon is ImageVectorDrawable) {
+                            createOwnedBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName)
+                        } else {
+                            createBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName)
+                        }
                     }
                 }
 
@@ -594,18 +599,18 @@ class IconPackBuilder(
         type: String = "drawable",
         clockLayers: LayerListXml? = null
     ) {
-        val fallback = createBitmapResource(apkModule, packageBlock, icon.toBitmap(), name, type = type)
+        val fallback = createOwnedBitmapResource(apkModule, packageBlock, icon.toBitmap(), name, type = type)
         if (legacyName != name) {
             packageBlock.getOrCreate("", type, legacyName).setValueAsString(fallback.valueAsString)
         }
         if (clockLayers == null) {
-            createBitmapResource(apkModule, packageBlock, icon.foreground, "${name}_foreground", "nodpi")
+            createOwnedBitmapResource(apkModule, packageBlock, icon.foreground, "${name}_foreground", "nodpi")
         } else {
             createXmlDrawableResource(apkModule, packageBlock, clockLayers, "${name}_foreground")
         }
-        createBitmapResource(apkModule, packageBlock, icon.background, "${name}_background", "nodpi")
+        createOwnedBitmapResource(apkModule, packageBlock, icon.background, "${name}_background", "nodpi")
         icon.monochrome?.let {
-            createBitmapResource(apkModule, packageBlock, it, "${name}_monochrome", "nodpi")
+            createOwnedBitmapResource(apkModule, packageBlock, it, "${name}_monochrome", "nodpi")
         }
 
         fun adaptive(includeMonochrome: Boolean) = AdaptiveIconXml().apply {
@@ -649,6 +654,19 @@ class IconPackBuilder(
         apkModule.add(generateBitmap(bitmap, resPath))
         return icon
     }
+
+    /**
+     * For a bitmap this builder decoded or rendered itself: frees its native pixels as soon as it is
+     * encoded instead of at the next GC (the build's native peak was ~345 MB). Never use it for a
+     * bitmap a drawable hands out from its own state: stored icons, calendar days and resources
+     * return the bitmap the UI still draws, and recycling that one crashes the UI.
+     */
+    private fun createOwnedBitmapResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, qualifier: String = "", type: String = "drawable"): Entry =
+        try {
+            createBitmapResource(apkModule, packageBlock, bitmap, name, qualifier, type)
+        } finally {
+            bitmap.recycle()
+        }
 
     private fun generateBitmap(image: Bitmap, name: String): InputSource {
         return if (PackageVersion.is30OrMore()) {
