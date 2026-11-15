@@ -18,6 +18,8 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.view.Gravity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.painter.Painter
 import dev.renkinProject.renkin.extension.newArgbBitmap
 import dev.renkinProject.renkin.icon.creator.MATERIAL_YOU_SCHEME_COLOR_IDS
@@ -52,12 +54,16 @@ class ThemedGlyphDrawable(mask: Bitmap, val scheme: Int = SYSTEM_PALETTE) : Icon
     override fun getIntrinsicHeight(): Int = PREVIEW_SIZE
 
     @Composable
-    override fun getPainter(): Painter = rememberPreviewPainter(PREVIEW_SIZE)
+    override fun getPainter(): Painter {
+        val configuration = LocalConfiguration.current
+        val revision = remember(configuration, scheme) { colorRevision() }
+        return rememberPreviewPainter(PREVIEW_SIZE, revision = revision)
+    }
 
     override fun draw(canvas: Canvas) {
         val size = maxOf(bounds.width(), bounds.height()).coerceAtMost(PREVIEW_SIZE)
         if (size <= 0) return
-        val bitmap = IconPreviewCache.getOrRender(IconPreviewCacheKey(this, size)) ?: return
+        val bitmap = IconPreviewCache.getOrRender(IconPreviewCacheKey(this, size, colorRevision())) ?: return
         canvas.drawBitmap(bitmap, null, bounds, paint)
     }
 
@@ -66,6 +72,9 @@ class ThemedGlyphDrawable(mask: Bitmap, val scheme: Int = SYSTEM_PALETTE) : Icon
 
     @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+
+    // The preview cache keys on identity, so the render colours must be part of the key.
+    private fun colorRevision(): Int = ThemedGlyphColors.current(scheme).hashCode()
 
     private fun render(size: Int): Bitmap {
         val (foreground, background) = ThemedGlyphColors.current(scheme)
