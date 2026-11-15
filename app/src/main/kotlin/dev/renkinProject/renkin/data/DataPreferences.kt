@@ -113,6 +113,10 @@ val InstallerChoiceConfirmedKey = booleanPreferencesKey(INSTALLER_CHOICE_CONFIRM
 val IncludeVectorKey = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
 val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
 val ExportThemedKey = booleanPreferencesKey(EXPORT_THEMED_NAME)
+// Refresh gives icons from a Material You pack (Lawnicons) live wallpaper colours. On by default.
+val MaterialYouPackLiveColorsKey = booleanPreferencesKey("MATERIAL_YOU_PACK_LIVE_COLORS")
+// The same for the Secondary source, chosen separately in the hero sheet.
+val SecondaryMaterialYouPackLiveColorsKey = booleanPreferencesKey("SECONDARY_MATERIAL_YOU_PACK_LIVE_COLORS")
 val IconColorKey = stringPreferencesKey(ICON_COLOR_NAME)
 val BackgroundColorKey = stringPreferencesKey(BACKGROUND_COLOR_NAME)
 // The pack-wide background can carry a gradient of its own, described like the colourizer's.
@@ -295,7 +299,7 @@ val GlobalBetaNoticeSeenKey = booleanPreferencesKey("GLOBAL_BETA_NOTICE_SEEN")
  * App-level settings (dark mode, watch interval, sort/filter) intentionally stay global.
  */
 private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
-    IncludeVectorKey, MonochromeKey, ExportThemedKey, CalendarIconsKey, OverrideIconKey,
+    IncludeVectorKey, MonochromeKey, ExportThemedKey, MaterialYouPackLiveColorsKey, SecondaryMaterialYouPackLiveColorsKey, CalendarIconsKey, OverrideIconKey,
     OutlineAddKey, GlobalShapeCropKey, GlobalColorizeKey, GlobalColorizeFlatKey,
     GlobalColorizeLightenKey,
     GlobalColorizeMonochromeKey, GlobalColorizeInverseKey,
@@ -935,16 +939,18 @@ fun getSourceLabels(): Map<Source, String> {
 }
 
 @Composable
-fun getImageEditLabels(includeSegments: Boolean = false): Map<ImageEdit, String> {
+fun getImageEditLabels(includeSegments: Boolean = false, includeThemed: Boolean = false): Map<ImageEdit, String> {
     val base = mapOf(ImageEdit.NONE to stringResource(id = R.string.none)
         , ImageEdit.PATH to stringResource(id = R.string.pathDetection)
         , ImageEdit.EDGE to stringResource(id = R.string.edgeDetection)
         , ImageEdit.COLORIZE to stringResource(id = R.string.colorize)
         , ImageEdit.REMOVE_BACKGROUND to stringResource(id = R.string.removeBackground))
     // Segments are picked on one icon's own artwork, so only the edit dialog offers them.
-    return if (includeSegments) {
+    val withSegments = if (includeSegments) {
         base + (ImageEdit.COLORIZE_SEGMENTS to stringResource(id = R.string.colorizeSegments))
     } else base
+    // Pack-wide refresh has its own Themed export switch, so only per-icon hosts offer it.
+    return if (includeThemed) withSegments + (ImageEdit.THEMED to stringResource(id = R.string.themedEdit)) else withSegments
 }
 
 @Composable
@@ -1002,7 +1008,9 @@ enum class FallbackSource {
 enum class ImageEdit {
     // New entries go at the END: ordinals are persisted by index. COLORIZE_SEGMENTS is the
     // per-app "colourize only these regions" modifier, so the pack-wide dropdowns skip it.
-    NONE, PATH, EDGE, COLORIZE, REMOVE_BACKGROUND, COLORIZE_SEGMENTS
+    NONE, PATH, EDGE, COLORIZE, REMOVE_BACKGROUND, COLORIZE_SEGMENTS,
+    // Per-icon (editor and Global style) only: the pack-wide Themed export already covers refresh.
+    THEMED
 }
 
 enum class TextType {

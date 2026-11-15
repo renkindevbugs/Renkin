@@ -16,6 +16,7 @@ import dev.renkinProject.renkin.xml.file.BaseVectorXml
 class XmlNodeParser(val resources: Resources, private val defaultColor: Color = Color.Unspecified) {
     private fun parse(node: XmlNode): IconPackDrawable? {
         node.findFirstTag(AdaptiveIconPayload.TAG)?.let { return AdaptiveIconPayload.decode(it) }
+        node.findFirstTag(ThemedGlyphPayload.TAG)?.let { return ThemedGlyphPayload.decode(it) }
 
         if (node.containsTag("vector")) {
             val vector = VectorParser.parse(resources, node, defaultColor)

@@ -313,7 +313,7 @@ private fun SaveModifierPresetDialog(
         mutableStateOf(defaultPresetGroups(adjustments, imageEdit))
     }
 
-    val effectLabel = getImageEditLabels(includeSegments = true)[imageEdit].orEmpty()
+    val effectLabel = getImageEditLabels(includeSegments = true, includeThemed = true)[imageEdit].orEmpty()
     val toggle: (ModifierPresetGroup) -> Unit = { group ->
         groups = if (group in groups) groups - group else groups + group
     }
@@ -720,7 +720,7 @@ private fun RenameModifierPresetDialog(
 private fun presetGroupSummary(payload: ModifierPresetPayload): String {
     val parts = buildList {
         payload.effect?.let {
-            add(getImageEditLabels(includeSegments = true)[it.imageEdit].orEmpty())
+            add(getImageEditLabels(includeSegments = true, includeThemed = true)[it.imageEdit].orEmpty())
         }
         if (payload.iconScale != null) add(stringResource(R.string.iconScale))
         payload.shape?.let { add(stringResource(R.string.iconShapeTitle)) }

@@ -173,7 +173,7 @@ class IconGenerator(
                 val primary = generateIcon(
                     app,
                     source.primarySource,
-                    modifiers.effect.imageEdit,
+                    refreshImageEdit(source.primarySource, modifiers.effect.imageEdit, primaryIconPackApplications, export.livePrimaryMaterialYouPack),
                     source.primaryTextType,
                     primaryIconPackApplications
                 )
@@ -187,7 +187,7 @@ class IconGenerator(
                     val secondary = generateIcon(
                         app,
                         source.secondarySource,
-                        source.secondaryImageEdit,
+                        refreshImageEdit(source.secondarySource, source.secondaryImageEdit, secondaryIconPackApplications, export.liveSecondaryMaterialYouPack),
                         source.secondaryTextType,
                         secondaryIconPackApplications
                     )
@@ -210,6 +210,16 @@ class IconGenerator(
             }
         }
     }
+
+    /**
+     * Refresh gives a Material You pack's icons live wallpaper colours when its source's switch in
+     * the hero sheet is on ([live]): the same Themed modifier the editor offers per icon. Any effect
+     * the user chose wins, and the pack-wide Themed export already keeps such icons live on its own.
+     */
+    private fun refreshImageEdit(source: Source, imageEdit: ImageEdit, pack: IconPackContainer, live: Boolean): ImageEdit =
+        if (live && source == Source.ICON_PACK && imageEdit == ImageEdit.NONE &&
+            !export.themed && packChangesWithMaterialYouColors(pack.iconPackName)
+        ) ImageEdit.THEMED else imageEdit
 
     private fun sourcePackNameFor(app: PackageInfoStruct, source: Source, iconPack: IconPackContainer): String = when {
         source == Source.ICON_PACK -> iconPack.iconPackName
@@ -294,7 +304,7 @@ class IconGenerator(
                 else -> it
             }
         }
-        val bitmapIcon = getIconBitmap(icon.drawable) ?: return null
+        val bitmapIcon = getIconBitmap(icon.drawable.copyForRendering()) ?: return null
         val changesWithMaterialYou = packChangesWithMaterialYouColors(iconPackName)
         val parsedIcon = exportIconPackXML(iconPackName, icon).let {
             if (changesWithMaterialYou) styleMaterialYouPackIcon(it) else it
@@ -401,7 +411,9 @@ class IconGenerator(
                 modifiers.materialYouPack.isReplayableOn(adaptiveLayers = true))
         }
 
-        val bitmapIcon = getIconBitmap(resIcon.drawable) ?: return null
+        // A mutated copy: drawables loaded from the pack share one native vector tree, and editor
+        // previews render concurrently. Drawing the shared one from two threads crashed natively.
+        val bitmapIcon = getIconBitmap(resIcon.drawable.copyForRendering()) ?: return null
         val changesWithMaterialYou = packChangesWithMaterialYouColors(iconPack.iconPackName)
         val parsedIcon = exportIconPackXML(iconPack.iconPackName, resIcon).let {
             if (changesWithMaterialYou) styleMaterialYouPackIcon(it) else it

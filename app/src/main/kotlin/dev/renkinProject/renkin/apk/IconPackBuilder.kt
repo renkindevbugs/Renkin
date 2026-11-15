@@ -20,6 +20,7 @@ import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
+import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.getDrawableOrNull
 import dev.renkinProject.renkin.extension.toByteArray
@@ -283,7 +284,7 @@ class IconPackBuilder(
                 val legacyName = if (layeredIcon != null) "${appFileName}_legacy" else appFileName
 
                 // Themed builds keep the user's static tint; plain clocks retain their source rotation.
-                val clock = if (themed) null else app.sourcePackName
+                val clock = if (themed || app.createdIcon is ThemedGlyphDrawable) null else app.sourcePackName
                     ?.takeIf { it.isNotEmpty() }
                     ?.let { clockExporter.clockIconFor(app, it, app.createdIcon) }
 
@@ -320,6 +321,10 @@ class IconPackBuilder(
                     adaptive.background("@color/icon_background_color")
 
                     when (app.createdIcon) {
+                        is ThemedGlyphDrawable -> {
+                            adaptive.foreground(appFileName)
+                            createTintedMaskResource(apkModule, packageBlock, app.createdIcon.mask, appFileName + "_foreground")
+                        }
                         is AdaptiveIconPackDrawable -> {
                             adaptive.foreground(appFileName)
                             createOwnedBitmapResource(apkModule, packageBlock, app.createdIcon.foreground, appFileName + "_foreground")
@@ -680,13 +685,15 @@ class IconPackBuilder(
      * Any other bitmap keeps its own colours.
      */
     private fun createGlyphResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, themed: Boolean) {
-        if (!themed || !bitmap.isSingleColorGlyph()) {
-            createBitmapResource(apkModule, packageBlock, bitmap, name)
-            return
-        }
-        val mask = "${name}_mask"
-        createBitmapResource(apkModule, packageBlock, bitmap, mask)
-        createXmlDrawableResource(apkModule, packageBlock, TintedBitmapXml(mask, "@color/icon_color"), name)
+        if (themed && bitmap.isSingleColorGlyph()) createTintedMaskResource(apkModule, packageBlock, bitmap, name)
+        else createBitmapResource(apkModule, packageBlock, bitmap, name)
+    }
+
+    /** Writes [mask] under [name] as a bitmap the launcher tints with `@color/icon_color`. */
+    private fun createTintedMaskResource(apkModule: ApkModule, packageBlock: PackageBlock, mask: Bitmap, name: String) {
+        val maskName = "${name}_mask"
+        createBitmapResource(apkModule, packageBlock, mask, maskName)
+        createXmlDrawableResource(apkModule, packageBlock, TintedBitmapXml(maskName, "@color/icon_color"), name)
     }
 
     private fun generateBitmap(image: Bitmap, name: String): InputSource {

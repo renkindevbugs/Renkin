@@ -754,11 +754,13 @@ class MainViewModel @Inject constructor(
         primary: Source,
         primaryPackage: String,
         secondary: Source,
-        secondaryPackage: String
+        secondaryPackage: String,
+        livePrimaryPack: Boolean,
+        liveSecondaryPack: Boolean
     ) {
         launchProfileOperation(expected) {
             val selected = appProvider.selectIconSources(
-                expected, primary, primaryPackage, secondary, secondaryPackage
+                expected, primary, primaryPackage, secondary, secondaryPackage, livePrimaryPack, liveSecondaryPack
             )
             if (primary != Source.NONE) refresh(selected)
         }
