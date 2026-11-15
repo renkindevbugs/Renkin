@@ -3,14 +3,12 @@ package dev.renkinProject.renkin.apk
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuProvider
 
 enum class ShizukuState {
-    UNSUPPORTED,
     NOT_INSTALLED,
     NOT_RUNNING,
     OUTDATED,
@@ -32,7 +30,6 @@ object ShizukuSupport {
     )
 
     fun state(context: Context): ShizukuState {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return ShizukuState.UNSUPPORTED
         return runCatching {
             val binderAlive = Shizuku.pingBinder()
             when {
@@ -86,7 +83,6 @@ object ShizukuSupport {
     }
 
     fun observe(onChanged: () -> Unit): AutoCloseable {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return AutoCloseable {}
         val mainHandler = Handler(Looper.getMainLooper())
         val notifyChanged: () -> Unit = { mainHandler.post { onChanged() } }
         val binderReceived = Shizuku.OnBinderReceivedListener { notifyChanged() }

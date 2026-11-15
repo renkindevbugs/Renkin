@@ -156,10 +156,7 @@ private fun installerOptions(viewModel: MainViewModel): List<InstallerOption> {
     return remember(discovered, shizukuState, shizukuDetail) {
         discovered.map { option ->
             if (option.selection.method == InstallMethod.SHIZUKU) {
-                option.copy(
-                    description = shizukuDetail,
-                    available = shizukuState != ShizukuState.UNSUPPORTED
-                )
+                option.copy(description = shizukuDetail)
             } else {
                 option
             }
@@ -216,7 +213,6 @@ private fun shizukuActions(viewModel: MainViewModel): ShizukuActions {
 @Composable
 private fun shizukuDescription(state: ShizukuState): String = stringResource(
     when (state) {
-        ShizukuState.UNSUPPORTED -> R.string.shizukuUnsupported
         ShizukuState.NOT_INSTALLED -> R.string.shizukuNotInstalled
         ShizukuState.NOT_RUNNING -> R.string.shizukuNotRunning
         ShizukuState.OUTDATED -> R.string.shizukuOutdated

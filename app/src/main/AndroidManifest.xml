@@ -2,10 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Ackpine's Shizuku backend starts at Android 7; Renkin still supports Android 6 and
-         never loads that backend there. -->
-    <uses-sdk tools:overrideLibrary="ru.solrudev.ackpine.shizuku,rikka.shizuku.api" />
-
     <queries>
         <package android:name="ru.tech.imageresizershrinker" />
         <package android:name="moe.shizuku.privileged.api" />

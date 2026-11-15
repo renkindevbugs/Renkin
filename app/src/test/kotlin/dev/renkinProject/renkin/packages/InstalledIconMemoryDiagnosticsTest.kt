@@ -99,7 +99,7 @@ class InstalledIconMemoryDiagnosticsTest {
     }
 
     @Test
-    @Config(sdk = [23])
+    @Config(sdk = [24])
     fun minimumSdkCanInspectRegularBitmapsAndWrappers() {
         val pixels = bitmap()
         val result = inspectInstalledIconMemory(listOf(InsetDrawable(BitmapDrawable(null, pixels), 1)))

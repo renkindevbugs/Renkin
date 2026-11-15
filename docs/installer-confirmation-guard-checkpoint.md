@@ -76,3 +76,10 @@ Remaining manual checks on the installed debug candidate:
 
 The device-test rule prohibits operating the system installer. These remaining interactions
 must be performed by the developer; automated evidence does not replace their approval.
+
+## Superseded, 2026-11-15
+
+Ackpine 0.26.0 ships the same guard upstream (#221: `SessionCommitActivity` completes the
+session exceptionally and finishes on `ActivityNotFoundException`). Renkin now depends on the
+published `ackpine-core` again; the source adapter, its exclusion and the pinned submodule were
+removed.

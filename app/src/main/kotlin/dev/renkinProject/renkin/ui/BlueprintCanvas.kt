@@ -160,22 +160,22 @@ internal fun VerticalLabeledSlider(
     }
     val sliderState = rememberSliderState(
         value = displayValue,
-        valueRange = valueRange
+        trackRange = valueRange
     )
     SideEffect {
         if (!sliderState.isDragging) sliderState.value = displayValue
-        sliderState.onValueChange = { changed ->
-            // A custom callback takes ownership of state updates; keep the thumb under the
-            // finger during a drag, then let the external value drive settled/tapped changes.
-            if (sliderState.isDragging) sliderState.value = changed
-            onValueChange(
-                if (reverseValue) {
-                    valueRange.start + valueRange.endInclusive - changed
-                } else {
-                    changed
-                }
-            )
-        }
+    }
+    val onSliderChange: (Float) -> Unit = { changed ->
+        // Keep the thumb under the finger during a drag, then let the external value drive
+        // settled/tapped changes.
+        if (sliderState.isDragging) sliderState.value = changed
+        onValueChange(
+            if (reverseValue) {
+                valueRange.start + valueRange.endInclusive - changed
+            } else {
+                changed
+            }
+        )
     }
 
     Column(
@@ -193,15 +193,17 @@ internal fun VerticalLabeledSlider(
         if (centered) {
             VerticalSlider(
                 state = sliderState,
+                onValueChange = onSliderChange,
                 modifier = Modifier.weight(1f),
-                reverseDirection = true,
+                topToBottom = false,
                 track = { SliderDefaults.CenteredTrack(sliderState = it) }
             )
         } else {
             VerticalSlider(
                 state = sliderState,
+                onValueChange = onSliderChange,
                 modifier = Modifier.weight(1f),
-                reverseDirection = true
+                topToBottom = false
             )
         }
     }

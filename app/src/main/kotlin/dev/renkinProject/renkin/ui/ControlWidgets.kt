@@ -21,10 +21,12 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.rememberSliderState
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -227,10 +229,14 @@ fun LabeledSlider(
         )
     }
     if (centered) {
+        val sliderState = rememberSliderState(value = value, trackRange = valueRange)
+        SideEffect { if (!sliderState.isDragging) sliderState.value = value }
         Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = valueRange,
+            state = sliderState,
+            onValueChange = { changed ->
+                sliderState.value = changed
+                onValueChange(changed)
+            },
             onValueChangeFinished = onValueChangeFinished,
             track = { SliderDefaults.CenteredTrack(sliderState = it) }
         )

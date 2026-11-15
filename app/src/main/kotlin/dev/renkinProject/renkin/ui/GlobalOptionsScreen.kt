@@ -105,9 +105,10 @@ import dev.renkinProject.renkin.ui.theme.OnWallpaperTextShadow
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.ui.theme.CardShape
@@ -652,13 +653,15 @@ private fun SectionHeader(title: String, applies: Boolean, hazeState: HazeState)
         modifier = Modifier
             .fillMaxWidth()
             .clip(InnerShape)
-            .hazeEffect(
-                state = hazeState,
-                style = HazeStyle(
-                    backgroundColor = surface,
-                    tint = HazeTint(surface.copy(alpha = SECTION_HEADER_TINT_ALPHA)),
-                    blurRadius = 20.dp
-                )
+            .hazeBlur(
+                input = remember(hazeState) { HazeInput.Sources(hazeState) },
+                style = remember(surface) {
+                    HazeBlurStyle {
+                        backgroundColor(surface)
+                        colorEffects(listOf(HazeColorEffect.tint(surface.copy(alpha = SECTION_HEADER_TINT_ALPHA))))
+                        blurRadius(20.dp)
+                    }
+                }
             )
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically

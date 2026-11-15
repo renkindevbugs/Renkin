@@ -86,7 +86,7 @@ class RenkinNotifications {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .setGroup(iconAvailableGroupKey)
-            .setGroupAlertBehavior(if (android.os.Build.VERSION.SDK_INT < 24) NotificationCompat.GROUP_ALERT_SUMMARY else NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
             .setOnlyAlertOnce(true)
         if (largeIcon != null) builder.setLargeIcon(largeIcon)
 
@@ -152,7 +152,7 @@ class RenkinNotifications {
             .setStyle(style)
             .setGroup(iconAvailableGroupKey)
             .setGroupSummary(true)
-            .setGroupAlertBehavior(if (android.os.Build.VERSION.SDK_INT < 24) NotificationCompat.GROUP_ALERT_SUMMARY else NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .build()
