@@ -20,10 +20,10 @@ class ForegroundProfileActionsTest {
         var busy = 0
         val actions = ForegroundProfileActions(mutex) { busy++ }
         val job = launch { awaitCancellation() }
-        actions.launch(reset, true) { job }
+        assertTrue(actions.launch(reset, true) { job })
         assertEquals(reset, actions.progress.value)
         assertTrue(mutex.isLocked)
-        actions.launch(reset, false) { fail("Duplicate started"); Job() }
+        assertFalse(actions.launch(reset, false) { fail("Duplicate started"); Job() })
         assertEquals(1, busy)
         job.cancel()
         runCurrent()
@@ -38,7 +38,7 @@ class ForegroundProfileActionsTest {
         val mutex = Mutex(locked = true)
         var busy = 0
         val actions = ForegroundProfileActions(mutex) { busy++ }
-        actions.launch(reset, true) { fail("Contended action started"); Job() }
+        assertFalse(actions.launch(reset, true) { fail("Contended action started"); Job() })
         assertEquals(1, busy)
         assertNull(actions.progress.value)
         assertTrue(mutex.isLocked)

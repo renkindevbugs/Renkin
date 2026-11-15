@@ -117,6 +117,9 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
@@ -495,11 +498,22 @@ fun MainColumn(iconPacks: List<IconPack>) {
     )
 
     val introTargets = remember { IntroTargets() }
-    // No pull-to-refresh here on purpose: its nested-scroll handler interfered with the
-    // collapsing top bar (scroll glitches, freezes) — the app list reloads from Settings.
+    // The pull handler wraps the Scaffold, outside the top bar's nested-scroll connection: a
+    // downward overscroll re-expands the collapsed bar before it reaches the pull, and a
+    // reverse drag shrinks the pull before collapsing the bar. Inside the Scaffold it stole
+    // the bar's overscroll, and an enabled gate froze mid-gesture (July 2026 attempts).
+    // The refresh shows the profile skeleton with its own spinner, so the pull indicator
+    // retracts on release; a repeated pull meanwhile is ignored by the ViewModel.
+    val pullState = rememberPullToRefreshState()
     CompositionLocalProvider(LocalIntroTargets provides introTargets) {
         Scaffold(
-            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+            modifier = Modifier
+                .pullToRefresh(
+                    isRefreshing = false,
+                    state = pullState,
+                    onRefresh = viewModel::refreshAppsAndPacks
+                )
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = { TitleBar(scrollBehavior) },
             snackbarHost = { SnackbarHost(snackbarHostState) },
             floatingActionButton = {
@@ -538,12 +552,19 @@ fun MainColumn(iconPacks: List<IconPack>) {
                         }
                     }
                 }
-                ApplicationList(
-                    iconPacks, applicationState, packageFilter, sortOrder, filterNoIcon, filterFallback, filterLocked, listState,
-                    onShowAllApps = clearProblemFilters,
-                    activeProblemFilters = activeProblemFilters,
-                    onProblemFilterToggle = toggleProblemFilter
-                )
+                Box(Modifier.weight(1f)) {
+                    ApplicationList(
+                        iconPacks, applicationState, packageFilter, sortOrder, filterNoIcon, filterFallback, filterLocked, listState,
+                        onShowAllApps = clearProblemFilters,
+                        activeProblemFilters = activeProblemFilters,
+                        onProblemFilterToggle = toggleProblemFilter
+                    )
+                    PullToRefreshDefaults.Indicator(
+                        state = pullState,
+                        isRefreshing = false,
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    )
+                }
             }
         }
     }

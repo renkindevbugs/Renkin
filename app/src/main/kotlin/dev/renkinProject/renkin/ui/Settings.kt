@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Animation
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.BarChart
@@ -216,10 +215,10 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
             SettingsGroup {
                 SettingsRow(
                     Icons.Filled.Sync,
-                    stringResource(R.string.syncPacks),
-                    busy = viewModel.syncing
+                    stringResource(R.string.refreshAppsAndPacks),
+                    busy = viewModel.appsRefreshing
                 ) {
-                    viewModel.sync()
+                    viewModel.refreshAppsAndPacks()
                 }
                 val showRenkinPacks = prefs.getBooleanValue(ShowRenkinPacksKey)
                 SettingsRow(
@@ -231,13 +230,6 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     trailing = { Switch(checked = showRenkinPacks, onCheckedChange = null) }
                 ) {
                     viewModel.setShowRenkinPacks(!showRenkinPacks)
-                }
-                SettingsRow(
-                    Icons.Filled.Apps,
-                    stringResource(R.string.refreshApplicationList),
-                    busy = viewModel.appsRefreshing
-                ) {
-                    viewModel.refreshApps()
                 }
                 SettingsRow(Icons.Filled.BarChart, stringResource(R.string.statsButton)) {
                     showStats = true
