@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<issues format="6" by="lint 9.5.1" type="baseline" client="gradle" dependencies="false" name="AGP (9.5.1)" variant="all" version="9.5.1">
+<issues format="6" by="lint 9.2.1" type="baseline" client="gradle" dependencies="false" name="AGP (9.2.1)" variant="all" version="9.2.1">
 
     <issue
         id="EmptySuperCall"
@@ -120,17 +120,6 @@
             file="src/main/kotlin/dev/renkinProject/renkin/icon/creator/MaterialYouSchemes.kt"
             line="16"
             column="5"/>
-    </issue>
-
-    <issue
-        id="NewApi"
-        message="Call requires API level 26 (current min is 24): `android.graphics.drawable.AdaptiveIconDrawable#getForeground`"
-        errorLine1="    return this.foreground.toIconPackDrawable()"
-        errorLine2="                ~~~~~~~~~~">
-        <location
-            file="src/main/kotlin/dev/renkinProject/renkin/drawable/DrawableExtension.kt"
-            line="88"
-            column="17"/>
     </issue>
 
     <issue
@@ -965,7 +954,7 @@
         errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="1154"
+            line="1166"
             column="5"/>
     </issue>
 
@@ -976,15 +965,8 @@
         errorLine2="    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="1240"
+            line="1252"
             column="5"/>
-    </issue>
-
-    <issue
-        id="TrustAllX509TrustManager"
-        message="`checkServerTrusted` is empty, which could cause insecure network traffic due to trusting arbitrary TLS/SSL certificates presented by peers">
-        <location
-            file="C:/Users/jozef/.gradle/caches/modules-2/files-2.1/org.bouncycastle/bcpkix-jdk18on/1.77/ed953791ba0229747dd0fd9911e3d76a462acfd3/bcpkix-jdk18on-1.77.jar"/>
     </issue>
 
     <issue
@@ -1192,7 +1174,7 @@
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="1174"
+            line="1186"
             column="13"/>
     </issue>
 
@@ -1203,7 +1185,7 @@
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="1210"
+            line="1222"
             column="13"/>
     </issue>
 
@@ -1214,7 +1196,7 @@
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="1211"
+            line="1223"
             column="13"/>
     </issue>
 
@@ -1225,7 +1207,7 @@
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="1212"
+            line="1224"
             column="13"/>
     </issue>
 
@@ -1236,7 +1218,7 @@
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="1215"
+            line="1227"
             column="13"/>
     </issue>
 
@@ -1247,7 +1229,7 @@
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/res/values/strings.xml"
-            line="1216"
+            line="1228"
             column="13"/>
     </issue>
 
@@ -2053,7 +2035,7 @@
         errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle.kts"
-            line="188"
+            line="189"
             column="20"/>
     </issue>
 
@@ -2064,7 +2046,7 @@
         errorLine2="                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle.kts"
-            line="214"
+            line="215"
             column="24"/>
     </issue>
 
@@ -2075,7 +2057,7 @@
         errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="build.gradle.kts"
-            line="217"
+            line="218"
             column="25"/>
     </issue>
 

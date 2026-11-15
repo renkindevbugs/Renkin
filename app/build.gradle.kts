@@ -139,6 +139,7 @@ android {
 
     lint {
         baseline = file("lint-baseline.xml")
+        lintConfig = file("lint.xml")
         // Known issues live in the baseline; any new warning fails lint.
         warningsAsErrors = true
         // Version-freshness checks change whenever a library publishes, not when the code does.
