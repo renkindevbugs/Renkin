@@ -113,6 +113,10 @@ val InstallerChoiceConfirmedKey = booleanPreferencesKey(INSTALLER_CHOICE_CONFIRM
 val IncludeVectorKey = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
 val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
 val ExportThemedKey = booleanPreferencesKey(EXPORT_THEMED_NAME)
+// Refresh gives icons from a Material You pack (Lawnicons) live wallpaper colours. On by default.
+val MaterialYouPackLiveColorsKey = booleanPreferencesKey("MATERIAL_YOU_PACK_LIVE_COLORS")
+// The same for the Secondary source, chosen separately in the hero sheet.
+val SecondaryMaterialYouPackLiveColorsKey = booleanPreferencesKey("SECONDARY_MATERIAL_YOU_PACK_LIVE_COLORS")
 val IconColorKey = stringPreferencesKey(ICON_COLOR_NAME)
 val BackgroundColorKey = stringPreferencesKey(BACKGROUND_COLOR_NAME)
 // The pack-wide background can carry a gradient of its own, described like the colourizer's.
@@ -295,7 +299,7 @@ val GlobalBetaNoticeSeenKey = booleanPreferencesKey("GLOBAL_BETA_NOTICE_SEEN")
  * App-level settings (dark mode, watch interval, sort/filter) intentionally stay global.
  */
 private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
-    IncludeVectorKey, MonochromeKey, ExportThemedKey, CalendarIconsKey, OverrideIconKey,
+    IncludeVectorKey, MonochromeKey, ExportThemedKey, MaterialYouPackLiveColorsKey, SecondaryMaterialYouPackLiveColorsKey, CalendarIconsKey, OverrideIconKey,
     OutlineAddKey, GlobalShapeCropKey, GlobalColorizeKey, GlobalColorizeFlatKey,
     GlobalColorizeLightenKey,
     GlobalColorizeMonochromeKey, GlobalColorizeInverseKey,

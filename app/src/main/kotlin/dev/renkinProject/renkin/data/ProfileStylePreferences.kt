@@ -62,7 +62,9 @@ internal object ProfileStylePreferences {
             ),
             export = ProfileExportStyle(
                 includeVector = this[IncludeVectorKey], monochrome = this[MonochromeKey],
-                themed = this[ExportThemedKey], background = color(BackgroundStyleKeys)
+                themed = this[ExportThemedKey], materialYouPackLive = this[MaterialYouPackLiveColorsKey],
+                secondaryMaterialYouPackLive = this[SecondaryMaterialYouPackLiveColorsKey],
+                background = color(BackgroundStyleKeys)
             ),
             policy = ProfileOperationPolicy(
                 overrideExisting = this[OverrideIconKey], calendarIcons = this[CalendarIconsKey],

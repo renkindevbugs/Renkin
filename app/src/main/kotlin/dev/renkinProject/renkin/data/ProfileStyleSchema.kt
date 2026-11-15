@@ -56,6 +56,8 @@ internal object ProfileStyleSchema {
         add(BooleanField(IncludeVectorKey, "export.includeVector") { it.export.includeVector })
         add(BooleanField(MonochromeKey, "export.monochrome") { it.export.monochrome })
         add(BooleanField(ExportThemedKey, "export.themed") { it.export.themed })
+        add(BooleanField(MaterialYouPackLiveColorsKey, "export.materialYouPackLive") { it.export.materialYouPackLive })
+        add(BooleanField(SecondaryMaterialYouPackLiveColorsKey, "export.secondaryMaterialYouPackLive") { it.export.secondaryMaterialYouPackLive })
         addAll(colorFields(BackgroundStyleKeys, "export.background") { it.export.background })
         add(BooleanField(OverrideIconKey, "policy.overrideExisting") { it.policy.overrideExisting })
         add(BooleanField(CalendarIconsKey, "policy.calendarIcons") { it.policy.calendarIcons })

@@ -19,6 +19,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material3.Switch
+import androidx.compose.material.icons.filled.ColorLens
+import dev.renkinProject.renkin.data.MaterialYouPackLiveColorsKey
+import dev.renkinProject.renkin.data.SecondaryMaterialYouPackLiveColorsKey
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -438,6 +444,8 @@ fun HeroPackCard(
     }
 
     if (sheetOpen) {
+        val livePrimaryPack = preferences.getBooleanValue(MaterialYouPackLiveColorsKey, default = true)
+        val liveSecondaryPack = preferences.getBooleanValue(SecondaryMaterialYouPackLiveColorsKey, default = true)
         val expected = remember { runtimeState.sessionToken }
         LaunchedEffect(runtimeState.sessionToken) {
             if (expected != runtimeState.sessionToken) sheetOpen = false
@@ -448,14 +456,18 @@ fun HeroPackCard(
             selectedPackage = packName,
             selectedSecondarySource = preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT),
             selectedSecondaryPackage = preferences.getStringValue(SecondaryIconPackKey),
+            themedExport = preferences.getBooleanValue(ExportThemedKey),
+            livePrimaryPack = livePrimaryPack,
+            liveSecondaryPack = liveSecondaryPack,
             onDismiss = { sheetOpen = false },
-            onPick = commitSources@{ newSource, newPackage, secondary, secondaryPackage ->
+            onPick = commitSources@{ newSource, newPackage, secondary, secondaryPackage, livePrimary, liveSecondary ->
                 sheetOpen = false
                 if (newSource == source && newPackage == packName &&
                     secondary == preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT) &&
-                    secondaryPackage == preferences.getStringValue(SecondaryIconPackKey)) return@commitSources
+                    secondaryPackage == preferences.getStringValue(SecondaryIconPackKey) &&
+                    livePrimary == livePrimaryPack && liveSecondary == liveSecondaryPack) return@commitSources
                 // The view model keeps the preference write ordered before clear/refresh.
-                viewModel.selectIconSources(expected, newSource, newPackage, secondary, secondaryPackage)
+                viewModel.selectIconSources(expected, newSource, newPackage, secondary, secondaryPackage, livePrimary, liveSecondary)
             }
         )
     }
@@ -510,8 +522,11 @@ private fun PackPickerSheet(
     selectedPackage: String,
     selectedSecondarySource: Source,
     selectedSecondaryPackage: String,
+    themedExport: Boolean,
+    livePrimaryPack: Boolean,
+    liveSecondaryPack: Boolean,
     onDismiss: () -> Unit,
-    onPick: (Source, String, Source, String) -> Unit
+    onPick: (Source, String, Source, String, Boolean, Boolean) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val usage = remember(iconPacks) { viewModel.packUsageCounts() }
@@ -527,6 +542,8 @@ private fun PackPickerSheet(
     var secondary by rememberSaveable { mutableStateOf(selectedSecondarySource) }
     var secondaryPackage by rememberSaveable { mutableStateOf(selectedSecondaryPackage) }
     var editingSecondary by rememberSaveable { mutableStateOf(false) }
+    var livePrimary by rememberSaveable { mutableStateOf(livePrimaryPack) }
+    var liveSecondary by rememberSaveable { mutableStateOf(liveSecondaryPack) }
     val secondaryEnabled = primary == Source.ICON_PACK &&
         iconPacks.any { it.packageName == primaryPackage }
     LaunchedEffect(secondaryEnabled) {
@@ -537,6 +554,11 @@ private fun PackPickerSheet(
     }
     val activeSource = if (editingSecondary) secondary else primary
     val activePackage = if (editingSecondary) secondaryPackage else primaryPackage
+    // Each source keeps its own switch, shown while its tab is open and it is a Material You pack.
+    // Only such a pack has a themed icon of its own to keep live; the pack-wide Themed export
+    // already makes every icon follow the wallpaper.
+    val showLiveColours = !themedExport && activeSource == Source.ICON_PACK &&
+        iconPacks.any { it.packageName == activePackage && it.changesWithMaterialYouColors }
 
     var query by rememberSaveable { mutableStateOf("") }
     val trimmedQuery = query.trim()
@@ -635,6 +657,13 @@ private fun PackPickerSheet(
                 enabled = secondaryEnabled,
                 modifier = Modifier.weight(1f)
             ) { editingSecondary = true; query = "" }
+        }
+        AnimatedVisibility(visible = showLiveColours) {
+            LiveColoursCard(
+                packName = sourcePickerName(activeSource, activePackage, iconPacks),
+                enabled = if (editingSecondary) liveSecondary else livePrimary,
+                onToggle = { if (editingSecondary) liveSecondary = it else livePrimary = it }
+            )
         }
         // Outside the list so it stays reachable while scrolling — with a couple of dozen packs
         // installed, scrolling back up to search would defeat the point.
@@ -746,10 +775,51 @@ private fun PackPickerSheet(
             onClick = {
                 onPick(primary, primaryPackage,
                     secondary.takeIf { secondaryEnabled } ?: Source.NONE,
-                    secondaryPackage.takeIf { secondaryEnabled }.orEmpty())
+                    secondaryPackage.takeIf { secondaryEnabled }.orEmpty(),
+                    livePrimary, liveSecondary)
             },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
         ) { Text(stringResource(R.string.done)) }
+    }
+}
+
+/** The editor's Follow wallpaper colours card, for every icon the selected Material You pack gives. */
+@Composable
+private fun LiveColoursCard(packName: String, enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Surface(
+        shape = CardShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .toggleable(value = enabled, role = Role.Switch, onValueChange = onToggle)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.ColorLens,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(22.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.themedIconCard),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = stringResource(R.string.themedPackCardDesc, packName),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                )
+            }
+            Switch(checked = enabled, onCheckedChange = null)
+        }
     }
 }
 

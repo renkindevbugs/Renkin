@@ -10,6 +10,9 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.data.AppTarget
 import dev.renkinProject.renkin.data.setIconSources
+import dev.renkinProject.renkin.data.setBooleanValue
+import dev.renkinProject.renkin.data.MaterialYouPackLiveColorsKey
+import dev.renkinProject.renkin.data.SecondaryMaterialYouPackLiveColorsKey
 import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
@@ -1776,10 +1779,14 @@ class ApplicationProvider internal constructor(
         primary: Source,
         primaryPackage: String,
         secondary: Source,
-        secondaryPackage: String
+        secondaryPackage: String,
+        livePrimaryPack: Boolean,
+        liveSecondaryPack: Boolean
     ): ProfileSessionToken = runProfileOperation(expected) {
         requireRecipeAvailable(expected)
         context.dataStore.setIconSources(primary, primaryPackage, secondary, secondaryPackage)
+        context.dataStore.setBooleanValue(MaterialYouPackLiveColorsKey, livePrimaryPack)
+        context.dataStore.setBooleanValue(SecondaryMaterialYouPackLiveColorsKey, liveSecondaryPack)
         if (primary == Source.NONE) clearRefreshedIcons()
         sessionToken
     }

@@ -263,6 +263,7 @@
     <string name="themedEdit">Themed</string>
     <string name="themedEditHint">The icon becomes a one-colour glyph that follows your wallpaper colours and dark mode. Use Scale below to change its size.</string>
     <string name="themedIconCard">Follow wallpaper colours</string>
+    <string name="themedPackCardDesc">%1$s icons change with your wallpaper and dark mode</string>
     <string name="themedIconCardDesc">Keeps this pack\'s themed icon in your wallpaper colours</string>
     <string name="colorizeCancel">Cancel</string>
     <string name="colorizeSheetHint">Preview updates as you edit</string>
