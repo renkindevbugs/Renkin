@@ -24,6 +24,7 @@ import android.util.LruCache
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -40,6 +41,7 @@ import dev.renkinProject.renkin.drawable.ForegroundIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
+import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.foregroundVectorOrNull
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
@@ -534,10 +536,29 @@ class IconGenerator(
         mono.setTintList(null)
         mono.setBounds(0, 0, size, size)
         val mask = newArgbBitmap(size, size) { mono.draw(it) }
+        liveMaterialYouScheme()?.let { return ThemedGlyphDrawable(mask, it) }
 
         // Opaque results stay adaptive so the launcher applies its mask. A translucent background
         // takes the flat path below because an adaptive export would insert the pack background.
         return materialYouDrawable(recolorMaterialYouLayer(mask))
+    }
+
+    /**
+     * The Material You scheme the variant is painted in, when it is one of the wallpaper schemes.
+     * Such an icon stays live: the pack references that scheme's system colours, so it follows
+     * later wallpaper changes. Custom colours and gradients are the user's own and stay as painted.
+     */
+    private fun liveMaterialYouScheme(): Int? {
+        if (!supportDynamicColors()) return null
+        if (export.foregroundStyle?.mode == ColorizerMode.GRADIENT ||
+            export.background.style?.mode == ColorizerMode.GRADIENT) return null
+        val foreground = modifiers.effect.colorizer.firstColor
+        val background = export.background.color
+        return materialYouSchemes(ctx)
+            .indexOfFirst { (schemeForeground, schemeBackground) ->
+                schemeForeground.toArgb() == foreground && schemeBackground.toArgb() == background
+            }
+            .takeIf { it >= 0 }
     }
 
     /**
@@ -560,7 +581,7 @@ class IconGenerator(
      * The artwork's plate (its outer tone, or transparency) becomes the selected background and
      * the contrasting tone the foreground; see [materialYouForegroundCoverage].
      */
-    private fun generateMaterialYouFromOriginal(icon: Bitmap): BitmapIconDrawable {
+    private fun generateMaterialYouFromOriginal(icon: Bitmap): IconPackDrawable {
         val pixels = IntArray(icon.width * icon.height)
         icon.getPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
 
@@ -578,6 +599,17 @@ class IconGenerator(
 
         val foreground = Bitmap.createBitmap(icon.width, icon.height, Bitmap.Config.ARGB_8888)
         foreground.setPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
+
+        liveMaterialYouScheme()?.let { scheme ->
+            // The same 72dp-in-108dp placement as below, as a glyph the launcher tints.
+            val glyph = newArgbBitmap(icon.width, icon.height) { canvas ->
+                val insetScale = 1f / adaptiveIconScale
+                canvas.scale(insetScale, insetScale, icon.width / 2f, icon.height / 2f)
+                canvas.drawBitmap(foreground, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
+            }
+            foreground.recycle()
+            return ThemedGlyphDrawable(glyph, scheme)
+        }
 
         // Adaptive launchers display only the inner 72dp of a 108dp foreground. Inset the complete
         // original icon by that ratio before export; previewScale reverses the inset in the flat
