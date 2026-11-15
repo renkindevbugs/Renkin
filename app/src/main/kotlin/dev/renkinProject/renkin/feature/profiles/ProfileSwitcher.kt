@@ -120,10 +120,10 @@ fun ProfileSwitcherTitle() {
         scope.launch {
             shareCheckInProgress = true
             try {
-                when {
-                    viewModel.profileUsesIconPackStudio(profile.id) -> ipsWarningFor = profile
-                    hideShareWarning -> startShare(profile)
-                    else -> shareWarningFor = profile
+                when (viewModel.profileUsesIconPackStudio(profile.id)) {
+                    null -> Unit
+                    true -> ipsWarningFor = profile
+                    false -> if (hideShareWarning) startShare(profile) else shareWarningFor = profile
                 }
             } finally {
                 shareCheckInProgress = false

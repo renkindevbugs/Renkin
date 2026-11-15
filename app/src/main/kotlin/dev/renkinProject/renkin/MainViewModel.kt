@@ -1038,8 +1038,7 @@ class MainViewModel @Inject constructor(
             _toastEvents.trySend(refusal)
             return false
         }
-        buildSession.startBuild(expected)
-        return true
+        return buildSession.startBuild(expected)
     }
 
     // Records that [app] was hand-edited this session (so the build preview marks it "changed").
@@ -1718,24 +1717,35 @@ class MainViewModel @Inject constructor(
 
     /**
      * Uses the live list for the active profile so an unsaved IPS selection is not missed;
-     * inactive profiles can be read from their persisted rows.
+     * inactive profiles can be read from their persisted rows. Null when the read failed (the
+     * failure is already shown), so the share must not start.
      */
-    suspend fun profileUsesIconPackStudio(profileId: Long): Boolean =
-        if (profileId == activeProfileId && applicationsLoaded) {
-            applicationList.any { isIconPackStudioExport(it.sourcePackName.orEmpty()) }
-        } else {
-            backupManager.profileUsesIconPackStudio(profileId)
+    suspend fun profileUsesIconPackStudio(profileId: Long): Boolean? =
+        exportPreflight(R.string.profileExportFailed) {
+            if (profileId == activeProfileId && applicationsLoaded) {
+                applicationList.any { isIconPackStudioExport(it.sourcePackName.orEmpty()) }
+            } else {
+                backupManager.profileUsesIconPackStudio(profileId)
+            }
         }
 
     /** Full-backup counterpart: live active-profile rows plus every other saved profile. */
-    suspend fun backupUsesIconPackStudio(): Boolean {
+    suspend fun backupUsesIconPackStudio(): Boolean? = exportPreflight(R.string.backupExportFailed) {
         val activeProfileUsesIps = if (applicationsLoaded) {
             applicationList.any { isIconPackStudioExport(it.sourcePackName.orEmpty()) }
         } else {
             backupManager.profileUsesIconPackStudio(activeProfileId)
         }
-        return activeProfileUsesIps || backupManager.otherProfilesUseIconPackStudio(activeProfileId)
+        activeProfileUsesIps || backupManager.otherProfilesUseIconPackStudio(activeProfileId)
     }
+
+    private suspend fun exportPreflight(@StringRes failure: Int, check: suspend () -> Boolean): Boolean? =
+        runCatchingCancellable { check() }
+            .onFailure { error ->
+                Log.error("MainViewModel", "Export pre-check failed", error)
+                _toastEvents.trySend(failure)
+            }
+            .getOrNull()
 
     private val backupCoordinator = BackupUiCoordinator(
         provider = appProvider,

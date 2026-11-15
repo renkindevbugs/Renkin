@@ -77,13 +77,14 @@ class BuildInstallSession @Inject constructor(
         coordinator?.detach()
     }
 
-    internal fun startBuild(expected: ProfileSessionToken) {
-        val current = coordinator ?: return
-        if (current.busy) return
-        continueWork { current.build(expected) }
+    /** False when the build did not start, so callers must not run the build animation. */
+    internal fun startBuild(expected: ProfileSessionToken): Boolean {
+        val current = coordinator ?: return false
+        if (current.busy) return false
+        return continueWork { current.build(expected) }
     }
 
-    internal fun continueWork(start: () -> Unit) {
+    internal fun continueWork(start: () -> Unit): Boolean {
         workId++
         try {
             ContextCompat.startForegroundService(application, Intent(application, PackBuildForegroundService::class.java)
@@ -91,9 +92,10 @@ class BuildInstallSession @Inject constructor(
         } catch (error: RuntimeException) {
             Log.error("BuildInstallSession", "Could not start foreground build", error)
             onNotice(R.string.buildForegroundUnavailable)
-            return
+            return false
         }
         start()
+        return true
     }
 
     internal fun setForeground(value: Boolean) { foreground = value }
