@@ -72,6 +72,38 @@ private val releaseHistory = listOf(
             WhatsNewSection(
                 R.string.whatsNewSectionNew,
                 listOf(
+                    R.string.whatsNewWallpaperColours,
+                    R.string.whatsNewOnlineIconSets,
+                    R.string.whatsNewLiveCalendarClock,
+                    R.string.whatsNewPackPreviewGrid,
+                    R.string.whatsNewBuildAnimation
+                )
+            ),
+            WhatsNewSection(
+                R.string.whatsNewSectionChanged,
+                listOf(
+                    R.string.whatsNewMotionSettings,
+                    R.string.whatsNewSquircleCorners,
+                    R.string.whatsNewFasterBrowsing,
+                    R.string.whatsNewAndroid7
+                )
+            ),
+            WhatsNewSection(
+                R.string.whatsNewSectionFixed,
+                listOf(
+                    R.string.whatsNewOlderAndroidBuilds,
+                    R.string.whatsNewProfilePackIcons,
+                    R.string.whatsNewBuildMemory
+                )
+            )
+        )
+    ),
+    WhatsNewRelease(
+        "2026.11.01",
+        listOf(
+            WhatsNewSection(
+                R.string.whatsNewSectionNew,
+                listOf(
                     R.string.whatsNewGlobalStyleTools,
                     R.string.whatsNewEditRecovery,
                     R.string.whatsNewPackIdentity,

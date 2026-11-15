@@ -1,8 +1,8 @@
 package dev.renkinProject.renkin
 
 /** Release whose notes ship with this build. Bump both values when adding the next notes. */
-const val LATEST_WHATS_NEW_VERSION_CODE = 56
-const val LATEST_WHATS_NEW_VERSION_NAME = "2026.11.01"
+const val LATEST_WHATS_NEW_VERSION_CODE = 57
+const val LATEST_WHATS_NEW_VERSION_NAME = "2026.11.02"
 
 internal fun shouldShowWhatsNew(
     lastSeenVersion: Int?,

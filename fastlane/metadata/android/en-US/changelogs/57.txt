@@ -1,0 +1,8 @@
+• Follow wallpaper colours for any icon, Material You packs and the app icon.
+• Online icon sets by category, offline downloads and built-in Tabler icons.
+• Native calendar icons; calendar days and clocks keep modifiers.
+• Searchable icon grid in built packs and a golden build animation.
+• Motion settings per animation and adjustable squircle corners.
+• Faster browsing, editing and building, lower memory use.
+• Pack builds work again on Android 9 and 10.
+• Renkin now needs Android 7.0 or newer.
