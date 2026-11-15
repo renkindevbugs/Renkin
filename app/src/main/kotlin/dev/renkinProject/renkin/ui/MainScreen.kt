@@ -92,6 +92,8 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -1569,6 +1571,17 @@ fun OpenAppOptions(
         if (recoveredSessionId == null) draftOwner.closeLive(sessionId)
         onDismiss()
     }
+    // A filtered list (e.g. Missing) drops the row once its icon is applied, disposing this editor
+    // before its close animation reaches closeEditor; the stored icon must still end the draft.
+    var iconStored by remember(sessionId) { mutableStateOf(false) }
+    val hostActivity = LocalActivity.current
+    DisposableEffect(sessionId) {
+        onDispose {
+            if (iconStored && recoveredSessionId == null && hostActivity?.isChangingConfigurations != true) {
+                draftOwner.closeLive(sessionId)
+            }
+        }
+    }
     var pendingApplyId by rememberSaveable(sessionId) { mutableStateOf<Long?>(null) }
     val applyResults by viewModel.iconApplyResults.collectAsStateWithLifecycle()
     LaunchedEffect(pendingApplyId, applyResults) {
@@ -1603,6 +1616,7 @@ fun OpenAppOptions(
                 session.confirmedModifierUse, session.adjustments.loadedPresetId
             )
         )
+        if (!awaitApply) iconStored = true
     }, closeEditor, onIconClear = {
         closeEditor()
         viewModel.resetIcon(session.application, expected)
