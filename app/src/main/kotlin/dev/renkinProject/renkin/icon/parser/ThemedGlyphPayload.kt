@@ -20,6 +20,7 @@ internal object ThemedGlyphPayload {
                 startTag(TAG)
                 attribute("version", VERSION)
                 attribute("mask", icon.mask.toBase64(Bitmap.CompressFormat.PNG, 100))
+                if (icon.scheme != ThemedGlyphDrawable.SYSTEM_PALETTE) attribute("scheme", icon.scheme.toString())
                 endTag(TAG)
             }
         }
@@ -30,6 +31,9 @@ internal object ThemedGlyphPayload {
         require(node.getAttributeValue("version") == VERSION) { "Unsupported themed glyph payload" }
         val mask = bitmapFromBase64(requireNotNull(node.getAttributeValue("mask")))
         require(mask.width in 1..4096 && mask.height in 1..4096) { "Invalid themed glyph mask" }
-        return ThemedGlyphDrawable(mask)
+        // No scheme: the themed-icon colours that follow dark mode.
+        val scheme = node.getAttributeValue("scheme")?.toIntOrNull() ?: ThemedGlyphDrawable.SYSTEM_PALETTE
+        require(scheme >= ThemedGlyphDrawable.SYSTEM_PALETTE) { "Invalid themed glyph scheme" }
+        return ThemedGlyphDrawable(mask, scheme)
     }
 }

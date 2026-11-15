@@ -43,7 +43,7 @@ private fun captureArtwork(icon: IconPackDrawable, budget: EditorArtworkBudget, 
                 state?.let { EditorPackControls(it.selectedScheme, it.customForeground.detached(), it.customBackground.detached(), it.strokeScale) },
                 icon.originalForegroundPng?.let(::layer), icon.originalBackgroundPng?.let(::layer))
         }
-        is ThemedGlyphDrawable -> EditorThemedArtwork(captureArtwork(BitmapIconDrawable(icon.mask), budget, depth + 1))
+        is ThemedGlyphDrawable -> EditorThemedArtwork(captureArtwork(BitmapIconDrawable(icon.mask), budget, depth + 1), icon.scheme)
         is InsetIconDrawable -> {
             val child = icon.drawable as? IconPackDrawable ?: throw IllegalArgumentException("Unsupported editor inset child")
             EditorInsetArtwork(captureArtwork(child, budget, depth + 1), icon.dimensions.left, icon.dimensions.top,

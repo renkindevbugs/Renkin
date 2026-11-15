@@ -192,6 +192,10 @@ class RenkinPackStoreTest {
         assertTrue(restored.isAdaptiveIcon())
         assertEquals(AndroidColor.WHITE, restored.mask.getPixel(3, 3))
         assertEquals(0, restored.mask.getPixel(0, 0))
+        assertEquals(ThemedGlyphDrawable.SYSTEM_PALETTE, restored.scheme)
+
+        val schemed = store().decodeStored(ThemedGlyphDrawable(mask, scheme = 3).toDbString(), isXml = true, isAdaptive = true, Color.Black)
+        assertEquals(3, (schemed as ThemedGlyphDrawable).scheme)
     }
 
     @Test

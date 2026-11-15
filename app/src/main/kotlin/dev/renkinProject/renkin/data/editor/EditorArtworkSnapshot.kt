@@ -58,7 +58,7 @@ internal data class EditorInsetArtwork(
 ) : EditorArtworkSnapshot
 
 // A themed icon: its glyph mask, which the launcher tints (ThemedGlyphDrawable).
-internal data class EditorThemedArtwork(val glyph: EditorArtworkSnapshot) : EditorArtworkSnapshot
+internal data class EditorThemedArtwork(val glyph: EditorArtworkSnapshot, val scheme: Int = -1) : EditorArtworkSnapshot
 
 internal data class EditorVectorEntry(val path: EditorVectorPath, val filled: Boolean, val baseStroke: Float)
 internal data class EditorVectorInputs(

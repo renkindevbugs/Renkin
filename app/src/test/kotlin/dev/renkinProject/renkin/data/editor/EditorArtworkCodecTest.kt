@@ -89,6 +89,11 @@ class EditorArtworkCodecTest {
         assertTrue(captured is EditorThemedArtwork)
         assertArtwork(captured)
         assertTrue(restoreEditorArtwork(captured) is ThemedGlyphDrawable)
+
+        val schemed = captureEditorArtwork(ThemedGlyphDrawable(mask, scheme = 2))
+        assertEquals(2, (schemed as EditorThemedArtwork).scheme)
+        assertArtwork(schemed)
+        assertEquals(2, (restoreEditorArtwork(schemed) as ThemedGlyphDrawable).scheme)
     }
 
     @Test fun everyPathCommandAndVectorPropertySurvivesCodecAndNativeBinding() = runBlocking<Unit> {

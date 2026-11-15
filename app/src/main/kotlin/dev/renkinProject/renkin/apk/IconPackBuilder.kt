@@ -21,6 +21,8 @@ import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
 import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
+import dev.renkinProject.renkin.drawable.ThemedGlyphColors
+import dev.renkinProject.renkin.icon.creator.MATERIAL_YOU_SCHEME_COLOR_IDS
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.getDrawableOrNull
 import dev.renkinProject.renkin.extension.toByteArray
@@ -318,12 +320,13 @@ class IconPackBuilder(
                 }
                 else if (exportAsAdaptive && PackageVersion.is26OrMore()) {
                     val adaptive = AdaptiveIconXml()
-                    adaptive.background("@color/icon_background_color")
+                    val colors = themedColors(packageBlock, (app.createdIcon as? ThemedGlyphDrawable)?.scheme)
+                    adaptive.background(colors.background)
 
                     when (app.createdIcon) {
                         is ThemedGlyphDrawable -> {
                             adaptive.foreground(appFileName)
-                            createTintedMaskResource(apkModule, packageBlock, app.createdIcon.mask, appFileName + "_foreground")
+                            createTintedMaskResource(apkModule, packageBlock, app.createdIcon.mask, appFileName + "_foreground", colors.foreground)
                         }
                         is AdaptiveIconPackDrawable -> {
                             adaptive.foreground(appFileName)
@@ -690,10 +693,34 @@ class IconPackBuilder(
     }
 
     /** Writes [mask] under [name] as a bitmap the launcher tints with `@color/icon_color`. */
-    private fun createTintedMaskResource(apkModule: ApkModule, packageBlock: PackageBlock, mask: Bitmap, name: String) {
+    private fun createTintedMaskResource(
+        apkModule: ApkModule, packageBlock: PackageBlock, mask: Bitmap, name: String, tint: String = "@color/icon_color"
+    ) {
         val maskName = "${name}_mask"
         createBitmapResource(apkModule, packageBlock, mask, maskName)
-        createXmlDrawableResource(apkModule, packageBlock, TintedBitmapXml(maskName, "@color/icon_color"), name)
+        createXmlDrawableResource(apkModule, packageBlock, TintedBitmapXml(maskName, tint), name)
+    }
+
+    private class ThemedColors(val foreground: String, val background: String)
+
+    /**
+     * The colour references of a themed icon. A Material You scheme of the app-icon variant gets
+     * its own pair, which from Android 12 points at that scheme's system colours so the icon
+     * follows the wallpaper; older versions keep the colours the scheme had at build time.
+     */
+    private fun themedColors(packageBlock: PackageBlock, scheme: Int?): ThemedColors {
+        val system = ThemedColors("@color/icon_color", "@color/icon_background_color")
+        if (scheme == null) return system
+        val ids = MATERIAL_YOU_SCHEME_COLOR_IDS.getOrNull(scheme) ?: return system
+        val (foreground, background) = ThemedGlyphColors.current(scheme)
+        val names = listOf("renkin_scheme${scheme}_fg" to (foreground to ids.first), "renkin_scheme${scheme}_bg" to (background to ids.second))
+        for ((name, color) in names) {
+            createColorResource(packageBlock, name, String.format("#%08X", color.first))
+            if (PackageVersion.is31OrMore()) {
+                createRefColor31Resource(packageBlock, name, "@android:color/" + ctx.resources.getResourceEntryName(color.second))
+            }
+        }
+        return ThemedColors("@color/" + names[0].first, "@color/" + names[1].first)
     }
 
     private fun generateBitmap(image: Bitmap, name: String): InputSource {

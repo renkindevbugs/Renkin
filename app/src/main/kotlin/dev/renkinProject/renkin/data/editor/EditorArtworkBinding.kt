@@ -72,7 +72,8 @@ internal suspend fun restoreEditorArtwork(value: EditorArtworkSnapshot): IconPac
             is EditorInsetArtwork -> InsetIconDrawable(restore(value.child), Rect(value.left, value.top, value.right, value.bottom),
                 RectF(value.fractionLeft, value.fractionTop, value.fractionRight, value.fractionBottom))
             is EditorThemedArtwork -> ThemedGlyphDrawable(
-                requireNotNull(restore(value.glyph) as? BitmapIconDrawable) { "Invalid themed glyph" }.toBitmap()
+                requireNotNull(restore(value.glyph) as? BitmapIconDrawable) { "Invalid themed glyph" }.toBitmap(),
+                value.scheme
             )
         }
     }

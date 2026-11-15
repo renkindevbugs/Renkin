@@ -20,21 +20,24 @@ import android.view.Gravity
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
 import dev.renkinProject.renkin.extension.newArgbBitmap
+import dev.renkinProject.renkin.icon.creator.MATERIAL_YOU_SCHEME_COLOR_IDS
 import dev.renkinProject.renkin.icon.parser.ThemedGlyphPayload
 
 /**
  * A themed icon: [mask] is a one-colour glyph on the 108dp adaptive layer. The pack exports it as
  * a mask the launcher tints with the wallpaper accent, over a wallpaper-coloured background, so
  * the icon follows wallpaper and dark-mode changes. Renkin previews it in the current colours.
+ * [scheme] picks the colours: [SYSTEM_PALETTE] for the themed-icon pair that follows dark mode,
+ * or the index of a Material You scheme the app-icon variant offers, which keeps that pair.
  */
-class ThemedGlyphDrawable(mask: Bitmap) : IconPackDrawable() {
+class ThemedGlyphDrawable(mask: Bitmap, val scheme: Int = SYSTEM_PALETTE) : IconPackDrawable() {
     private val glyph = BitmapIconDrawable(mask)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     /** The glyph itself, shared with this drawable: read it, never recycle or mutate it. */
     val mask: Bitmap get() = glyph.toBitmap()
 
-    fun withMask(mask: Bitmap): ThemedGlyphDrawable = ThemedGlyphDrawable(mask)
+    fun withMask(mask: Bitmap): ThemedGlyphDrawable = ThemedGlyphDrawable(mask, scheme)
 
     override fun isAdaptiveIcon(): Boolean = true
     override fun toBitmap(): Bitmap = render(PREVIEW_SIZE)
@@ -65,7 +68,7 @@ class ThemedGlyphDrawable(mask: Bitmap) : IconPackDrawable() {
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
     private fun render(size: Int): Bitmap {
-        val (foreground, background) = ThemedGlyphColors.current()
+        val (foreground, background) = ThemedGlyphColors.current(scheme)
         val layerSize = (size * ADAPTIVE_ICON_SCALE).toInt().coerceAtLeast(1)
         val tinted = newArgbBitmap(layerSize, layerSize) { canvas ->
             canvas.drawBitmap(mask, null, Rect(0, 0, layerSize, layerSize), Paint(Paint.FILTER_BITMAP_FLAG).apply {
@@ -96,6 +99,8 @@ class ThemedGlyphDrawable(mask: Bitmap) : IconPackDrawable() {
         const val PREVIEW_SIZE = 500
         /** Masks are stored at this size: sharp on any launcher, small enough for the database. */
         const val MASK_SIZE = 500
+        // The themed-icon colours that follow dark mode (icon_color and icon_background_color in the pack).
+        const val SYSTEM_PALETTE = -1
     }
 }
 
@@ -104,9 +109,12 @@ class ThemedGlyphDrawable(mask: Bitmap) : IconPackDrawable() {
  * the pack, resolved from the system the way the launcher resolves them.
  */
 internal object ThemedGlyphColors {
-    fun current(): Pair<Int, Int> {
+    fun current(scheme: Int = ThemedGlyphDrawable.SYSTEM_PALETTE): Pair<Int, Int> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return Color.WHITE to Color.BLACK
         val system = Resources.getSystem()
+        MATERIAL_YOU_SCHEME_COLOR_IDS.getOrNull(scheme)?.let { (foreground, background) ->
+            return system.getColor(foreground, null) to system.getColor(background, null)
+        }
         val night = (system.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val foreground = if (night) android.R.color.system_accent1_200 else android.R.color.system_accent1_700
         val background = if (night) android.R.color.system_accent2_800 else android.R.color.system_accent1_100
