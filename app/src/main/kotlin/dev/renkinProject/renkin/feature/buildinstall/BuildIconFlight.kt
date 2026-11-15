@@ -247,7 +247,7 @@ internal class BuildSwirlState {
     internal var galaxyTexture by mutableStateOf<GalaxyTexture?>(null)
     // Decoded and sampled off the main thread with the galaxy; it does not depend on the screen.
     internal var packSymbol by mutableStateOf<PackSymbol?>(null)
-    // Off with Reduce icon motion: the two controls then simply crossfade with their screens.
+    // Off when the Build animation is reduced: the two controls then simply crossfade with their screens.
     var pillEnabled by mutableStateOf(true)
     internal val fab = PillEnd()
     internal val buildButton = PillEnd()

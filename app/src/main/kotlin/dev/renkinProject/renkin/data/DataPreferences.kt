@@ -107,8 +107,22 @@ val ExternalInstallerComponentKey = stringPreferencesKey(EXTERNAL_INSTALLER_COMP
 val AskInstallerEveryTimeKey = booleanPreferencesKey(ASK_INSTALLER_EVERY_TIME_NAME)
 /** App-wide, not per profile: offer other profiles' generated packs as icon sources (issue #25). */
 val ShowRenkinPacksKey = booleanPreferencesKey(SHOW_RENKIN_PACKS_NAME)
-/** App-wide: skip decorative icon flights without suppressing loading feedback. */
+/** Legacy app-wide switch: still the fallback for every [MotionPart] the user has not set on its own. */
 val ReduceIconMotionKey = booleanPreferencesKey("REDUCE_ICON_MOTION")
+
+/** Decorative animations the user can reduce one by one; loading feedback is never part of them. */
+enum class MotionPart(val key: Preferences.Key<Boolean>) {
+    ICON_FLIGHT(booleanPreferencesKey("REDUCE_MOTION_ICON_FLIGHT")),
+    EDITOR_TABS(booleanPreferencesKey("REDUCE_MOTION_EDITOR_TABS")),
+    BUILD(booleanPreferencesKey("REDUCE_MOTION_BUILD")),
+    ATTENTION(booleanPreferencesKey("REDUCE_MOTION_ATTENTION"))
+}
+
+fun Preferences.reducesMotion(part: MotionPart): Boolean =
+    this[part.key] ?: this[ReduceIconMotionKey] ?: false
+
+fun Preferences.reducedMotionParts(): Set<MotionPart> =
+    MotionPart.entries.filterTo(mutableSetOf()) { reducesMotion(it) }
 val InstallerChoiceConfirmedKey = booleanPreferencesKey(INSTALLER_CHOICE_CONFIRMED_NAME)
 val IncludeVectorKey = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
 val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
@@ -355,7 +369,7 @@ private val persistedPreferenceTypes: Map<String, (Any) -> Boolean> = buildMap {
     for (key in ProfileBooleanPrefKeys + listOf(
         AskInstallerEveryTimeKey, InstallerChoiceConfirmedKey, AppFilterNoIconKey,
         OnboardingSeenKey, HideProfileShareWarningKey, GlobalBetaNoticeSeenKey, ShowRenkinPacksKey, ReduceIconMotionKey, OledBlackKey, WatchAutomaticChecksKey
-    )) put(key.name) { it is Boolean }
+    ) + MotionPart.entries.map { it.key }) put(key.name) { it is Boolean }
     for (key in ProfileIntPrefKeys + listOf(
         DarkModeKey, InstallMethodKey, AppSortOrderKey, WatchCheckIntervalKey,
         AutoBackupIntervalKey, LastSeenWhatsNewVersionKey
@@ -520,6 +534,9 @@ internal fun MutablePreferences.replaceProfilePrefs(snapshot: String) {
 fun DataStore<Preferences>.getPreferencesValue(): Preferences {
     return remember(this) { observePreferences() }.collectAsStateWithLifecycle(initialValue = emptyPreferences()).value
 }
+
+@Composable
+fun DataStore<Preferences>.reducesMotion(part: MotionPart): Boolean = getPreferencesValue().reducesMotion(part)
 
 @Composable
 fun DataStore<Preferences>.getDefaultIconColor(): Color {

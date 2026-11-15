@@ -11,7 +11,8 @@ import dev.renkinProject.renkin.EditorDraftRecoveryViewModel
 import dev.renkinProject.renkin.InstallerChoiceReason
 import dev.renkinProject.renkin.expiredSessionMessage
 import dev.renkinProject.renkin.data.TextFontKey
-import dev.renkinProject.renkin.data.ReduceIconMotionKey
+import dev.renkinProject.renkin.data.MotionPart
+import dev.renkinProject.renkin.data.reducesMotion
 import dev.renkinProject.renkin.feature.watch.WatchNotificationProfileDialog
 import dev.renkinProject.renkin.data.observePreferences
 import java.util.UUID
@@ -900,7 +901,7 @@ fun ApplicationList(
     val bgColorValue = prefs.getBackgroundColor()
     val preferenceSnapshot by optionsViewModel.preferenceSnapshot.collectAsStateWithLifecycle()
     val themed = preferenceSnapshot.getBooleanValue(ExportThemedKey)
-    val reduceIconMotion = preferenceSnapshot.getBooleanValue(ReduceIconMotionKey)
+    val reduceIconFlight = preferenceSnapshot.reducesMotion(MotionPart.ICON_FLIGHT)
 
     // Install times refresh whenever the set of packages changes — keying on size alone missed
     // a reinstall or list refresh that swapped apps without changing the count. Looked up off
@@ -1070,7 +1071,7 @@ fun ApplicationList(
                     iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue,
                     sourceSession = sourceSession,
                     isLocked = indexedApp.value.createdIcon == null && indexedApp.value.key in lockedIconKeys,
-                    reduceIconMotion = reduceIconMotion,
+                    reduceIconFlight = reduceIconFlight,
                     modifier = Modifier.animateItem().then(introModifier)
                 )
             }
@@ -1208,7 +1209,7 @@ fun ApplicationItem(
     sourceSession: ProfileSessionToken,
     isLocked: Boolean,
     modifier: Modifier = Modifier,
-    reduceIconMotion: Boolean = false
+    reduceIconFlight: Boolean = false
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val dynamicColor = themed && supportDynamicColors()
@@ -1245,7 +1246,7 @@ fun ApplicationItem(
                     }
                     view.performTapHaptic()
                     if (viewModel.iconPackState.value.loaded) {
-                        iconFlight = if (reduceIconMotion) null else iconAnchor.launch()
+                        iconFlight = if (reduceIconFlight) null else iconAnchor.launch()
                         openAppOptions = true
                     } else {
                         toaster.show(syncWarning)
@@ -1698,7 +1699,7 @@ fun TitleBar(
                 Box(Modifier.weight(1f).introTarget(IntroTarget.PROFILE)) { ProfileSwitcherTitle() }
                 if (hasSavedEdit) {
                     SavedEditorDraftButton(
-                        reduceMotion = prefs.getBooleanValue(ReduceIconMotionKey),
+                        reduceMotion = prefs.reducesMotion(MotionPart.ATTENTION),
                         onClick = draftOwner::reviewSavedEdit
                     )
                 }

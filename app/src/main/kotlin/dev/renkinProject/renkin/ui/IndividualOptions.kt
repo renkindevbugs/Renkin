@@ -59,7 +59,8 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.AppTargetState
-import dev.renkinProject.renkin.data.ReduceIconMotionKey
+import dev.renkinProject.renkin.data.MotionPart
+import dev.renkinProject.renkin.data.reducesMotion
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.Source
 import androidx.compose.ui.platform.LocalContext
@@ -199,7 +200,7 @@ internal fun OptionsDialog(
     val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     val optionsViewModel: OptionsViewModel = hiltViewModel()
     val preferenceSnapshot by optionsViewModel.preferenceSnapshot.collectAsStateWithLifecycle()
-    val reduceIconMotion = preferenceSnapshot.getBooleanValue(ReduceIconMotionKey)
+    val reduceTabMotion = preferenceSnapshot.reducesMotion(MotionPart.EDITOR_TABS)
     val app = session.application
     val interactionAllowed = canInteract()
 
@@ -928,7 +929,7 @@ internal fun OptionsDialog(
                     OptionsBottomBar(
                         selectedTab = selectedTab,
                         modifierEnabled = draft.hasIcon,
-                        reduceMotion = reduceIconMotion,
+                        reduceMotion = reduceTabMotion,
                         onSelectTab = { selectedTab = it },
                         onModifierBlocked = {
                             toaster.show(selectIconMessage)
