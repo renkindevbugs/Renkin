@@ -610,10 +610,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
         profileActionProgress == null && !viewModel.showMissingPacksDialog && !viewModel.watchProfileMissing
     val lostUnsavedWork by viewModel.lostUnsavedWork.collectAsStateWithLifecycle()
     val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
-    lostUnsavedWork?.takeIf { startupPromptsAllowed && runtimeState.ready }?.let { lost ->
-        // Journaled icons restore only into their own profile, which is active after a restart
-        // unless the user switched first; otherwise the journal waits for a later start.
-        val offer = lost.offer?.takeIf { it.entries.isNotEmpty() && it.profileId == runtimeState.activeProfileId }
+    lostUnsavedWork?.takeIf { viewModel.lostWorkReviewOpen && runtimeState.ready }?.let { lost ->
+        val offer = lost.restorableOffer(runtimeState.activeProfileId)
         val marker = lost.marker
         when {
             offer != null -> RestoreLostIconsDialog(
@@ -621,7 +619,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 profileName = profiles.firstOrNull { it.id == offer.profileId }?.name.orEmpty(),
                 onRestore = { viewModel.restoreLostIcons(refreshAfter = false) },
                 onRefresh = { viewModel.restoreLostIcons(refreshAfter = true) },
-                onLater = viewModel::dismissLostUnsavedWork,
+                onLater = viewModel::closeLostWorkReview,
                 onDiscard = viewModel::discardLostIcons
             )
             marker != null -> LostUnsavedSessionDialog(
@@ -634,8 +632,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
             else -> LaunchedEffect(lost) { viewModel.dismissLostUnsavedWork() }
         }
     }
-    // Lost or restorable icons come first; the editor-draft offer is the more specific follow-up.
-    EditorDraftRecoveryHost(iconPacks, showPrompt = startupPromptsAllowed && lostUnsavedWork == null)
+    // Lost or restorable icons open from the title-bar icon first; the editor draft is the follow-up.
+    EditorDraftRecoveryHost(iconPacks, showPrompt = startupPromptsAllowed && !viewModel.lostWorkReviewOpen)
 }
 
 /**
@@ -1683,6 +1681,9 @@ fun TitleBar(
     }
     val draftOwner: EditorDraftRecoveryViewModel = hiltViewModel()
     val hasSavedEdit by draftOwner.hasSavedEdit.collectAsStateWithLifecycle()
+    val lostUnsavedWork by mainViewModel.lostUnsavedWork.collectAsStateWithLifecycle()
+    val runtimeState by mainViewModel.runtimeState.collectAsStateWithLifecycle()
+    val hasLostWork = runtimeState.ready && lostUnsavedWork?.hasSomethingToShow(runtimeState.activeProfileId) == true
 
     TitleBarContent(
         scrollBehavior = scrollBehavior,
@@ -1697,10 +1698,10 @@ fun TitleBar(
         title = {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f).introTarget(IntroTarget.PROFILE)) { ProfileSwitcherTitle() }
-                if (hasSavedEdit) {
+                if (hasLostWork || hasSavedEdit) {
                     SavedEditorDraftButton(
                         reduceMotion = prefs.reducesMotion(MotionPart.ATTENTION),
-                        onClick = draftOwner::reviewSavedEdit
+                        onClick = if (hasLostWork) mainViewModel::openLostWorkReview else draftOwner::reviewSavedEdit
                     )
                 }
             }
