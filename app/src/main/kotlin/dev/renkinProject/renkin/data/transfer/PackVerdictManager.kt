@@ -54,7 +54,7 @@ class PackVerdictManager(
     suspend fun recordInstalledPacks(packs: List<IconPack>) = withContext(Dispatchers.Default) {
         if (packs.isEmpty()) return@withContext
         val existing = repo.verdicts(packs.map { it.packageName })
-        repo.upsertVerdicts(packs.map { pack ->
+        repo.mergeVerdicts(packs.map { pack ->
             val row = existing[pack.packageName] ?: PackVerdict(pack.packageName)
             row.copy(label = pack.applicationName, seenInstalled = true)
         })
@@ -152,7 +152,7 @@ class PackVerdictManager(
                 updates.add(updated)
             }
         }
-        repo.upsertVerdicts(updates.distinctBy { it.packageName }.map { verdicts[it.packageName] ?: it })
+        repo.mergeVerdicts(updates.distinctBy { it.packageName }.map { verdicts[it.packageName] ?: it })
 
         candidates.filter { pack ->
             (verdicts[pack]?.verdict ?: VERDICT_UNKNOWN) != VERDICT_UNLISTED

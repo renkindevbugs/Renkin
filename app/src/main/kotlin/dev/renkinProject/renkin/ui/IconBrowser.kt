@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -232,7 +233,10 @@ internal fun CreateTab(
     // In-flight pack-row loads; > 0 (or a pending debounce) means the search is still resolving.
     var activeLoads by remember { mutableIntStateOf(0) }
     val trackLoad: (Boolean) -> Unit = remember { { loading -> activeLoads += if (loading) 1 else -1 } }
-    val busy = activeLoads > 0 || searchPending || searchQuery != debouncedQuery
+    // Every thumbnail reports its load; reading the counter directly recomposed the whole browser
+    // twice per thumbnail, so composition only observes the idle/loading flip.
+    val loadsActive by remember { derivedStateOf { activeLoads > 0 } }
+    val busy = loadsActive || searchPending || searchQuery != debouncedQuery
     LaunchedEffect(busy) { onBusyChange(busy) }
     // Pack first-install times, fetched only once the recently-installed sort is chosen.
     val packInstallTimes by produceState(emptyMap<String, Long>(), packSort, iconPacks) {

@@ -986,6 +986,7 @@
     <string name="editorKeepGlobalStyle">Keep Global style</string>
     <string name="editorGlobalStyleOff">Apply saves this icon without: %1$s</string>
     <string name="globalOptionsApplyFailed">Applying global modifiers failed</string>
+    <string name="globalOptionsLoadFailed">Couldn\'t load the global modifiers. Close this screen and try again.</string>
     <string name="globalApplying">Applying…</string>
     <string name="globalApplyCount">Apply to %1$d</string>
     <string name="globalSaveStyle">Save style</string>

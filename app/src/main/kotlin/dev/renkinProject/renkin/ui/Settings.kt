@@ -311,10 +311,10 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     scope.launch {
                         backupCheckInProgress = true
                         try {
-                            if (viewModel.backupUsesIconPackStudio()) {
-                                showIpsBackupWarning = true
-                            } else {
-                                exportBackupLauncher.launch(BackupManager.defaultFileName())
+                            when (viewModel.backupUsesIconPackStudio()) {
+                                true -> showIpsBackupWarning = true
+                                false -> exportBackupLauncher.launch(BackupManager.defaultFileName())
+                                null -> Unit
                             }
                         } finally {
                             backupCheckInProgress = false

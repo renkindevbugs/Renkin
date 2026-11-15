@@ -77,4 +77,13 @@ class AtomicFileWritesTest {
         val error = assertThrows(IOException::class.java) { AtomicFile(file).writeVerified("next".toByteArray()) }
         assertEquals("Cannot publish metadata.json", error.message)
     }
+
+    @Test fun committedDataIncludesTheBackupAnInterruptedWriteLeaves() {
+        val file = target()
+        assertFalse(AtomicFile(file).hasCommittedData())
+
+        File(file.path + ".bak").writeText("previous")
+
+        assertTrue(AtomicFile(file).hasCommittedData())
+    }
 }

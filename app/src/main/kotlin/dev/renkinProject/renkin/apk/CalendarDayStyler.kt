@@ -9,6 +9,7 @@ import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
+import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.globalModifierOptions
 import dev.renkinProject.renkin.icon.creator.hasVisibleModifierEffect
@@ -61,6 +62,11 @@ internal class CalendarDayStyler(
             val app = appsByComponent[target.toComponentInfo()]
             if (app == null) {
                 if (source is CalendarSource.App) dropped += target
+                continue
+            }
+            // A themed icon follows the wallpaper; fixed-colour day bitmaps would freeze its colours.
+            if (app.createdIcon is ThemedGlyphDrawable) {
+                dropped += target
                 continue
             }
             val days = (1..31).mapNotNull { day -> raw.drawables[prefix + day]?.let { day to it } }.toMap()

@@ -270,6 +270,10 @@ class IconPackBuilder(
 
         val vectorBrush = ReferenceBrush("@color/icon_color")
 
+        // Calendar days are fixed-colour bitmaps, so a themed pack keeps the static icon, like clocks.
+        val calendarMappings = if (themed) emptyMap() else calendarIcons
+        val calendarDays = if (themed) emptyMap() else calendarIconsDrawable
+
         val totalIcons = apps.count { it.createdIcon != null }
         val appFileNames = uniqueDrawableFileNames(apps)
         val ambiguousClasses = ambiguousActivityClasses(apps)
@@ -414,12 +418,12 @@ class IconPackBuilder(
             }
         }
 
-        for (calendarIcon in calendarIcons) {
+        for (calendarIcon in calendarMappings) {
             checkActive()
             appfilterXml.calendar(calendarIcon.key.packageName, calendarIcon.key.activityName, calendarIcon.value)
         }
 
-        for (drawable in calendarIconsDrawable) {
+        for (drawable in calendarDays) {
             checkActive()
             val day = drawable.value
             val bitmap = if (day is IconPackDrawable) day.toBitmap() else day.toSafeBitmapOrNull()
@@ -453,7 +457,7 @@ class IconPackBuilder(
         // Flat icon list as a compiled string-array — the format icon pickers and the old
         // theme engines look up via resources.getIdentifier("icon_pack", "array", pkg).
         val allDrawables = apps.filter { it.createdIcon != null }.map { appFileNames.getValue(it.key) } +
-            calendarIconsDrawable.keys
+            calendarDays.keys
         createStringArrayResource(packageBlock, "icon_pack", allDrawables)
         createStringArrayResource(packageBlock, "all", allDrawables)
         createPreviewResources(apkModule, packageBlock, appFileNames)
