@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- BouncyCastle (pulled in by the APK signer) ships a trust-all manager we never use; its
+         location is an absolute Gradle-cache path, so a baseline entry cannot match on CI. -->
+    <issue id="TrustAllX509TrustManager">
+        <ignore regexp="bcpkix-jdk18on" />
+    </issue>
+</lint>
