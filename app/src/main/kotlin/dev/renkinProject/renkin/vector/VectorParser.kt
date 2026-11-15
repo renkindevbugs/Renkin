@@ -75,7 +75,10 @@ class VectorParser(val resources: Resources, private val defaultColor: Color = C
         val scaleY = node.getAttributeValue("scaleY")?.toFloat() ?: DefaultScaleY
         val translateX = node.getAttributeValue("translateX")?.toFloat() ?: DefaultTranslationX
         val translateY = node.getAttributeValue("translateY")?.toFloat() ?: DefaultTranslationY
-        val clipPathData: List<PathNode> = EmptyPath
+        val clipPathData: List<PathNode> = node.children.firstOrNull { it.name == "clip-path" }
+            ?.getAttributeValue("pathData")
+            ?.let { PathParser().parsePathString(it).toNodes() }
+            ?: EmptyPath
 
         builder.addGroup(
             name,

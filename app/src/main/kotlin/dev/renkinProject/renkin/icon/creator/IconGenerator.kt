@@ -63,7 +63,7 @@ import dev.renkinProject.renkin.packages.PackageVersion
 import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.vector.PathConverter.Companion.toNodes
-import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyAndRemoveGroup
+import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyAndKeepClipGroups
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.editStrokePaths
 import kotlinx.coroutines.CancellationException
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.resizeAndCenter
@@ -1101,7 +1101,7 @@ class IconGenerator(
     @RequiresApi(Build.VERSION_CODES.O)
     private fun fixAdaptiveIconSize(adaptiveIconDrawable: AdaptiveIconDrawable) {
         val vector = adaptiveIconDrawable.foregroundVectorOrNull()
-        vector?.resizeAndCenter()?.applyAndRemoveGroup()?.scaleAtCenter(adaptiveIconScale)
+        vector?.resizeAndCenter()?.applyAndKeepClipGroups()?.scaleAtCenter(adaptiveIconScale)
     }
 
     private companion object {

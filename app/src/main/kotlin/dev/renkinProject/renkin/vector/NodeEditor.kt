@@ -165,11 +165,13 @@ abstract class NodeEditor(val relative: Boolean) {
         private val nodeY: Float,
         relative: Boolean
     ) : BaseEditor(nodeX, nodeY, 0F, 0F, 0F, 0F, relative) {
+        // A rotated H/V segment is a diagonal line. Relative segments rotate as a vector; an
+        // absolute one needs the pen position, so callers rewrite such paths as explicit nodes
+        // first (VectorEditor.rotateNodes) and an unconverted absolute node is left unchanged.
         override fun rotate(rotation: Float, pivotX: Float, pivotY: Float): PathNode {
-            val x1 = if (rotation == 180F) -nodeX else nodeX
-            val y1 = if (rotation == 180F) -nodeY else nodeY
+            if (rotation % 360F == 0F || !relative) return createNode(nodeX, nodeY, 0F, 0F, 0F, 0F)
 
-            return createNode(x1, y1, 0F, 0F, 0F, 0F)
+            return RelativeLineToEditor(PathNode.RelativeLineTo(nodeX, nodeY)).rotate(rotation, pivotX, pivotY)
         }
     }
 
