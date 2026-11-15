@@ -781,16 +781,32 @@ class MainViewModel @Inject constructor(
     /** Unsaved work a previous process held when Android ended it; offered or explained after startup. */
     val lostUnsavedWork = unsavedSessionMonitor.lostWork
 
-    /** OK on the notice, or Not now on the restore offer: the journal stays for a later start. */
-    fun dismissLostUnsavedWork() = unsavedSessionMonitor.dismiss()
+    /**
+     * Lost or restorable work never opens by itself at startup; the title-bar restore icon opens
+     * this review, and Not now only closes it so the icon stays.
+     */
+    var lostWorkReviewOpen by mutableStateOf(false)
+        private set
+
+    fun openLostWorkReview() { lostWorkReviewOpen = true }
+
+    fun closeLostWorkReview() { lostWorkReviewOpen = false }
+
+    /** OK on the notice: the journal stays for a later start. */
+    fun dismissLostUnsavedWork() {
+        lostWorkReviewOpen = false
+        unsavedSessionMonitor.dismiss()
+    }
 
     fun discardLostIcons() {
+        lostWorkReviewOpen = false
         launchUserAction(R.string.profileOperationFailed) { unsavedSessionMonitor.closeOffer() }
     }
 
     /** Restores the offered hand-made icons; with [refreshAfter] also regenerates refresh output. */
     fun restoreLostIcons(refreshAfter: Boolean) {
         val offer = lostUnsavedWork.value?.offer ?: return
+        lostWorkReviewOpen = false
         unsavedSessionMonitor.dismiss()
         launchProfileOperation { expected ->
             val restored = appProvider.restoreUnsavedIcons(expected, offer)
@@ -803,6 +819,7 @@ class MainViewModel @Inject constructor(
 
     fun refreshAfterLostSession() {
         val lost = lostUnsavedWork.value?.marker
+        lostWorkReviewOpen = false
         unsavedSessionMonitor.dismiss()
         if (lost != null && lost.profileId == activeProfileId && startupComplete) refresh()
     }
