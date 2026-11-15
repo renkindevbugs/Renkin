@@ -40,11 +40,7 @@ class LetterGenerator(ctx: Context, fontPath: String = "", ownedTypeface: Typefa
         ?: ResourcesCompat.getFont(ctx, R.font.arcticonssans_regular)!!
 
     fun generateFirstLetter(appName: String, color: Int, strokeWidth: Float, maxSize: Int): Drawable {
-        var text = appName.trim()
-        if (text.isNotEmpty()) {
-            text = text.substring(0, 1)
-        }
-
+        val text = appName.trim().takeCodePoints(1)
         return TextDrawable(text, font, 200F, color, strokeWidth, maxSize, maxSize)
     }
 
