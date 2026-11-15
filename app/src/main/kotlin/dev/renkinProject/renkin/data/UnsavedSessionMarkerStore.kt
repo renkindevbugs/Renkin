@@ -34,7 +34,7 @@ class UnsavedSessionMarkerStore @Inject constructor(@param:ApplicationContext pr
     private val mutex = Mutex()
 
     suspend fun read(): UnsavedSessionMarker? = mutex.withLock { withContext(Dispatchers.IO) {
-        if (!file.baseFile.exists()) return@withContext null
+        if (!file.hasCommittedData()) return@withContext null
         try {
             decode(String(file.readFully(), Charsets.UTF_8))
         } catch (error: Exception) {

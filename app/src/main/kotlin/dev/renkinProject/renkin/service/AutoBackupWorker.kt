@@ -67,18 +67,20 @@ class AutoBackupWorker(appContext: Context, params: WorkerParameters) :
                             ?: throw IOException("Cannot open automatic backup for writing")
                     }
                 }
+                // A completed backup must survive cancellation, a failed bookkeeping write or a
+                // failed retention scan, so it stops being cleanup-eligible as soon as it is written.
+                val completedUri = outputUri
+                outputUri = null
                 StorageOperationGate.run {
                     applicationContext.dataStore.edit { current ->
                         if (current[AutoBackupTreeUriKey] == treeUri.toString()) {
                             current[LastAutoBackupDigestKey] = digest
-                            current[LastAutoBackupDocumentUriKey] = outputUri?.toString() ?: previousDocument
+                            current[LastAutoBackupDocumentUriKey] = completedUri?.toString() ?: previousDocument
                             current[LastAutoBackupAtKey] = System.currentTimeMillis()
                             current.remove(LastAutoBackupFailedAtKey)
                         }
                     }
                 }
-                // A completed backup must survive cancellation or a failed retention scan.
-                outputUri = null
                 if (!unchanged) {
                     try {
                         deleteExpiredBackups(treeUri)

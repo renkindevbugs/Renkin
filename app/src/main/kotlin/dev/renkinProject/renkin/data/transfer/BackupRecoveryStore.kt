@@ -13,6 +13,7 @@ import dev.renkinProject.renkin.data.StorageRecoveryState
 import dev.renkinProject.renkin.data.StorageRecoverySnapshotException
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.syncDirectory
+import dev.renkinProject.renkin.data.hasCommittedData
 import dev.renkinProject.renkin.data.writeVerified
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.dataStore
@@ -46,12 +47,12 @@ internal class BackupRecoveryStore(private val context: Context) {
     fun pendingSnapshot(): Snapshot? = readPointer(pending)?.let(::readSnapshot)
     fun previousSnapshot(): Snapshot? = readPointer(previous)?.let(::readSnapshot)
 
-    fun hasPreviousState(): Boolean = hasPointer(previous)
+    fun hasPreviousState(): Boolean = previous.hasCommittedData()
 
     fun discardPreviousState() {
-        if (hasPointer(pending)) throw IOException("Recovery is still pending")
+        if (pending.hasCommittedData()) throw IOException("Recovery is still pending")
         previous.delete()
-        if (hasPointer(previous)) throw IOException("Cannot discard previous saved state")
+        if (previous.hasCommittedData()) throw IOException("Cannot discard previous saved state")
         syncDirectory(root)
         cleanup()
     }
@@ -171,7 +172,7 @@ internal class BackupRecoveryStore(private val context: Context) {
     }
 
     fun activate(snapshot: Snapshot) {
-        if (hasPointer(pending)) throw IOException("An interrupted restore still requires recovery")
+        if (pending.hasCommittedData()) throw IOException("An interrupted restore still requires recovery")
         writeAtomic(pending, JSONObject().put("id", snapshot.directory.name))
         syncDirectory(root)
     }
@@ -203,7 +204,7 @@ internal class BackupRecoveryStore(private val context: Context) {
 
     fun clearPending() {
         pending.delete()
-        if (hasPointer(pending)) throw IOException("Cannot finish storage recovery")
+        if (pending.hasCommittedData()) throw IOException("Cannot finish storage recovery")
         syncDirectory(root)
     }
 
@@ -348,7 +349,7 @@ internal class BackupRecoveryStore(private val context: Context) {
     }
 
     private fun readPointer(pointer: AtomicFile): String? {
-        if (!hasPointer(pointer)) return null
+        if (!pointer.hasCommittedData()) return null
         val text = pointer.openRead().bufferedReader(Charsets.UTF_8).use { it.readText() }
         val id = decodeMetadata { parseBackupJson(text).getString("id") }
         if (!validId(id)) throw StorageRecoverySnapshotException("Invalid recovery identity")
@@ -400,8 +401,6 @@ internal class BackupRecoveryStore(private val context: Context) {
     }
 
     private fun validId(id: String): Boolean = Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").matches(id)
-
-    private fun hasPointer(file: AtomicFile): Boolean = file.baseFile.exists() || File(file.baseFile.path + ".bak").exists()
 
     // Live writes are never activated unless the pointer/manifest was actually finalized.
     private fun writeAtomic(file: AtomicFile, data: JSONObject) =
