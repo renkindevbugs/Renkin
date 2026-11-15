@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The font and pinned Ackpine core sources are Git submodules.
+          # The font is a Git submodule.
           submodules: recursive
           persist-credentials: false
 
@@ -48,9 +48,6 @@ jobs:
             app/build/reports/lint-results-debug.*
             app/build/reports/roborazzi/
             app/build/outputs/screenshots_comparison/
-            compat/ackpine-core/build/reports/tests/
-            compat/ackpine-core/build/test-results/testDebugUnitTest/
-            compat/ackpine-core/build/reports/lint-results-debug.*
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

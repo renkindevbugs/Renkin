@@ -33,7 +33,7 @@ class RenkinNotificationsTest {
     )
 
     @Test
-    @Config(sdk = [23, 26, 33])
+    @Config(sdk = [24, 26, 33])
     fun allowedPublicationPostsSuggestionAndSummary() {
         post()
         assertEquals(2, RevokingNotificationManagerShadow.attempts)

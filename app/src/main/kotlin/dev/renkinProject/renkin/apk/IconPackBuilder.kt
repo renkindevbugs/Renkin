@@ -513,7 +513,7 @@ class IconPackBuilder(
 
     @Suppress(SuppressSameParameterValue)
     private fun setSdkVersions(manifest: ResXmlElement, minSdkVersion: Int, targetSdkVersion: Int) {
-        val useSdk = manifest.createChildElement(AndroidManifestBlock.TAG_uses_sdk)
+        val useSdk = manifest.newElement(AndroidManifestBlock.TAG_uses_sdk)
 
         val minSdk = useSdk.getOrCreateAndroidAttribute(
             AndroidManifestBlock.NAME_minSdkVersion,
@@ -530,7 +530,7 @@ class IconPackBuilder(
 
     private fun createMainActivity(manifest: AndroidManifestBlock, changesWithMaterialYouColors: Boolean) {
         val application = manifest.orCreateApplicationElement
-        val activity = application.createChildElement(AndroidManifestBlock.TAG_activity)
+        val activity = application.newElement(AndroidManifestBlock.TAG_activity)
         // The preview grid sits on the user's wallpaper by default.
         activity.getOrCreateAndroidAttribute("theme", android.R.attr.theme)
             .setTypeAndData(ValueType.REFERENCE, android.R.style.Theme_Material_Wallpaper_NoTitleBar)
@@ -573,10 +573,10 @@ class IconPackBuilder(
     }
 
     private fun createIntentFilter(activity: ResXmlElement, actions: Array<String>, categories: Array<String>) {
-        val intentFilter = activity.createChildElement(AndroidManifestBlock.TAG_intent_filter)
+        val intentFilter = activity.newElement(AndroidManifestBlock.TAG_intent_filter)
 
         for (actionValue in actions) {
-            val action = intentFilter.createChildElement(AndroidManifestBlock.TAG_action)
+            val action = intentFilter.newElement(AndroidManifestBlock.TAG_action)
             val attribute = action.getOrCreateAndroidAttribute(
                 AndroidManifestBlock.NAME_name,
                 AndroidManifestBlock.ID_name
@@ -585,7 +585,7 @@ class IconPackBuilder(
         }
 
         for (categoryValue in categories) {
-            val category = intentFilter.createChildElement(AndroidManifestBlock.TAG_category)
+            val category = intentFilter.newElement(AndroidManifestBlock.TAG_category)
             val attribute = category.getOrCreateAndroidAttribute(
                 AndroidManifestBlock.NAME_name,
                 AndroidManifestBlock.ID_name
@@ -769,7 +769,7 @@ class IconPackBuilder(
     private fun buildDex(apkModule: ApkModule) {
         val dex = DexFile.createDefault()
         for (asset in PACK_SMALI_ASSETS) {
-            dex.fromSmali(SmaliReader(ctx.assets.toByteArray(asset)))
+            dex.getOrCreateFirst().fromSmali(SmaliReader(ctx.assets.toByteArray(asset)))
         }
         apkModule.add(ByteInputSource(getBytesFromDex(dex), "classes.dex"))
     }
@@ -778,7 +778,7 @@ class IconPackBuilder(
         dex.refresh()
         dex.version = apiToDexVersion(minSdkVersion)
         dex.clearEmptySections()
-        dex.sortSection(SectionType.getR8Order())
+        dex.forEach { it.sortSection(SectionType.getR8Order()) }
         dex.shrink()
         dex.refreshFull()
         val bytes = dex.bytes

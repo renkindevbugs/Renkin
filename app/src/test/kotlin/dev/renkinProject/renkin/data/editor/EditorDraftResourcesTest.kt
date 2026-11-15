@@ -47,7 +47,7 @@ class EditorDraftResourcesTest {
     }
 
     @Test
-    @Config(sdk = [23, 26, 27, 33])
+    @Config(sdk = [24, 26, 27, 33])
     @GraphicsMode(GraphicsMode.Mode.LEGACY)
     fun uploadKeepsExactBytesAndAtomicProtectedOpenAcrossSdkBoundary() = runBlocking {
         val file = png()
@@ -65,7 +65,7 @@ class EditorDraftResourcesTest {
         assertThrows(IllegalArgumentException::class.java) { EditorDraftResource(EditorDraftResourceKind.FONT, "x".repeat(65537), byteArrayOf(1)) }
     }
 
-    @Config(sdk = [23, 26, 27, 33])
+    @Config(sdk = [24, 26, 27, 33])
     @GraphicsMode(GraphicsMode.Mode.LEGACY)
     @Test fun bundledFontIsCapturedAsOwnedBytesWithoutASystemPath() = runBlocking {
         val captured = reader.font("")

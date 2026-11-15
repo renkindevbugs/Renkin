@@ -1,32 +1,31 @@
 [versions]
-ackpineCore = "0.25.4"
+ackpineCore = "0.27.0"
 shizuku = "13.1.5"
-agp = "8.13.2"
-androidx-activityCompose = "1.10.1"
-androidx-appcompat = "1.7.0"
-androidx-core-ktx = "1.15.0"
-androidx-core-splashscreen = "1.0.1"
-androidx-espresso-core = "3.6.1"
-androidx-material = "1.12.0"
-androidx-lifecycle = "2.9.4"
-androidx-test-junit = "1.2.1"
-arsclib = "1.3.5"
-bom = "2025.10.00"
-colorpickerCompose = "1.1.2"
-# 1.6.x is the last Haze line built on Compose UI 1.8; 1.7+ requires Compose 1.12.
-haze = "1.6.10"
-datastorePreferences = "1.1.3"
-hilt = "2.58"
-hiltNavigationCompose = "1.2.0"
+agp = "9.2.1"
+androidx-activityCompose = "1.13.0"
+androidx-appcompat = "1.8.0"
+androidx-core-ktx = "1.19.1"
+androidx-core-splashscreen = "1.2.0"
+androidx-espresso-core = "3.7.0"
+androidx-material = "1.14.0"
+androidx-lifecycle = "2.11.0"
+androidx-test-junit = "1.3.0"
+arsclib = "1.4.0"
+bom = "2026.09.00"
+colorpickerCompose = "1.3.0"
+haze = "2.1.0"
+datastorePreferences = "1.3.0"
+hilt = "2.60.1"
+hiltNavigationCompose = "1.4.0"
 junit = "4.13.2"
-robolectric = "4.14.1"
-roborazzi = "1.41.0"
+robolectric = "4.18"
+roborazzi = "1.79.0"
 kotlin = "2.3.21"
-kotlinx-collections-immutable = "0.4.0"
-ksp = "2.3.12"
-material3Android = "1.5.0-alpha14"
+kotlinx-collections-immutable = "0.5.2"
+ksp = "2.3.14"
+material3Android = "1.5.0-rc01"
 roomKtx = "2.8.5"
-workRuntime = "2.9.1"
+workRuntime = "2.12.0"
 windowManager = "1.5.1"
 androidSvg = "1.4"
 imageTracer = "1.0.3"
@@ -35,24 +34,19 @@ apksigner = "1.0.3"
 
 desugar-jdk-libs-nio = "2.1.5"
 
-android-compileSdk = "36"
-android-minSdk = "23"
+android-compileSdk = "37"
+android-minSdk = "24"
 android-targetSdk = "35"
 
 [libraries]
 kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "kotlinx-collections-immutable" }
 ackpine-core = { module = "ru.solrudev.ackpine:ackpine-core", version.ref = "ackpineCore" }
-ackpine-api = { module = "ru.solrudev.ackpine:ackpine-api", version.ref = "ackpineCore" }
-ackpine-runtime = { module = "ru.solrudev.ackpine:ackpine-runtime", version.ref = "ackpineCore" }
 ackpine-ktx = { module = "ru.solrudev.ackpine:ackpine-ktx", version.ref = "ackpineCore" }
 ackpine-shizuku = { module = "ru.solrudev.ackpine:ackpine-shizuku", version.ref = "ackpineCore" }
 shizuku-api = { module = "dev.rikka.shizuku:api", version.ref = "shizuku" }
 shizuku-provider = { module = "dev.rikka.shizuku:provider", version.ref = "shizuku" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "androidx-core-ktx" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "androidx-core-splashscreen" }
-androidx-startup = { module = "androidx.startup:startup-runtime", version = "1.1.1" }
-androidx-concurrent-futures = { module = "androidx.concurrent:concurrent-futures", version = "1.3.0" }
-androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "roomKtx" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activityCompose" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
@@ -71,6 +65,7 @@ androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navig
 arscLib = { module = "io.github.reandroid:ARSCLib", version.ref = "arsclib" }
 colorpicker-compose = { module = "com.github.skydoves:colorpicker-compose", version.ref = "colorpickerCompose" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
 android-svg = { module = "com.caverock:androidsvg", version.ref = "androidSvg" }
 imagetracer-compose = { group = "com.github.Alembicons", name = "ImageTracerCompose", version.ref = "imageTracer" }
 cannyedge-compose = { group = "com.github.Alembicons", name = "TGCannyEdgeCompose", version.ref = "cannyEdge" }
@@ -86,8 +81,6 @@ android-tools-desugar-jdk-libs-nio = { group = "com.android.tools", name = "desu
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-android-library = { id = "com.android.library", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }

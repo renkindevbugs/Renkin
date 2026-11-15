@@ -1120,9 +1120,9 @@ private fun ProblemFilterButtons(
                 onCheckedChange = { onToggle(filter) },
                 shapes = when {
                     // A lone button must follow the connected rule, not the standalone one:
-                    // ToggleButtonDefaults.shapes() is round when unchecked and SQUARE when
+                    // ToggleButtonDefaults.shapesFor() is round when unchecked and SQUARE when
                     // checked — the inverse of a button group, where checked goes fully round.
-                    entries.size == 1 -> ToggleButtonDefaults.shapes(
+                    entries.size == 1 -> ToggleButtonDefaults.shapesFor(ToggleButtonDefaults.size).copy(
                         shape = ShapeDefaults.Small,
                         checkedShape = ButtonGroupDefaults.connectedButtonCheckedShape
                     )
@@ -1130,13 +1130,13 @@ private fun ProblemFilterButtons(
                     index == entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
                     else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                 },
-                colors = ToggleButtonDefaults.toggleButtonColors(
+                colors = ToggleButtonDefaults.colors(
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     checkedContainerColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     checkedContentColor = MaterialTheme.colorScheme.primaryContainer
                 ),
-                contentPadding = ToggleButtonDefaults.ContentPadding
+                contentPadding = ToggleButtonDefaults.contentPaddingFor(ToggleButtonDefaults.size)
             ) {
                 Icon(
                     imageVector = if (selected) icons.second else icons.first,

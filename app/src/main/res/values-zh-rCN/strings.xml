@@ -39,7 +39,6 @@
     <string name="installerAskEveryTime">每次都询问</string>
     <string name="installerAskEveryTimeDescription">每当生成的图标包准备安装时，显示此安装器选择器。</string>
     <string name="installerAskEveryTimeEnabled">每次安装前都会打开安装器选择器</string>
-    <string name="shizukuUnsupported">Shizuku 安装需要 Android 7 或更高版本，将使用系统安装器。</string>
     <string name="shizukuNotInstalled">Shizuku 未安装，将使用系统安装器。</string>
     <string name="shizukuOpenApp">打开 Shizuku</string>
     <string name="shizukuNotRunning">Shizuku 未运行，在可用之前将使用系统安装器。</string>

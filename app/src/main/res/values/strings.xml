@@ -46,7 +46,6 @@
     <string name="installerAskEveryTime">Ask every time</string>
     <string name="installerAskEveryTimeDescription">Show this installer picker whenever a generated icon pack is ready to install.</string>
     <string name="installerAskEveryTimeEnabled">Installer picker will open before each installation</string>
-    <string name="shizukuUnsupported">Shizuku installation requires Android 7 or newer. The system installer will be used.</string>
     <string name="shizukuNotInstalled">Shizuku isn\'t installed. The system installer will be used.</string>
     <string name="shizukuOpenApp">Open Shizuku</string>
     <string name="shizukuNotRunning">Shizuku is not running. The system installer will be used until it becomes available.</string>

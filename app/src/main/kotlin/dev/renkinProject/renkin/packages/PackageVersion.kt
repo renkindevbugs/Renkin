@@ -5,18 +5,6 @@ import androidx.annotation.ChecksSdkIntAtLeast
 
 class PackageVersion {
     companion object {
-        fun is22OrMore(): Boolean {
-            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1
-        }
-
-        fun is23OrMore(): Boolean {
-            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
-        }
-
-        fun is24OrMore(): Boolean {
-            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
-        }
-
         fun is25OrMore(): Boolean {
             return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1
         }

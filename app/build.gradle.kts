@@ -5,7 +5,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.ksp)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.hilt.android)
@@ -84,16 +83,6 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    applicationVariants.all {
-        val variant = this
-        variant.outputs
-            .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
-            .forEach { output ->
-                val outputFileName = "Renkin-v${variant.versionName}.apk"
-                output.outputFileName = outputFileName
-            }
-    }
-
     signingConfigs {
         localProps.getProperty("renkin.keystore")?.let { keystorePath ->
             create("release") {
@@ -165,11 +154,6 @@ android {
     }
 }
 
-// The guarded source build supplies core; published installer plugins must not pull in a second copy.
-configurations.configureEach {
-    exclude(group = "ru.solrudev.ackpine", module = "ackpine-core")
-}
-
 dependencies {
     implementation(libs.kotlinx.collections.immutable)
     implementation(libs.androidx.core.ktx)
@@ -181,7 +165,7 @@ dependencies {
 
     //Apk related
     implementation(libs.arscLib)
-    implementation(project(":ackpine-core-compat"))
+    implementation(libs.ackpine.core)
     implementation(libs.ackpine.ktx)
     implementation(libs.ackpine.shizuku)
     implementation(libs.shizuku.api)
@@ -200,6 +184,7 @@ dependencies {
     implementation(libs.androidx.window)
     implementation(libs.colorpicker.compose)
     implementation(libs.haze)
+    implementation(libs.haze.blur)
     implementation("androidx.compose.material:material-icons-extended")
 
     //Data
@@ -300,6 +285,11 @@ val prepareArcticonsFont = tasks.register<GeneratedFontResources>("prepareArctic
 androidComponents {
     onVariants { variant ->
         variant.sources.res?.addGeneratedSourceDirectory(prepareArcticonsFont) { it.outputDirectory }
+        // The release step expects app/release/Renkin-v<versionName>.apk; the public variant API has
+        // no output file name, so this goes through the implementation type.
+        variant.outputs.filterIsInstance<com.android.build.api.variant.impl.VariantOutputImpl>().forEach { output ->
+            output.outputFileName.set(output.versionName.map { "Renkin-v$it.apk" })
+        }
     }
 }
 
