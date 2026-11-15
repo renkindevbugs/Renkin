@@ -729,11 +729,16 @@ private fun PackUsageDialog(onDismiss: () -> Unit) {
     val entries by produceState<List<ApplicationProvider.PackUsage>?>(null) {
         value = viewModel.packUsageEntries()
     }
-    PackUsageDialog(entries, onDismiss)
+    val liveIcons = remember { viewModel.liveIconCount() }
+    PackUsageDialog(entries, onDismiss, liveIcons)
 }
 
 @Composable
-internal fun PackUsageDialog(entries: List<ApplicationProvider.PackUsage>?, onDismiss: () -> Unit) {
+internal fun PackUsageDialog(
+    entries: List<ApplicationProvider.PackUsage>?,
+    onDismiss: () -> Unit,
+    liveIcons: ApplicationProvider.LiveIconCount? = null
+) {
     MessageDialog(
         onDismissRequest = onDismiss,
         badge = { if (entries == null) DialogProgressBadge() else DialogBadge(Icons.Filled.BarChart, DialogTone.Neutral) },
@@ -742,7 +747,7 @@ internal fun PackUsageDialog(entries: List<ApplicationProvider.PackUsage>?, onDi
         actions = { DialogPrimaryAction(stringResource(R.string.ok), onDismiss) }
     ) {
         if (!entries.isNullOrEmpty()) {
-            PackUsageContent(entries)
+            PackUsageContent(entries, liveIcons)
         }
     }
 }

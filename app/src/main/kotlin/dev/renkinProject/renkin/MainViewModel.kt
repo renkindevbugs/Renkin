@@ -1264,6 +1264,8 @@ class MainViewModel @Inject constructor(
     /** Live count of icons taken from each pack — orders the per-app icon picker. */
     fun packUsageCounts(): Map<String, Int> = appProvider.packUsageCounts()
 
+    fun liveIconCount(): ApplicationProvider.LiveIconCount = appProvider.liveIconCount()
+
     /** How many installed apps each pack has an icon for — the pack picker's coverage line. */
     fun packMatchedAppCounts(): Map<String, Int> = appProvider.packMatchedAppCounts()
 

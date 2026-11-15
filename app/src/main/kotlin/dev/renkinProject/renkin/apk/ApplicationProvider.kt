@@ -54,6 +54,7 @@ import dev.renkinProject.renkin.data.restoreBuiltPrimarySource
 import dev.renkinProject.renkin.data.online.onlineAttributionLabel
 import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
@@ -2166,6 +2167,14 @@ class ApplicationProvider internal constructor(
 
     /** One row of the "pack usage" stats: how many stored icons really came from [packageName]. */
     data class PackUsage(val packageName: String, val label: String, val count: Int, val installed: Boolean)
+
+    /** Of the profile's icons ([total]), how many follow the wallpaper colours ([live]). */
+    data class LiveIconCount(val live: Int, val total: Int)
+
+    fun liveIconCount(): LiveIconCount {
+        val icons = applicationList.mapNotNull { it.createdIcon }
+        return LiveIconCount(icons.count { it is ThemedGlyphDrawable }, icons.size)
+    }
 
     /**
      * Per-pack usage by TRUE origin for the stats dialog: counts include the locked
