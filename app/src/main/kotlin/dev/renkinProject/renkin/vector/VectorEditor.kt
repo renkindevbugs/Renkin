@@ -5,16 +5,26 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.DefaultPivotX
+import androidx.compose.ui.graphics.vector.DefaultPivotY
+import androidx.compose.ui.graphics.vector.DefaultRotation
+import androidx.compose.ui.graphics.vector.DefaultScaleX
+import androidx.compose.ui.graphics.vector.DefaultScaleY
+import androidx.compose.ui.graphics.vector.DefaultTranslationX
+import androidx.compose.ui.graphics.vector.DefaultTranslationY
+import androidx.compose.ui.graphics.vector.PathNode
 import androidx.compose.ui.graphics.vector.toPath
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.MutableVectorGroup
+import dev.renkinProject.renkin.drawable.MutableVectorNode
 import dev.renkinProject.renkin.drawable.MutableVectorPath
 import dev.renkinProject.renkin.vector.NodeEditor.Companion.rotate
 import dev.renkinProject.renkin.vector.NodeEditor.Companion.scale
 import dev.renkinProject.renkin.vector.NodeEditor.Companion.translate
 import dev.renkinProject.renkin.vector.PathConverter.Companion.isRelative
 import dev.renkinProject.renkin.vector.PathConverter.Companion.toAbsolute
+import dev.renkinProject.renkin.vector.PathConverter.Companion.toNodes
 import dev.renkinProject.renkin.vector.brush.GradientMatrix
 import dev.renkinProject.renkin.vector.brush.ReferenceBrush
 import dev.renkinProject.renkin.vector.brush.SolidColorShader
@@ -44,6 +54,7 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
     private fun resizeGroup(group: MutableVectorGroup, scaleX: Float, scaleY: Float, translateX: Float, translateY: Float) {
         group.translationX *= scaleX
         group.translationY *= scaleY
+        group.clipPathData.scaleNodes(scaleX, scaleY, translateX, translateY)
 
         for (child in group.children) {
             if (child is MutableVectorGroup) {
@@ -74,6 +85,8 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
     }
 
     private fun scaleGroup(group: MutableVectorGroup, scaleX: Float, scaleY: Float, pivotX: Float, pivotY: Float) {
+        group.clipPathData.scaleNodes(scaleX, scaleY, pivotX, pivotY)
+
         for (child in group.children) {
             if (child is MutableVectorGroup) {
                 scaleGroup(child, scaleX, scaleY, pivotX, pivotY)
@@ -86,19 +99,13 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
     }
 
     private fun scalePath(path: MutableVectorPath, scaleX: Float, scaleY: Float, pivotX: Float, pivotY: Float) {
-        for (i in path.pathData.indices) {
-            var node = path.pathData[i]
-
-            if (i == 0 && node.isRelative()) {
-                node = node.toAbsolute()
-            }
-
-            path.pathData[i] = node.scale(scaleX, scaleY, pivotX, pivotY)
-        }
+        path.pathData.scaleNodes(scaleX, scaleY, pivotX, pivotY)
         path.transformBrushes(GradientMatrix.scale(scaleX, scaleY, pivotX, pivotY))
     }
 
     private fun translateGroup(group: MutableVectorGroup, translateX: Float, translateY: Float) {
+        group.clipPathData.translateNodes(translateX, translateY)
+
         for (child in group.children) {
             if (child is MutableVectorGroup) {
                 translateGroup(child, translateX, translateY)
@@ -111,29 +118,46 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
     }
 
     private fun translatePath(path: MutableVectorPath, translateX: Float, translateY: Float) {
-        for (i in path.pathData.indices) {
-            var node = path.pathData[i]
-
-            if (i == 0 && node.isRelative()) {
-                node = node.toAbsolute()
-            }
-
-            path.pathData[i] = node.translate(translateX, translateY)
-        }
+        path.pathData.translateNodes(translateX, translateY)
         path.transformBrushes(GradientMatrix.translate(translateX, translateY))
     }
 
     private fun rotatePath(path: MutableVectorPath, rotation: Float, pivotX: Float, pivotY: Float) {
-        for (i in path.pathData.indices) {
-            var node = path.pathData[i]
+        if (rotation % 360F == 0F) return
+
+        path.pathData.rotateNodes(rotation, pivotX, pivotY)
+        path.transformBrushes(GradientMatrix.rotate(rotation, pivotX, pivotY))
+    }
+
+    private fun MutableList<PathNode>.scaleNodes(scaleX: Float, scaleY: Float, pivotX: Float, pivotY: Float) =
+        rewriteNodes { it.scale(scaleX, scaleY, pivotX, pivotY) }
+
+    private fun MutableList<PathNode>.translateNodes(translateX: Float, translateY: Float) =
+        rewriteNodes { it.translate(translateX, translateY) }
+
+    private fun MutableList<PathNode>.rotateNodes(rotation: Float, pivotX: Float, pivotY: Float) {
+        if (rotation % 360F == 0F) return
+
+        // An absolute H/V depends on the pen position, which a single node does not know; once
+        // rotated it becomes a diagonal line, so the path is first rewritten as explicit M/L/C/Q/Z.
+        if (any { it is PathNode.HorizontalTo || it is PathNode.VerticalTo }) {
+            val explicitNodes = toPath().toNodes()
+            clear()
+            addAll(explicitNodes)
+        }
+        rewriteNodes { it.rotate(rotation, pivotX, pivotY) }
+    }
+
+    private fun MutableList<PathNode>.rewriteNodes(transform: (PathNode) -> PathNode) {
+        for (i in indices) {
+            var node = this[i]
 
             if (i == 0 && node.isRelative()) {
                 node = node.toAbsolute()
             }
 
-            path.pathData[i] = node.rotate(rotation, pivotX, pivotY)
+            this[i] = transform(node)
         }
-        path.transformBrushes(GradientMatrix.rotate(rotation, pivotX, pivotY))
     }
 
     // Gradients live in path coordinates, so they follow every rewrite of the path data.
@@ -203,34 +227,59 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
         return mutableVector
     }
 
-    private fun applyAndRemoveGroup(): ImageVectorDrawable {
-        val paths = applyGroup(mutableVector.root)
-        mutableVector.root.children.clear()
-        mutableVector.root.children.addAll(paths)
+    /** Bakes every group transform into its paths and drops all groups, clip-paths included. */
+    private fun applyAndRemoveGroup(): ImageVectorDrawable = flattenGroups(keepClipGroups = false)
+
+    /**
+     * Like [applyAndRemoveGroup], but a group with a clip-path survives as an identity-transform
+     * group holding its baked clip and children, because a clip cannot be baked into paths.
+     */
+    private fun applyAndKeepClipGroups(): ImageVectorDrawable = flattenGroups(keepClipGroups = true)
+
+    private fun flattenGroups(keepClipGroups: Boolean): ImageVectorDrawable {
+        val root = mutableVector.root
+        val children = flattenChildren(root, keepClipGroups)
+        children.forEach { applyGroup(root, it) }
+        root.children.clear()
+        root.children.addAll(children)
 
         return mutableVector
     }
 
-    private fun applyGroup(group: MutableVectorGroup): MutableList<MutableVectorPath> {
-        val newChildren = mutableListOf<MutableVectorPath>()
+    private fun flattenChildren(group: MutableVectorGroup, keepClipGroups: Boolean): List<MutableVectorNode> {
+        val flattened = mutableListOf<MutableVectorNode>()
 
         for (child in group.children) {
-            if (child is MutableVectorGroup) {
-                val paths = applyGroup(child)
-
-                for (path in paths) {
-                    applyGroup(group, path)
-                    newChildren.add(path)
-                }
-            }
-
-            if (child is MutableVectorPath) {
-                applyGroup(group, child)
-                newChildren.add(child)
+            when (child) {
+                is MutableVectorPath -> flattened.add(child)
+                is MutableVectorGroup -> flattened.addAll(flattenGroup(child, keepClipGroups))
             }
         }
 
-        return newChildren
+        return flattened
+    }
+
+    private fun flattenGroup(group: MutableVectorGroup, keepClipGroups: Boolean): List<MutableVectorNode> {
+        val children = flattenChildren(group, keepClipGroups)
+        children.forEach { applyGroup(group, it) }
+
+        if (!keepClipGroups || group.clipPathData.isEmpty()) return children
+
+        applyGroupToNodes(group, group.clipPathData)
+        group.resetTransform()
+        group.children.clear()
+        group.children.addAll(children)
+        return listOf(group)
+    }
+
+    private fun applyGroup(group: MutableVectorGroup, node: MutableVectorNode) {
+        when (node) {
+            is MutableVectorPath -> applyGroup(group, node)
+            is MutableVectorGroup -> {
+                applyGroupToNodes(group, node.clipPathData)
+                node.children.forEach { applyGroup(group, it) }
+            }
+        }
     }
 
     private fun applyGroup(group: MutableVectorGroup, path: MutableVectorPath) {
@@ -241,9 +290,25 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
         path.strokeLineWidth *= strokeScale(group.scaleX, group.scaleY)
     }
 
+    private fun applyGroupToNodes(group: MutableVectorGroup, nodes: MutableList<PathNode>) {
+        nodes.scaleNodes(group.scaleX, group.scaleY, group.pivotX, group.pivotY)
+        nodes.rotateNodes(group.rotation, group.pivotX, group.pivotY)
+        nodes.translateNodes(group.translationX, group.translationY)
+    }
+
+    private fun MutableVectorGroup.resetTransform() {
+        rotation = DefaultRotation
+        pivotX = DefaultPivotX
+        pivotY = DefaultPivotY
+        scaleX = DefaultScaleX
+        scaleY = DefaultScaleY
+        translationX = DefaultTranslationX
+        translationY = DefaultTranslationY
+    }
+
     /** Position first, then scale — the same order as the established bitmap modifier path. */
     private fun applyModifierTransform(scale: Float, offsetX: Float, offsetY: Float): ImageVectorDrawable {
-        applyAndRemoveGroup()
+        applyAndKeepClipGroups()
         translateGroup(
             mutableVector.root,
             offsetX * mutableVector.viewportWidth,
@@ -264,7 +329,7 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
 
     /** Applies an inset as x'=left+scale*x, y'=top+scale*y while keeping paths editable. */
     private fun applyViewportInset(left: Float, top: Float, scaleX: Float, scaleY: Float): ImageVectorDrawable {
-        applyAndRemoveGroup()
+        applyAndKeepClipGroups()
         scaleGroup(mutableVector.root, scaleX, scaleY, 0f, 0f)
         scaleStrokeWidths(mutableVector.root, scaleX, scaleY)
         translateGroup(
@@ -376,6 +441,11 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
         fun ImageVectorDrawable.applyAndRemoveGroup(): ImageVectorDrawable {
             val editor = VectorEditor(this)
             return editor.applyAndRemoveGroup()
+        }
+
+        fun ImageVectorDrawable.applyAndKeepClipGroups(): ImageVectorDrawable {
+            val editor = VectorEditor(this)
+            return editor.applyAndKeepClipGroups()
         }
 
         fun ImageVectorDrawable.applyModifierTransform(

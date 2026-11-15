@@ -53,6 +53,13 @@ abstract class BaseVectorXml: XmlMemoryFile() {
         endTag("group")
     }
 
+    /** Clips the rest of the enclosing group; must come right after [startGroup]. */
+    fun clipPath(pathData: String) {
+        startTag("clip-path")
+        attribute("pathData", pathData, androidNamespace)
+        endTag("clip-path")
+    }
+
     fun path(
         pathData: String,
         strokeLineJoin: String,

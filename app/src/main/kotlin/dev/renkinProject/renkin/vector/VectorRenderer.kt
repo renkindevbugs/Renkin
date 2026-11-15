@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.vector
 
+import androidx.core.graphics.withSave
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
@@ -55,6 +56,9 @@ class VectorRenderer(private val imageVector: ImageVector) {
         canvas.translate(group.translationX, group.translationY)
         canvas.rotate(group.rotation, group.pivotX, group.pivotY)
         canvas.scale(group.scaleX, group.scaleY, group.pivotX, group.pivotY)
+        if (group.clipPathData.isNotEmpty()) {
+            canvas.clipPath(group.clipPathData.toPath().asAndroidPath())
+        }
 
         for (child in group) {
             if (child is VectorGroup) {
@@ -94,14 +98,21 @@ class VectorRenderer(private val imageVector: ImageVector) {
 
         matrixStack.addLast(groupMatrix)
         currentMatrix = groupMatrix
-
-        for (child in group) {
-            if (child is VectorGroup) {
-                renderNonScalingStrokeInGroup(canvas, child)
+        canvas.withSave {
+            if (group.clipPathData.isNotEmpty()) {
+                val clip = Path()
+                group.clipPathData.toPath().asAndroidPath().transform(groupMatrix, clip)
+                clipPath(clip)
             }
 
-            if (child is VectorPath) {
-                renderNonScalingStrokeInPath(canvas, child)
+            for (child in group) {
+                if (child is VectorGroup) {
+                    renderNonScalingStrokeInGroup(this, child)
+                }
+
+                if (child is VectorPath) {
+                    renderNonScalingStrokeInPath(this, child)
+                }
             }
         }
 

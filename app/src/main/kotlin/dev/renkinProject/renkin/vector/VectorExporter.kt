@@ -74,6 +74,7 @@ class VectorExporter(
             group.pivotX,
             group.pivotY
         )
+        if (group.clipPathData.isNotEmpty()) file.clipPath(group.clipPathData.toStringPath())
 
         for (child in group) {
             if (child is VectorGroup) {
