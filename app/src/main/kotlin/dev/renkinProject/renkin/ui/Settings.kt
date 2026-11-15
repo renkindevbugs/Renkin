@@ -92,7 +92,7 @@ import dev.renkinProject.renkin.data.OledBlackKey
 import dev.renkinProject.renkin.data.InstallMethod
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
 import dev.renkinProject.renkin.data.ShowRenkinPacksKey
-import dev.renkinProject.renkin.data.ReduceIconMotionKey
+import dev.renkinProject.renkin.data.reducedMotionParts
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.SettingsSegmentShape
 import dev.renkinProject.renkin.data.AUTO_BACKUP_INTERVAL_OFF
@@ -195,15 +195,20 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     // Android 13+ delivers it as a configuration change that MainActivity handles in place.
                     if (!AppLocales.handledBySystem) activity?.recreate()
                 }
-                val reduceIconMotion = prefs.getBooleanValue(ReduceIconMotionKey)
+                val reducedMotion = prefs.getPreferencesValue().reducedMotionParts()
+                var motionOpen by remember { mutableStateOf(false) }
                 SettingsRow(
                     icon = Icons.Filled.Animation,
-                    label = stringResource(R.string.reduceIconMotion),
-                    subtitle = stringResource(R.string.reduceIconMotionSummary),
-                    checked = reduceIconMotion,
-                    trailing = { Switch(checked = reduceIconMotion, onCheckedChange = null) }
-                ) {
-                    viewModel.setReduceIconMotion(!reduceIconMotion)
+                    label = stringResource(R.string.motionSettingsTitle),
+                    subtitle = motionSettingsSummary(reducedMotion),
+                    onClick = { motionOpen = true }
+                )
+                if (motionOpen) {
+                    MotionSettingsDialog(
+                        reduced = reducedMotion,
+                        onReduce = viewModel::setReduceMotion,
+                        onDismiss = { motionOpen = false }
+                    )
                 }
             }
 

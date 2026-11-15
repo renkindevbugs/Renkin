@@ -35,7 +35,8 @@ import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.OptionsViewModel
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.ExportThemedKey
-import dev.renkinProject.renkin.data.ReduceIconMotionKey
+import dev.renkinProject.renkin.data.MotionPart
+import dev.renkinProject.renkin.data.reducesMotion
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.expiredSessionMessage
 import dev.renkinProject.renkin.hideWallpaperBehindContent
@@ -75,7 +76,7 @@ internal fun PackPreviewHost(
     val session = viewModel.packPreview
     val options: OptionsViewModel = hiltViewModel()
     val preferences by options.preferenceSnapshot.collectAsStateWithLifecycle()
-    val reduceMotion = preferences.getBooleanValue(ReduceIconMotionKey)
+    val reduceMotion = preferences.reducesMotion(MotionPart.BUILD)
 
     SideEffect { swirl.pillEnabled = !reduceMotion }
     val morph = swirl.previewMorph

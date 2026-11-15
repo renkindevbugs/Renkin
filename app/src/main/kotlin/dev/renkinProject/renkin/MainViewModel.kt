@@ -65,7 +65,7 @@ import dev.renkinProject.renkin.data.AppSortOrder
 import dev.renkinProject.renkin.data.AppSortOrderKey
 import dev.renkinProject.renkin.data.DarkMode
 import dev.renkinProject.renkin.data.DarkModeKey
-import dev.renkinProject.renkin.data.ReduceIconMotionKey
+import dev.renkinProject.renkin.data.MotionPart
 import dev.renkinProject.renkin.data.OledBlackKey
 import dev.renkinProject.renkin.data.InstallMethod
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
@@ -854,8 +854,8 @@ class MainViewModel @Inject constructor(
         setBooleanValue(OledBlackKey, enabled)
     }
 
-    fun setReduceIconMotion(enabled: Boolean) = updatePreferences {
-        setBooleanValue(ReduceIconMotionKey, enabled)
+    fun setReduceMotion(parts: Collection<MotionPart>, reduced: Boolean) = updatePreferences {
+        parts.forEach { setBooleanValue(it.key, reduced) }
     }
 
     fun appLanguageTag(): String = AppLocales.selectedTag(getApplication())
