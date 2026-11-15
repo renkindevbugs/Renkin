@@ -2,6 +2,8 @@ package dev.renkinProject.renkin.ui.theme
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.ColorUtils
 
 val md_theme_light_primary = Color(0xFFA83912)
 val md_theme_light_onPrimary = Color(0xFFFFFFFF)
@@ -33,6 +35,13 @@ val md_theme_light_shadow = Color(0xFF000000)
 val md_theme_light_surfaceTint = Color(0xFFA83912)
 val md_theme_light_outlineVariant = Color(0xFFD8C2BC)
 val md_theme_light_scrim = Color(0xFF000000)
+val md_theme_light_surfaceDim = Color(0xFFE5D7D0)
+val md_theme_light_surfaceBright = Color(0xFFFFF8F5)
+val md_theme_light_surfaceContainerLowest = Color(0xFFFFFFFF)
+val md_theme_light_surfaceContainerLow = Color(0xFFFFF1EB)
+val md_theme_light_surfaceContainer = Color(0xFFF9E7DE)
+val md_theme_light_surfaceContainerHigh = Color(0xFFF3E1D8)
+val md_theme_light_surfaceContainerHighest = Color(0xFFEDDBD2)
 
 val md_theme_dark_primary = Color(0xFFFFB59E)
 val md_theme_dark_onPrimary = Color(0xFF5E1700)
@@ -64,6 +73,13 @@ val md_theme_dark_shadow = Color(0xFF000000)
 val md_theme_dark_surfaceTint = Color(0xFFFFB59E)
 val md_theme_dark_outlineVariant = Color(0xFF53433F)
 val md_theme_dark_scrim = Color(0xFF000000)
+val md_theme_dark_surfaceDim = Color(0xFF18120F)
+val md_theme_dark_surfaceBright = Color(0xFF443A35)
+val md_theme_dark_surfaceContainerLowest = Color(0xFF120C09)
+val md_theme_dark_surfaceContainerLow = Color(0xFF261D19)
+val md_theme_dark_surfaceContainer = Color(0xFF2C231F)
+val md_theme_dark_surfaceContainerHigh = Color(0xFF372D28)
+val md_theme_dark_surfaceContainerHighest = Color(0xFF423833)
 
 
 val seed = Color(0xFFC85028)
@@ -71,6 +87,30 @@ val seed = Color(0xFFC85028)
 // Marks icons added since the last build — the selection frame in the icon browser, the
 // "new" dot in the build preview, and the green segment of the change bar.
 val AddedGreen = Color(0xFF34C759)
+
+/** Keeps the small added count readable on static and wallpaper-derived hero backgrounds. */
+internal fun readableAddedTextColor(background: Color): Color {
+    val backdrop = background.copy(alpha = 1f).toArgb()
+    val black = Color.Black.toArgb()
+    val white = Color.White.toArgb()
+    val lightForeground = ColorUtils.calculateContrast(white, backdrop) >
+        ColorUtils.calculateContrast(black, backdrop)
+    val green = if (lightForeground) Color(0xFF7DDC94).toArgb() else Color(0xFF1B6B30).toArgb()
+    if (ColorUtils.calculateContrast(green, backdrop) >= 4.5) return Color(green)
+
+    val endpoint = if (lightForeground) white else black
+    var low = 0f
+    var high = 1f
+    repeat(16) {
+        val fraction = (low + high) / 2f
+        if (ColorUtils.calculateContrast(ColorUtils.blendARGB(green, endpoint, fraction), backdrop) >= 4.5) {
+            high = fraction
+        } else {
+            low = fraction
+        }
+    }
+    return Color(ColorUtils.blendARGB(green, endpoint, high))
+}
 
 // Marks icons changed (re-edited) since the last build, and the calendar "missing days"
 // warning — distinct from AddedGreen so "new" and "changed" read differently in the preview.

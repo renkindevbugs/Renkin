@@ -9,7 +9,6 @@ import dev.renkinProject.renkin.ui.DialogBadge
 import dev.renkinProject.renkin.ui.MessageDialog
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.material.icons.filled.NotificationsOff
-import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
@@ -53,6 +52,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -395,14 +396,7 @@ private fun WatchRuleList(
                 ) {
                     if (rules.isEmpty()) {
                         item {
-                            Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = stringResource(R.string.noWatchRulesYet),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                    modifier = Modifier.padding(32.dp)
-                                )
-                            }
+                            WatchEmptyState(Modifier.fillParentMaxSize())
                         }
                     }
                     if (completed.isNotEmpty()) {
@@ -486,73 +480,57 @@ private fun WatchRuleList(
     }
 }
 
-/**
- * Shows when the next periodic check is due (from WorkManager's real schedule). In debug
- * builds it also exposes a frequency picker so the watcher can be tested without waiting
- * the full 24h — WorkManager's periodic floor is 15 min, so that's the smallest option.
- */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-private fun WatchCheckScheduleRow() {
-    val watchViewModel: WatchViewModel = hiltViewModel()
-    val context = getCurrentContext()
-    val nextCheck by watchViewModel.nextCheckAt.collectAsStateWithLifecycle()
-    val intervalMinutes by watchViewModel.checkIntervalMinutes.collectAsStateWithLifecycle()
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+private fun WatchEmptyState(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
     ) {
-        val nextText = nextCheck?.let {
-            stringResource(
-                R.string.watchNextCheck,
-                DateUtils.formatDateTime(
-                    context, it,
-                    DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_ALL
-                )
-            )
-        } ?: stringResource(R.string.watchNextCheckUnknown)
-        Text(
-            text = nextText,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f)
-        )
-        if (BuildConfig.DEBUG) {
-            WatchIntervalPicker(intervalMinutes) { watchViewModel.setCheckIntervalMinutes(it) }
-        }
-    }
-}
-
-/** Debug-only frequency picker. Options are all valid WorkManager periodic intervals. */
-@Composable
-private fun WatchIntervalPicker(selectedMinutes: Int, onChange: (Int) -> Unit) {
-    val options = listOf(15, 60, 1440)
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        TextButton(onClick = { expanded = true }) {
-            Text(intervalLabel(selectedMinutes))
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { minutes ->
-                DropdownMenuItem(
-                    text = { Text(intervalLabel(minutes)) },
-                    onClick = { expanded = false; onChange(minutes) },
-                    leadingIcon = if (minutes == selectedMinutes) {
-                        { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
+        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+            Box(Modifier.size(96.dp), contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Filled.NotificationsNone, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp)
                 )
             }
         }
+        Text(
+            stringResource(R.string.watchEmptyTitle),
+            style = MaterialTheme.typography.titleMediumEmphasized,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        Text(
+            stringResource(R.string.watchEmptyDescription),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
     }
 }
 
-private fun intervalLabel(minutes: Int): String = when (minutes) {
-    15 -> "15 min"
-    60 -> "1 h"
-    1440 -> "24 h"
-    else -> "$minutes min"
+@Composable
+private fun WatchCheckScheduleRow() {
+    val watchViewModel: WatchViewModel = hiltViewModel()
+    val nextCheck by watchViewModel.nextCheckAt.collectAsStateWithLifecycle()
+    val intervalMinutes by watchViewModel.checkIntervalMinutes.collectAsStateWithLifecycle()
+    val lastCheck by watchViewModel.lastCheckStatus.collectAsStateWithLifecycle()
+    val automatic by watchViewModel.automaticChecksEnabled.collectAsStateWithLifecycle()
+    val scheduleUpdating by watchViewModel.scheduleUpdating.collectAsStateWithLifecycle()
+    val iconPackState by watchViewModel.iconPackState.collectAsStateWithLifecycle()
+
+    WatchScheduleCard(
+        automatic = automatic,
+        scheduleUpdating = scheduleUpdating,
+        nextCheckAt = nextCheck,
+        intervalMinutes = intervalMinutes,
+        lastCheck = lastCheck,
+        iconPacks = iconPackState.packs,
+        onAutomaticChange = watchViewModel::setAutomaticChecks,
+        onIntervalChange = watchViewModel::setCheckIntervalMinutes
+    )
 }
 
 @Composable

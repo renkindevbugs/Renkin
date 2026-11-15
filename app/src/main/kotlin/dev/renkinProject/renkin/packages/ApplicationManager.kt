@@ -3,6 +3,8 @@ package dev.renkinProject.renkin.packages
 import android.content.Context
 import android.content.res.Resources
 import android.graphics.drawable.Drawable
+import dev.renkinProject.renkin.BuildConfig
+import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawCalendar
 import dev.renkinProject.renkin.data.RawDynamicClock
@@ -44,6 +46,7 @@ internal data class NamedResourceDrawable(val name: String, val resource: Resour
 
 internal interface PackBrowserDataSource {
     fun getIconPackDrawableNames(iconPackName: String): List<String>
+    fun getIconPackDrawableIds(iconPackName: String, drawableNames: List<String>): Map<String, Int> = emptyMap()
     fun getIconPackDrawableEntries(iconPackName: String, drawableNames: List<String>): List<NamedResourceDrawable>
     fun getAppFilterRawElements(iconPackName: String, applications: List<InstalledApplication>): List<RawElement>
 }
@@ -171,6 +174,11 @@ internal class ApplicationManager(
     fun getResourceDrawableByName(iconPackName: String, drawableName: String): ResourceDrawable? =
         resourceResolver.getResources(iconPackName)?.let { getResourceDrawableByName(it, iconPackName, drawableName) }
 
+    fun resourceDrawableExists(iconPackName: String, drawableName: String): Boolean? =
+        resourceResolver.getResources(iconPackName)?.let { resources ->
+            resourceResolver.hasDrawable(resources, iconPackName, drawableName)
+        }
+
     /** Resolves [iconPackName]'s drawables by name, reading the pack's Resources once, on first use. */
     fun packDrawableResolver(iconPackName: String): (String) -> ResourceDrawable? {
         val res by lazy { resourceResolver.getResources(iconPackName) }
@@ -181,8 +189,20 @@ internal class ApplicationManager(
         val resourceId = runCatching {
             res.getIdentifierByName(drawableName, "drawable", iconPackName)
         }.getOrNull() ?: return null
-        if (resourceId <= 0) return null
-        val drawable = runCatching { resourceResolver.getDrawable(res, resourceId) }.getOrNull() ?: return null
+        if (resourceId <= 0) {
+            if (BuildConfig.DEBUG) {
+                val mipmapId = res.getIdentifierByName(drawableName, "mipmap", iconPackName)
+                Log.debug("PackResources", "Missing drawable: pack=$iconPackName, name=$drawableName, mipmapId=$mipmapId")
+            }
+            return null
+        }
+        val drawable = runCatching { resourceResolver.getDrawable(res, resourceId) }
+            .onFailure { if (BuildConfig.DEBUG) Log.error("PackResources", "Drawable load failed: pack=$iconPackName, name=$drawableName, id=$resourceId", it) }
+            .getOrNull()
+        if (drawable == null) {
+            if (BuildConfig.DEBUG) Log.debug("PackResources", "Unreadable drawable: pack=$iconPackName, name=$drawableName, id=$resourceId")
+            return null
+        }
         return ResourceDrawable(resourceId, drawable)
     }
 
@@ -241,6 +261,18 @@ internal class ApplicationManager(
             resolveId = { name -> res.getIdentifierByName(name, "drawable", iconPackName) },
             loadDrawable = { id -> resourceResolver.getDrawable(res, id) }
         )
+    }
+
+    override fun getIconPackDrawableIds(iconPackName: String, drawableNames: List<String>): Map<String, Int> {
+        val res = checkNotNull(resourceResolver.getResources(iconPackName)) { "Icon pack resources unavailable: $iconPackName" }
+        return drawableNames.associateWith { name ->
+            val id = res.getIdentifierByName(name, "drawable", iconPackName)
+            if (id == 0 && BuildConfig.DEBUG) {
+                val mipmapId = res.getIdentifierByName(name, "mipmap", iconPackName)
+                Log.debug("PackResources", "Missing browser drawable: pack=$iconPackName, name=$name, mipmapId=$mipmapId")
+            }
+            id
+        }
     }
 
     fun getCalendarApplications(applications: List<InstalledApplication>, elements: List<RawElement>): Map<InstalledApplication, String> {

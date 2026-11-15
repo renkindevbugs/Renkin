@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.data.ExportThemedKey
+import dev.renkinProject.renkin.data.MaterialYouPackLiveColorsKey
+import dev.renkinProject.renkin.data.SecondaryMaterialYouPackLiveColorsKey
 import dev.renkinProject.renkin.data.FALLBACK_SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.FallbackSourceKey
 import dev.renkinProject.renkin.data.IMAGE_EDIT_DEFAULT
@@ -140,6 +142,8 @@ data class GenerationOptions(
                     vector = pathOptionsRelevant && preferences.getBooleanValue(IncludeVectorKey),
                     materialYou = materialYou,
                     themed = preferences.getBooleanValue(ExportThemedKey),
+                    livePrimaryMaterialYouPack = preferences.getBooleanValue(MaterialYouPackLiveColorsKey, default = true),
+                    liveSecondaryMaterialYouPack = preferences.getBooleanValue(SecondaryMaterialYouPackLiveColorsKey, default = true),
                     background = appIconColors?.let { ColorFill(it.backgroundColor, it.background) }
                         ?: ColorFill(
                             color = bgColor.toArgb(),

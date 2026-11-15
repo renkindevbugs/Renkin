@@ -10,8 +10,12 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.data.AppTarget
 import dev.renkinProject.renkin.data.setIconSources
+import dev.renkinProject.renkin.data.setBooleanValue
+import dev.renkinProject.renkin.data.MaterialYouPackLiveColorsKey
+import dev.renkinProject.renkin.data.SecondaryMaterialYouPackLiveColorsKey
 import dev.renkinProject.renkin.data.AppTargetCodec
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
+import dev.renkinProject.renkin.data.ActiveProfileIdKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.UnsavedIconJournal
@@ -50,6 +54,7 @@ import dev.renkinProject.renkin.data.restoreBuiltPrimarySource
 import dev.renkinProject.renkin.data.online.onlineAttributionLabel
 import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
@@ -61,7 +66,8 @@ import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.icon.creator.withModifiers
 import dev.renkinProject.renkin.icon.creator.withExport
 import dev.renkinProject.renkin.icon.creator.withEffect
-import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews
+import dev.renkinProject.renkin.icon.creator.PackBrowserSession
+import dev.renkinProject.renkin.icon.creator.PackBrowserIndex
 import dev.renkinProject.renkin.icon.creator.globalModifierOptions
 import dev.renkinProject.renkin.icon.creator.hasVisibleModifierEffect
 import dev.renkinProject.renkin.packages.ApplicationManager
@@ -212,6 +218,8 @@ class ApplicationProvider internal constructor(
         sessionToken = ProfileSessionToken(profileManager.activeProfileId, 0L, providerInstanceId)
     ))
     val runtimeState = mutableRuntimeState.asStateFlow()
+    private val mutableStartupProfile = MutableStateFlow<Profile?>(null)
+    val startupProfile = mutableStartupProfile.asStateFlow()
     /** Operation-time view; composables collect [applicationState]. Mutations hold the profile gate. */
     val applicationList: List<PackageInfoStruct> get() = stagedApplications
     // UI observes the repository flow; synchronous getters serve operation snapshots.
@@ -386,6 +394,9 @@ class ApplicationProvider internal constructor(
                 profileOperations.run {
                     if (!startupComplete) {
                         val startupPrefs = context.dataStore.getPreferencesAfterPendingWrites()
+                        val storedProfileId = startupPrefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
+                        mutableStartupProfile.value = profileManager.profile(storedProfileId)
+                            ?: profileManager.profile(DEFAULT_PROFILE_ID)
                         if (startupPrefs.contains(BuiltPrimarySourceKey)) {
                             context.dataStore.restoreBuiltPrimarySource(startupPrefs)
                         }
@@ -1346,8 +1357,18 @@ class ApplicationProvider internal constructor(
         finishInstallAttempt(iconPack, ApkInstallOutcome(ApkInstallResult.ABORTED))
     }
 
-    private suspend fun finishInstallAttempt(iconPack: BuiltIconPack, outcome: ApkInstallOutcome) {
+    internal suspend fun retainReadyBuild(iconPack: BuiltIconPack): BuiltIconPack {
+        val revision = finishInstallAttempt(iconPack, ApkInstallOutcome(ApkInstallResult.ABORTED), retainArtifacts = true)
+        return iconPack.copy(storageRevision = revision)
+    }
+
+    private suspend fun finishInstallAttempt(
+        iconPack: BuiltIconPack,
+        outcome: ApkInstallOutcome,
+        retainArtifacts: Boolean = false
+    ): Long? {
         val success = outcome.result == ApkInstallResult.SUCCESS
+        var retainedRevision = iconPack.storageRevision
         // Building the APK is the commitment, not installing it: someone who only wants their
         // icons stored can go through Build and dismiss the installer. Either way the save
         // matches the pack that was produced, so it counts as built.
@@ -1365,6 +1386,7 @@ class ApplicationProvider internal constructor(
                         preservedRows = iconPack.preservedRows, unbuiltAfter = false,
                         liveSession = iconPack.sessionToken
                     )?.let { renkinPackStore.recordBuilt(iconPack.profileId, it) }
+                    retainedRevision = savedProfileRevisions[iconPack.profileId] ?: retainedRevision
                 } else {
                     // A newer explicit save wins; the built baseline still describes the older APK.
                     renkinPackStore.recordBuilt(iconPack.profileId, iconPack.profileApps, iconPack.preservedRows)
@@ -1375,10 +1397,11 @@ class ApplicationProvider internal constructor(
                 if (success) lockManager.clearProvenanceCache()
             }
         } finally {
-            if (outcome.result != ApkInstallResult.CONFLICT) withContext(NonCancellable) {
+            if (!retainArtifacts && outcome.result != ApkInstallResult.CONFLICT) withContext(NonCancellable) {
                 iconPackBuildService.releaseArtifacts(iconPack, completed = outcome.result != ApkInstallResult.TIMEOUT)
             }
         }
+        return retainedRevision
     }
 
     /**
@@ -1663,11 +1686,11 @@ class ApplicationProvider internal constructor(
         stagedApplications = stagedApplications.set(index, newApp)
     }
 
-    suspend fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, IconPackDrawable?> =
-        iconGenService.getIconPackIcons(iconPackName, options, drawables)
-
-    internal fun packBrowserPreviews(): PackBrowserPreviews =
-        PackBrowserPreviews(appManager, iconPackRepo::indexedElements, ::getIconPackIcons)
+    internal fun packBrowserPreviews(): PackBrowserSession =
+        PackBrowserSession(
+            PackBrowserIndex(context, appManager), appManager,
+            iconPackRepo::indexedBrowserNames, iconGenService::packBrowserBitmap
+        )
 
     suspend fun getIconPackDropdownIcons(): Map<String, ResourceDrawable> = iconPackRepo.getDropdownIcons()
 
@@ -1757,10 +1780,14 @@ class ApplicationProvider internal constructor(
         primary: Source,
         primaryPackage: String,
         secondary: Source,
-        secondaryPackage: String
+        secondaryPackage: String,
+        livePrimaryPack: Boolean,
+        liveSecondaryPack: Boolean
     ): ProfileSessionToken = runProfileOperation(expected) {
         requireRecipeAvailable(expected)
         context.dataStore.setIconSources(primary, primaryPackage, secondary, secondaryPackage)
+        context.dataStore.setBooleanValue(MaterialYouPackLiveColorsKey, livePrimaryPack)
+        context.dataStore.setBooleanValue(SecondaryMaterialYouPackLiveColorsKey, liveSecondaryPack)
         if (primary == Source.NONE) clearRefreshedIcons()
         sessionToken
     }
@@ -2140,6 +2167,14 @@ class ApplicationProvider internal constructor(
 
     /** One row of the "pack usage" stats: how many stored icons really came from [packageName]. */
     data class PackUsage(val packageName: String, val label: String, val count: Int, val installed: Boolean)
+
+    /** Of the profile's icons ([total]), how many follow the wallpaper colours ([live]). */
+    data class LiveIconCount(val live: Int, val total: Int)
+
+    fun liveIconCount(): LiveIconCount {
+        val icons = applicationList.mapNotNull { it.createdIcon }
+        return LiveIconCount(icons.count { it is ThemedGlyphDrawable }, icons.size)
+    }
 
     /**
      * Per-pack usage by TRUE origin for the stats dialog: counts include the locked

@@ -48,6 +48,8 @@ import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.isDarkModeEnabled
 import dev.renkinProject.renkin.data.dataStore
+import dev.renkinProject.renkin.data.GlobalBetaNoticeSeenKey
+import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
@@ -77,6 +79,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -249,6 +253,15 @@ class GlobalOptionsViewModel @Inject constructor(
     val installedIcons = appProvider.installedIcons
     val runtimeState = appProvider.runtimeState
     val iconPackState = appProvider.iconPackState
+
+    // Null until the preferences are read, so the notice never flashes for a user who has seen it.
+    val betaNoticeSeen: kotlinx.coroutines.flow.StateFlow<Boolean?> = application.dataStore.data
+        .map { it[GlobalBetaNoticeSeenKey] == true }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
+
+    fun markBetaNoticeSeen() {
+        viewModelScope.launch { getApplication<Application>().dataStore.setBooleanValue(GlobalBetaNoticeSeenKey, true) }
+    }
 
     /** A content URI an external editor can read [bitmap] from, or null when it cannot be written. */
     suspend fun shareIconForEditing(bitmap: Bitmap): Uri? = SharedIconHandoff.write(getApplication(), bitmap)

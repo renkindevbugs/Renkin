@@ -19,6 +19,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material3.Switch
+import androidx.compose.material.icons.filled.ColorLens
+import dev.renkinProject.renkin.data.MaterialYouPackLiveColorsKey
+import dev.renkinProject.renkin.data.SecondaryMaterialYouPackLiveColorsKey
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -120,6 +126,7 @@ import dev.renkinProject.renkin.ui.theme.GoldBase
 import dev.renkinProject.renkin.ui.theme.RemovedRed
 import dev.renkinProject.renkin.ui.theme.GoldShimmer
 import dev.renkinProject.renkin.ui.theme.CardShape
+import dev.renkinProject.renkin.ui.theme.readableAddedTextColor
 import kotlinx.coroutines.delay
 
 private const val CHANGE_BAR_ANIMATION_MS = 900
@@ -232,6 +239,8 @@ fun HeroPackCard(
     val themedCount = stats.themedCount
     val totalCount = stats.totalCount
     val fallbackCount = stats.fallbackCount
+    val heroBackground = MaterialTheme.colorScheme.primaryContainer
+    val addedTextColor = remember(heroBackground) { readableAddedTextColor(heroBackground) }
 
     var sheetOpen by remember { mutableStateOf(false) }
     var changesSession by remember { mutableStateOf<ProfileSessionToken?>(null) }
@@ -267,6 +276,7 @@ fun HeroPackCard(
 
     Surface(
         onClick = { sheetOpen = true },
+        enabled = !viewModel.buildBusy,
         shape = CardShape,
         color = MaterialTheme.colorScheme.primaryContainer,
         modifier = Modifier
@@ -345,7 +355,7 @@ fun HeroPackCard(
                             text = "+$addedCount",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = AddedGreen
+                            color = addedTextColor
                         )
                     }
                     if (removedCount > 0) {
@@ -434,6 +444,8 @@ fun HeroPackCard(
     }
 
     if (sheetOpen) {
+        val livePrimaryPack = preferences.getBooleanValue(MaterialYouPackLiveColorsKey, default = true)
+        val liveSecondaryPack = preferences.getBooleanValue(SecondaryMaterialYouPackLiveColorsKey, default = true)
         val expected = remember { runtimeState.sessionToken }
         LaunchedEffect(runtimeState.sessionToken) {
             if (expected != runtimeState.sessionToken) sheetOpen = false
@@ -444,14 +456,18 @@ fun HeroPackCard(
             selectedPackage = packName,
             selectedSecondarySource = preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT),
             selectedSecondaryPackage = preferences.getStringValue(SecondaryIconPackKey),
+            themedExport = preferences.getBooleanValue(ExportThemedKey),
+            livePrimaryPack = livePrimaryPack,
+            liveSecondaryPack = liveSecondaryPack,
             onDismiss = { sheetOpen = false },
-            onPick = commitSources@{ newSource, newPackage, secondary, secondaryPackage ->
+            onPick = commitSources@{ newSource, newPackage, secondary, secondaryPackage, livePrimary, liveSecondary ->
                 sheetOpen = false
                 if (newSource == source && newPackage == packName &&
                     secondary == preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT) &&
-                    secondaryPackage == preferences.getStringValue(SecondaryIconPackKey)) return@commitSources
+                    secondaryPackage == preferences.getStringValue(SecondaryIconPackKey) &&
+                    livePrimary == livePrimaryPack && liveSecondary == liveSecondaryPack) return@commitSources
                 // The view model keeps the preference write ordered before clear/refresh.
-                viewModel.selectIconSources(expected, newSource, newPackage, secondary, secondaryPackage)
+                viewModel.selectIconSources(expected, newSource, newPackage, secondary, secondaryPackage, livePrimary, liveSecondary)
             }
         )
     }
@@ -506,8 +522,11 @@ private fun PackPickerSheet(
     selectedPackage: String,
     selectedSecondarySource: Source,
     selectedSecondaryPackage: String,
+    themedExport: Boolean,
+    livePrimaryPack: Boolean,
+    liveSecondaryPack: Boolean,
     onDismiss: () -> Unit,
-    onPick: (Source, String, Source, String) -> Unit
+    onPick: (Source, String, Source, String, Boolean, Boolean) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val usage = remember(iconPacks) { viewModel.packUsageCounts() }
@@ -523,6 +542,8 @@ private fun PackPickerSheet(
     var secondary by rememberSaveable { mutableStateOf(selectedSecondarySource) }
     var secondaryPackage by rememberSaveable { mutableStateOf(selectedSecondaryPackage) }
     var editingSecondary by rememberSaveable { mutableStateOf(false) }
+    var livePrimary by rememberSaveable { mutableStateOf(livePrimaryPack) }
+    var liveSecondary by rememberSaveable { mutableStateOf(liveSecondaryPack) }
     val secondaryEnabled = primary == Source.ICON_PACK &&
         iconPacks.any { it.packageName == primaryPackage }
     LaunchedEffect(secondaryEnabled) {
@@ -533,6 +554,11 @@ private fun PackPickerSheet(
     }
     val activeSource = if (editingSecondary) secondary else primary
     val activePackage = if (editingSecondary) secondaryPackage else primaryPackage
+    // Each source keeps its own switch, shown while its tab is open and it is a Material You pack.
+    // Only such a pack has a themed icon of its own to keep live; the pack-wide Themed export
+    // already makes every icon follow the wallpaper.
+    val showLiveColours = !themedExport && activeSource == Source.ICON_PACK &&
+        iconPacks.any { it.packageName == activePackage && it.changesWithMaterialYouColors }
 
     var query by rememberSaveable { mutableStateOf("") }
     val trimmedQuery = query.trim()
@@ -631,6 +657,13 @@ private fun PackPickerSheet(
                 enabled = secondaryEnabled,
                 modifier = Modifier.weight(1f)
             ) { editingSecondary = true; query = "" }
+        }
+        AnimatedVisibility(visible = showLiveColours) {
+            LiveColoursCard(
+                packName = sourcePickerName(activeSource, activePackage, iconPacks),
+                enabled = if (editingSecondary) liveSecondary else livePrimary,
+                onToggle = { if (editingSecondary) liveSecondary = it else livePrimary = it }
+            )
         }
         // Outside the list so it stays reachable while scrolling — with a couple of dozen packs
         // installed, scrolling back up to search would defeat the point.
@@ -742,10 +775,51 @@ private fun PackPickerSheet(
             onClick = {
                 onPick(primary, primaryPackage,
                     secondary.takeIf { secondaryEnabled } ?: Source.NONE,
-                    secondaryPackage.takeIf { secondaryEnabled }.orEmpty())
+                    secondaryPackage.takeIf { secondaryEnabled }.orEmpty(),
+                    livePrimary, liveSecondary)
             },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp)
         ) { Text(stringResource(R.string.done)) }
+    }
+}
+
+/** The editor's Follow wallpaper colours card, for every icon the selected Material You pack gives. */
+@Composable
+private fun LiveColoursCard(packName: String, enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Surface(
+        shape = CardShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .toggleable(value = enabled, role = Role.Switch, onValueChange = onToggle)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.ColorLens,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(22.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.themedIconCard),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = stringResource(R.string.themedPackCardDesc, packName),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                )
+            }
+            Switch(checked = enabled, onCheckedChange = null)
+        }
     }
 }
 
@@ -940,8 +1014,8 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
             targetValue = 1f,
             animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)),
             label = "shimmerSweep"
-        ).value
-    } else 0f
+        )
+    } else null
 
     Canvas(
         Modifier
@@ -962,7 +1036,7 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
                     drawRect(color = GoldBase)
                     // The moving band travels a bit past both edges so the sweep fades in/out.
                     val band = size.width * 0.22f
-                    val x = shimmerProgress * (size.width + 2f * band) - band
+                    val x = (shimmerProgress?.value ?: 0f) * (size.width + 2f * band) - band
                     drawRect(
                         brush = Brush.horizontalGradient(
                             colors = listOf(
@@ -1046,9 +1120,9 @@ private fun ProblemFilterButtons(
                 onCheckedChange = { onToggle(filter) },
                 shapes = when {
                     // A lone button must follow the connected rule, not the standalone one:
-                    // ToggleButtonDefaults.shapes() is round when unchecked and SQUARE when
+                    // ToggleButtonDefaults.shapesFor() is round when unchecked and SQUARE when
                     // checked — the inverse of a button group, where checked goes fully round.
-                    entries.size == 1 -> ToggleButtonDefaults.shapes(
+                    entries.size == 1 -> ToggleButtonDefaults.shapesFor(ToggleButtonDefaults.size).copy(
                         shape = ShapeDefaults.Small,
                         checkedShape = ButtonGroupDefaults.connectedButtonCheckedShape
                     )
@@ -1056,13 +1130,13 @@ private fun ProblemFilterButtons(
                     index == entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
                     else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                 },
-                colors = ToggleButtonDefaults.toggleButtonColors(
+                colors = ToggleButtonDefaults.colors(
                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     checkedContainerColor = MaterialTheme.colorScheme.onPrimaryContainer,
                     checkedContentColor = MaterialTheme.colorScheme.primaryContainer
                 ),
-                contentPadding = ToggleButtonDefaults.ContentPadding
+                contentPadding = ToggleButtonDefaults.contentPaddingFor(ToggleButtonDefaults.size)
             ) {
                 Icon(
                     imageVector = if (selected) icons.second else icons.first,

@@ -8,6 +8,7 @@ import android.content.pm.Signature
 import android.content.res.AssetManager
 import org.junit.After
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -68,6 +69,13 @@ class GeneratedPackIdentityTest {
         assertTrue(GeneratedPackIdentity.isLocallyOwned(packContext(firstName, GeneratedPackIdentity.MARKER), firstName))
         install(firstName, "replacement-certificate")
         assertFalse(GeneratedPackIdentity.isLocallyOwned(packContext(firstName, GeneratedPackIdentity.MARKER), firstName))
+    }
+
+    @Test
+    fun builtApkWithoutAnyReadableSignerIsASigningFailure() {
+        assertThrows(PackSigningException::class.java) {
+            GeneratedPackIdentity.recordBuilt(context, "example.unsigned", files.newFile())
+        }
     }
 
     @Test

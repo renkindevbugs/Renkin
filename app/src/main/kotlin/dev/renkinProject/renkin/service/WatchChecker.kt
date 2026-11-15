@@ -13,12 +13,13 @@ import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
 import dev.renkinProject.renkin.data.watch.WatchState
+import dev.renkinProject.renkin.data.watch.WatchReadIssue
+import dev.renkinProject.renkin.data.watch.WatchReadFailureReason
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.contentHash
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.appFilterDrawableName
-import dev.renkinProject.renkin.packages.appFilterDrawableNames
 import dev.renkinProject.renkin.packages.InstalledAppCatalog
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.util.Log
@@ -63,7 +64,7 @@ internal inline fun <T> readWatchPackOrNull(
  * trigger (phase 4) / notifier (phase 5) can act on them.
  */
 class WatchChecker(
-    context: Context,
+    private val context: Context,
     private val iconPackCatalog: IconPackCatalog = IconPackCatalog(context),
     private val repo: WatchRepository = WatchRepository(context)
 ) {
@@ -83,7 +84,13 @@ class WatchChecker(
         withContext(Dispatchers.Default) { block() }
     }
 
-    data class CheckResult(val suggestions: List<FiredSuggestion>, val storageEpoch: Long) {
+    data class CheckResult(
+        val suggestions: List<FiredSuggestion>,
+        val storageEpoch: Long,
+        val hadReadFailures: Boolean = false,
+        val failedPackNames: List<String> = emptyList(),
+        val readIssues: List<WatchReadIssue> = emptyList()
+    ) {
         // Check under the storage gate together with notification/metadata side effects.
         fun isCurrent(): Boolean = storageEpoch == StorageOperationGate.epoch
     }
@@ -183,7 +190,12 @@ class WatchChecker(
                 committed
             }
         }
-        CheckResult(fired, epoch)
+        CheckResult(fired, epoch, packIcons.hadReadFailures,
+            packIcons.failedPackages.map { installedPacks[it]?.applicationName ?: it },
+            packIcons.readIssues.map { issue ->
+                issue.copy(packName = installedPacks[issue.packPackage]?.applicationName ?: issue.packPackage,
+                    appName = issue.appPackage?.let(::applicationLabel))
+            })
     }
 
     private fun planActive(
@@ -204,14 +216,14 @@ class WatchChecker(
             if (resolved.componentChanged) {
                 val replacement = AppComponent(installedApp.packageName, installedApp.activityName)
                 return@mapNotNull AppCheck(replacement, component,
-                    buildBaseline(listOf(replacement), rule.rule.watchAllPacks, packs, installedPacks))
+                    buildBaseline(listOf(replacement), rule.rule.watchAllPacks, packs, installedPacks, packIcons::markReadIssue))
             }
             val states = mutableListOf<WatchState>()
             val candidates = mutableListOf<CandidateInput>()
             for (packPackage in packs) {
                 val pack = installedPacks[packPackage] ?: continue
                 val previous = statesByComponentPack[Triple(component.packageName, component.activityName, packPackage)]
-                if (previous?.lastPackVersionCode == pack.versionCode) continue
+                if (!shouldCheckWatchIcon(previous, pack.versionCode)) continue
                 val (drawableName, hash) = packIcons.resolveIcon(packPackage, installedApp) ?: continue
                 states += WatchState(
                     ruleId = rule.rule.id,
@@ -295,7 +307,8 @@ class WatchChecker(
         apps: List<AppComponent>,
         watchAllPacks: Boolean,
         selectedPacks: List<String>,
-        installedPacks: Map<String, IconPack> = watchablePacks()
+        installedPacks: Map<String, IconPack> = watchablePacks(),
+        onReadIssue: (WatchReadIssue) -> Unit = {}
     ): List<BaselineInput> {
         val packPackages = if (watchAllPacks) {
             installedPacks.keys.toList()
@@ -305,39 +318,12 @@ class WatchChecker(
         val checkedAt = System.currentTimeMillis()
         val baseline = mutableListOf<BaselineInput>()
         val installedApps = apps.map { InstalledApplication(it.packageName, it.activityName, 0) }
-
-        // Parsing appfilter.xml dominates save time. Resolve every selected app in one pass per
-        // pack instead of reopening and reparsing the same pack once for every app.
+        val packIcons = watchPackIcons(installedApps)
         for (packPackage in packPackages) {
             val pack = installedPacks[packPackage] ?: continue
-            // A third-party pack with a malformed appfilter.xml throws while parsing. Skip that
-            // pack instead of failing the whole baseline — the same isolation IconPackRepository
-            // applies when loading packs.
-            val parsed = readWatchPackOrNull(packPackage) {
-                val elements = appMan.getAppFilterRawElements(packPackage, installedApps)
-                elements to appMan.getDrawableFromAppFilterElements(
-                    packPackage, installedApps, elements
-                )
-            } ?: continue
-            val (elements, resources) = parsed
-            val drawableNames = appFilterDrawableNames(elements)
-
-            for (installedApp in installedApps) {
-                val drawableName = drawableNames[installedApp.toComponentInfo()]
-                val hash = resources[installedApp]?.drawable?.toSafeBitmapOrNull()?.contentHash()
-                baseline.add(
-                    BaselineInput(
-                        packageName = installedApp.packageName,
-                        activityName = installedApp.activityName,
-                        iconPackPackage = packPackage,
-                        lastPackVersionCode = pack.versionCode,
-                        lastIconName = drawableName,
-                        lastIconHash = hash,
-                        lastCheckedAt = checkedAt
-                    )
-                )
-            }
+            baseline += packIcons.baseline(pack, checkedAt)
         }
+        packIcons.readIssues.forEach(onReadIssue)
         return baseline
     }
 
@@ -359,12 +345,27 @@ class WatchChecker(
         val watchedPackages = rules.flatMapTo(HashSet()) { snapshot ->
             snapshot.details.apps.map { it.packageName } + snapshot.details.suggestions.map { it.packageName }
         }
-        return WatchPackIcons(
-            watchedApps = watchedPackages.flatMap { installedApps[it].orEmpty() },
-            parse = appMan::getAppFilterRawElements,
-            resolve = ::resolveIcon
-        )
+        return watchPackIcons(watchedPackages.flatMap { installedApps[it].orEmpty() })
     }
+
+    private fun watchPackIcons(watchedApps: List<InstalledApplication>) = WatchPackIcons(
+        watchedApps = watchedApps,
+        parse = appMan::getAppFilterRawElements,
+        resolve = ::resolveIcon,
+        describeFailure = { pack, _, name ->
+            when (appMan.resourceDrawableExists(pack, name)) {
+                false -> WatchReadFailureReason.MISSING_DRAWABLE
+                true -> WatchReadFailureReason.ICON_UNREADABLE
+                null -> WatchReadFailureReason.PACK_UNREADABLE
+            }
+        }
+    )
+
+    @Suppress("DEPRECATION")
+    private fun applicationLabel(packageName: String): String = runCatching {
+        val manager = context.packageManager
+        manager.getApplicationLabel(manager.getApplicationInfo(packageName, 0)).toString()
+    }.getOrDefault(packageName)
 
     /**
      * The (drawable name, content hash) a pack's parsed appfilter gives one app. The hash must stay
@@ -384,6 +385,10 @@ class WatchChecker(
 }
 
 private suspend fun commitRuleDirectly(operation: suspend () -> Long): Long = operation()
+
+internal fun shouldCheckWatchIcon(previous: WatchState?, packVersionCode: Long): Boolean =
+    previous == null || previous.lastPackVersionCode != packVersionCode ||
+        (previous.lastIconName != null && previous.lastIconHash == null)
 
 /** Per pack, the apps of a rule that have no stored baseline yet; packs with none are left out. */
 internal fun missingBaselinePairs(

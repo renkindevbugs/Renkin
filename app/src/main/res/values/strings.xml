@@ -1,4 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="editorLoading">Loading editor content</string>
+    <string name="packIconUnavailable">Icon unavailable</string>
+    <string name="packSearchFailed">Could not read all icons in this pack. Try refreshing the icon packs.</string>
     <string name="app_name" translatable="false">Renkin</string>
 
     <string name="iconColor">Icon color</string>
@@ -43,7 +46,6 @@
     <string name="installerAskEveryTime">Ask every time</string>
     <string name="installerAskEveryTimeDescription">Show this installer picker whenever a generated icon pack is ready to install.</string>
     <string name="installerAskEveryTimeEnabled">Installer picker will open before each installation</string>
-    <string name="shizukuUnsupported">Shizuku installation requires Android 7 or newer. The system installer will be used.</string>
     <string name="shizukuNotInstalled">Shizuku isn\'t installed. The system installer will be used.</string>
     <string name="shizukuOpenApp">Open Shizuku</string>
     <string name="shizukuNotRunning">Shizuku is not running. The system installer will be used until it becomes available.</string>
@@ -257,6 +259,11 @@
     <string name="textType">Text Type</string>
     <string name="colorize">Colorize</string>
     <string name="colorizeSegments">Colorize segments</string>
+    <string name="themedEdit">Themed</string>
+    <string name="themedEditHint">The icon becomes a one-colour glyph that follows your wallpaper colours and dark mode. Use Scale below to change its size.</string>
+    <string name="themedIconCard">Follow wallpaper colours</string>
+    <string name="themedPackCardDesc">%1$s icons change with your wallpaper and dark mode</string>
+    <string name="themedIconCardDesc">Keeps this pack\'s themed icon in your wallpaper colours</string>
     <string name="colorizeCancel">Cancel</string>
     <string name="colorizeSheetHint">Preview updates as you edit</string>
     <string name="savedColorsTitle">Saved colors</string>
@@ -426,6 +433,7 @@
     <string name="searchFonts">Search fonts</string>
     <string name="searchFontsEmpty">No font matches that name</string>
     <string name="searchPacksEmpty">No icon pack matches that name</string>
+    <string name="createNoIconPacks">No icon packs found on this device. Install an icon pack, or pick App Icon or Text below.</string>
     <string name="packCoverage">%1$d of %2$d apps matched</string>
     <string name="packCoverageUsed">%1$d of %2$d apps matched · %3$d used</string>
     <string name="filterChipMissing">%d missing</string>
@@ -470,6 +478,7 @@
     <string name="paths">Paths</string>
     <string name="addPath">Add path</string>
     <string name="editPath">Edit path</string>
+    <string name="deletePath">Delete path</string>
     <string name="gradientMakeSolid">Make solid</string>
     <plurals name="gradientSwatchDescription">
         <item quantity="one">Gradient, %1$d colour</item>
@@ -635,7 +644,6 @@
     <string name="buildPreviewTitle">Pack preview</string>
     <string name="buildPreviewEmpty">No icons yet — assign some to your apps first</string>
     <string name="buildPreviewCount">%d icons</string>
-    <string name="buildPreviewSessionLost">Renkin was closed by the system — preview cancelled, reopen it to build</string>
     <string name="watchApplyFailed">Could not apply the icon — the suggestion was kept so you can try again</string>
     <string name="linkOpenFailed">No app on this device can open that link</string>
     <string name="shareFailed">No app on this device can share that</string>
@@ -686,6 +694,13 @@
     <string name="installFailureApkSaved">APK saved. Install it with any installer; Renkin detects the pack on its next refresh.</string>
     <string name="installFailureApkSaveFailed">The APK could not be saved. Build the pack again to create a new one.</string>
     <string name="installFailureCopied">Installation details copied</string>
+    <string name="buildFailureStorage">Your phone ran out of free storage while Renkin was writing the pack. Free up some space, then build again.</string>
+    <string name="buildFailureMemory">Android ran out of memory for this build. Close other apps and build again. If it keeps failing, try a profile with fewer icons.</string>
+    <string name="buildFailureIconEncoding">One icon image couldn\'t be saved into the pack. This usually means storage is almost full. Free up some space and build again.</string>
+    <string name="buildFailureSigning">Renkin couldn\'t sign the pack or confirm its signature on this device. Copy the details and report it so it can be fixed.</string>
+    <string name="buildFailureUnknown">Something unexpected stopped the build. Try again. If it keeps failing, copy the details and report it.</string>
+    <string name="buildFailureSavedNote">These details are also kept in Settings → Crash logs.</string>
+    <string name="buildFailureCopied">Build details copied</string>
     <string name="installFallbackTitle">Replace existing icon pack?</string>
     <string name="packRecordBlocksReplace">Android still keeps an older copy of %1$s that Renkin can’t see or remove, for example in another user, a work profile or a private space. Allow Shizuku and tap Replace pack again, or connect a computer and run: adb shell pm uninstall %1$s</string>
     <string name="installFallbackText">Android can’t update the installed pack in place.</string>
@@ -719,6 +734,9 @@
     </plurals>
     <string name="backupExported">Backup exported</string>
     <string name="backupExportFailed">Couldn\'t export the backup</string>
+    <string name="inlineBackupExportWriting">Saving profiles, icons and settings…</string>
+    <string name="inlineBackupExportSaved">Profiles, icons and settings saved. Tap to export again.</string>
+    <string name="inlineBackupExportRetry">%1$s. Tap to try again.</string>
     <string name="backupImported">Backup imported</string>
     <string name="backupImportFailed">Couldn\'t import this file. Check that it is a Renkin backup, then select the file again to retry.</string>
     <string name="backupInsufficientStorage">Not enough free storage to prepare this backup. Free up space and try again.</string>
@@ -773,6 +791,8 @@
     <string name="autoBackupNever">Never</string>
     <string name="autoBackupFolder">Backup folder</string>
     <string name="autoBackupChooseFolder">Choose a folder</string>
+    <string name="autoBackupFailed">Last automatic backup failed</string>
+    <string name="autoBackupFailedHint">The backup folder may have been removed or is no longer accessible. Tap to choose it again.</string>
     <string name="autoBackupSetupFailed">Couldn\'t set up automatic backups</string>
     <string name="shareProfile">Share profile</string>
     <string name="profileExported">Profile exported</string>
@@ -1038,6 +1058,18 @@
     <string name="whatsNewSectionNew">New</string>
     <string name="whatsNewSectionChanged">Changed</string>
     <string name="whatsNewSectionFixed">Fixed</string>
+    <string name="whatsNewWallpaperColours">**Follow wallpaper colours:** Turn any icon, Material You pack icons or the app icon variant into glyphs that recolour with your wallpaper. Statistics show how many icons follow it.</string>
+    <string name="whatsNewOnlineIconSets">**Online icons:** Browse Iconify sets by category, download whole sets for offline use, and use the built-in Tabler set. SVG imports keep gradients and fill-and-stroke paths.</string>
+    <string name="whatsNewLiveCalendarClock">**Calendar and clock icons:** Native app calendar icons are supported, calendar days and live clocks keep your modifiers, and the editor preview shows every day and time.</string>
+    <string name="whatsNewPackPreviewGrid">**Pack preview:** The built pack shows a searchable icon grid, and Pack preview now opens inside Renkin.</string>
+    <string name="whatsNewBuildAnimation">**Build animation:** Icons dissolve into a golden galaxy that forms the Renkin Pack symbol while the pack builds.</string>
+    <string name="whatsNewMotionSettings">**Motion:** Choose which animations play: icon flight, editor tab icons, build animation and attention pulses.</string>
+    <string name="whatsNewSquircleCorners">**Squircle:** Adjust the corner roundness of the squircle shape.</string>
+    <string name="whatsNewFasterBrowsing">**Faster:** Icon pack browsing, editor loading, pack builds and Pack preview scrolling are quicker and use less memory.</string>
+    <string name="whatsNewAndroid7">**Requirements:** Renkin now needs Android 7.0 or newer.</string>
+    <string name="whatsNewOlderAndroidBuilds">**Builds:** Pack builds work again on Android 9 and 10, and a failed build shows a readable report.</string>
+    <string name="whatsNewProfilePackIcons">**Profiles:** One profile’s pack icon no longer shows up on your other profiles’ packs.</string>
+    <string name="whatsNewBuildMemory">**Reliability:** Lower memory use while building, a warning when the latest automatic backup failed, and fewer crashes with pack icons.</string>
     <string name="whatsNewGlobalStyleTools">**Global Style:** Customize shadows in the panel while keeping icons visible, revisit Apply history, keep the style during individual edits, and bake or undo a look.</string>
     <string name="whatsNewEditRecovery">**Edit recovery:** Recover supported unfinished edits and unsaved custom icons after Android closes Renkin, or restore saved modifier settings.</string>
     <string name="whatsNewPackIdentity">**Pack identity:** Choose a profile’s pack icon and package name.</string>
@@ -1115,6 +1147,10 @@
         <item quantity="one">Adds %1$d missing icon</item>
         <item quantity="other">Adds %1$d missing icons</item>
     </plurals>
+    <plurals name="liveIconsOutOf">
+        <item quantity="one">Out of %1$d icon · %2$d%%</item>
+        <item quantity="other">Out of %1$d icons · %2$d%%</item>
+    </plurals>
     <string name="previewMaskSquare">Square</string>
     <string name="previewMaskRounded">Rounded square</string>
     <string name="modifierPresetsEmptyHint">Nothing saved yet. Tune the modifiers above, then save them as a preset.</string>
@@ -1122,4 +1158,102 @@
     <string name="sortAppsWithFilters">Sort and filter apps. Active filters: %1$d</string>
     <string name="sourceSecondaryOptional">Optional</string>
     <string name="sourceSecondaryNotNeeded">Not needed</string>
+    <string name="enlargeNewIconPreview">Enlarge new icon preview</string>
+    <string name="motionSettingsTitle">Motion</string>
+    <string name="motionSettingsDescription">Choose which animations play. Loading indicators always stay visible.</string>
+    <string name="motionAllOn">All animations on</string>
+    <string name="motionAllReduced">All animations reduced</string>
+    <string name="motionSomeOn">%1$d of %2$d animations on</string>
+    <string name="motionReduceAll">Reduce all motion</string>
+    <string name="motionReduceAllSummary">Turns every animation below off</string>
+    <string name="motionIconFlight">Icon flight</string>
+    <string name="motionIconFlightSummary">Icon flies into and out of the editor</string>
+    <string name="motionEditorTabs">Editor tab icons</string>
+    <string name="motionEditorTabsSummary">Tab icons animate when selected</string>
+    <string name="motionBuild">Build animation</string>
+    <string name="motionBuildSummary">Golden swirl and pack preview morph</string>
+    <string name="motionAttention">Attention pulses</string>
+    <string name="motionAttentionSummary">Saved edit button pulses to get noticed</string>
+    <string name="settingsLastBackup">Last backup: %1$s</string>
+    <string name="watchNotificationSummaryLine">%1$s · %2$s</string>
+    <plurals name="watchNotificationAvailableCount">
+        <item quantity="one">%1$d icon available</item>
+        <item quantity="other">%1$d icons available</item>
+    </plurals>
+    <string name="watchEmptyTitle">Watch your favorite icons</string>
+    <string name="watchEmptyDescription">Add a rule with + to find out when an icon pack adds an icon for your app.</string>
+    <string name="watchLastCheckAt">Last checked: %1$s</string>
+    <string name="watchLastSuccessAt">Last successful check: %1$s</string>
+    <string name="watchLastCheckNoIcons">No new icons found</string>
+    <string name="watchLastCheckFailed">The last check could not finish</string>
+    <string name="watchCheckPartial">Some icon packs could not be checked</string>
+    <string name="watchAutomaticChecks">Automatic checks</string>
+    <string name="watchManualChecks">Manual checks</string>
+    <string name="watchAutomaticChecksOff">Automatic checks off</string>
+    <string name="watchCheckDetailsAction">View check details: %1$s</string>
+    <string name="watchCheckCompleteTitle">Check complete</string>
+    <string name="watchCheckPartialTitle">Partial check</string>
+    <string name="watchCheckFailedTitle">Check failed</string>
+    <string name="watchNoCheckDetails">The result will appear here after the first check. Pull down to check for new icons.</string>
+    <string name="watchDetailsLastCheck">Last check</string>
+    <string name="watchDetailsLastSuccess">Last successful check</string>
+    <string name="watchDetailsFound">New icons</string>
+    <string name="watchDetailsUnknown">—</string>
+    <string name="watchUnreadablePacksTitle">Could not read</string>
+    <string name="watchIntervalTitle">Check interval</string>
+    <string name="watchIntervalSummary">How often to check for new icons</string>
+    <string name="watchIntervalHours">%1$d h</string>
+    <string name="watchIntervalMinutes">%1$d min</string>
+    <string name="watchCheckToday">Today, %1$s</string>
+    <string name="watchCheckTomorrow">Tomorrow, %1$s</string>
+    <plurals name="watchEveryHours">
+        <item quantity="one">Every %1$d hour</item>
+        <item quantity="other">Every %1$d hours</item>
+    </plurals>
+    <plurals name="watchEveryMinutes">
+        <item quantity="one">Every %1$d minute</item>
+        <item quantity="other">Every %1$d minutes</item>
+    </plurals>
+    <string name="packUsageAttributedIcons">Icons from these sources</string>
+    <string name="packUsageSourceSummary">Sources used: %1$d · Unavailable: %2$d</string>
+    <string name="packUsageShareDescription">Each bar shows the source’s share of attributed icons.</string>
+    <string name="packUsageNoAttributedIcons">No icons attributed to these sources yet.</string>
+    <string name="packUsagePercent">%1$d%%</string>
+    <string name="watchManualOnly">Manual only. Check whenever you want.</string>
+    <string name="watchCheckNow">Check now</string>
+    <string name="watchCheckingNow">Checking…</string>
+    <string name="watchNeverChecked">No checks yet</string>
+    <string name="watchScheduleNotSaved">Could not update automatic checks. Try again.</string>
+    <string name="watchUnreadablePacks">Could not read: %1$s</string>
+    <string name="watchMoreUnreadablePacks">Other unreadable packs: %1$d</string>
+    <string name="watchPartialExplanation">Some pack icons could not be read. Checks include watched apps in all profiles.</string>
+    <string name="watchMissingDrawableReason">The pack maps this app to an icon resource that is missing from the installed pack.</string>
+    <string name="watchIconReadFailedReason">The mapped icon could not be loaded or rendered.</string>
+    <string name="watchPackReadFailedReason">The pack resources or app filter could not be read.</string>
+    <string name="watchFailedDrawableResource">Resource: %1$s</string>
+    <string name="watchPackReadRetryHint">Renkin will retry next time. Check for an update to the icon pack.</string>
+    <string name="watchLegacyDetailsHint">Pull down to refresh and collect details about the affected apps and icon resources.</string>
+    <plurals name="watchLastCheckFound">
+        <item quantity="one">%1$d new icon found</item>
+        <item quantity="other">%1$d new icons found</item>
+    </plurals>
+    <string name="watchNotificationChooseProfile">Choose a profile</string>
+    <string name="watchNotificationChooseProfileBody">New icons are available in more than one profile. Choose which results to review.</string>
+    <string name="profileSwitchLoadingTitle">Opening profile</string>
+    <string name="startupProfileLoading">Loading apps and saved icons…</string>
+    <string name="themePreviewDescription">Choose how Renkin looks. Changes apply immediately.</string>
+    <string name="oledBlackTitle">Pure black in dark mode</string>
+    <string name="oledBlackSummary">Use a true black background while keeping cards and controls distinct. Applies to Dark and to Follow system at night.</string>
+    <string name="oledBlackEnabled">Pure black in dark mode enabled</string>
+    <string name="buildNotificationChannel">Icon pack builds</string>
+    <string name="buildNotificationTitle">Building icon pack</string>
+    <string name="buildNotificationPreparing">Preparing your icon pack…</string>
+    <string name="buildNotificationFinishing">Finishing icon pack</string>
+    <string name="buildNotificationCount">%1$d / %2$d icons</string>
+    <string name="buildReady">Pack ready</string>
+    <string name="buildSavingReady">Saving the built profile…</string>
+    <string name="buildReadyInstall">Install icon pack</string>
+    <string name="buildInterrupted">The build was interrupted. Build the icon pack again.</string>
+    <string name="buildNoPendingPack">No prepared pack is available. Build the icon pack again.</string>
+    <string name="buildForegroundUnavailable">Could not start the background build. Return to Renkin and try again.</string>
 </resources>

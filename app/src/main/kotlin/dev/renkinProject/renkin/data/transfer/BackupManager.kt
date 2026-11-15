@@ -22,6 +22,7 @@ import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
+import dev.renkinProject.renkin.data.LastAutoBackupFailedAtKey
 import dev.renkinProject.renkin.data.LastAutoBackupDigestKey
 import dev.renkinProject.renkin.data.LastAutoBackupDocumentUriKey
 import dev.renkinProject.renkin.data.ColorPreset
@@ -1080,6 +1081,7 @@ class BackupManager(
             val autoBackupInterval = store[AutoBackupIntervalKey].takeIf { preserveDeviceLocal }
             val autoBackupTreeUri = store[AutoBackupTreeUriKey].takeIf { preserveDeviceLocal }
             val lastAutoBackupAt = store[LastAutoBackupAtKey].takeIf { preserveDeviceLocal }
+            val lastAutoBackupFailedAt = store[LastAutoBackupFailedAtKey].takeIf { preserveDeviceLocal }
             store.clear()
             for ((name, pref) in prefs) {
                 if (preserveDeviceLocal && name in DEVICE_LOCAL_PREF_NAMES) continue
@@ -1097,6 +1099,7 @@ class BackupManager(
             autoBackupInterval?.let { store[AutoBackupIntervalKey] = it }
             autoBackupTreeUri?.let { store[AutoBackupTreeUriKey] = it }
             lastAutoBackupAt?.let { store[LastAutoBackupAtKey] = it }
+            lastAutoBackupFailedAt?.let { store[LastAutoBackupFailedAtKey] = it }
         }
     }
 
@@ -1114,7 +1117,8 @@ class BackupManager(
             AutoBackupTreeUriKey.name,
             LastAutoBackupAtKey.name,
             LastAutoBackupDigestKey.name,
-            LastAutoBackupDocumentUriKey.name
+            LastAutoBackupDocumentUriKey.name,
+            LastAutoBackupFailedAtKey.name
         )
         private const val MANIFEST_ENTRY = "manifest.json"
         private const val DATA_ENTRY = "data.json"

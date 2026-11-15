@@ -121,6 +121,7 @@ internal object EditorRecoveryValidation {
             }
             is EditorAdaptiveArtwork -> value.controls?.let(::pack)
             is EditorInsetArtwork -> artwork(value.child)
+            is EditorThemedArtwork -> artwork(value.glyph)
         }
     }
 

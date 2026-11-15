@@ -14,10 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Done
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +42,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.renkinProject.renkin.OptionsViewModel
 import dev.renkinProject.renkin.feature.online.OnlineImageImport
 import android.graphics.Bitmap
 import dev.renkinProject.renkin.icon.creator.materialYouSchemes
@@ -60,6 +59,9 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.AppTargetState
+import dev.renkinProject.renkin.data.MotionPart
+import dev.renkinProject.renkin.data.reducesMotion
+import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.Source
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
@@ -88,7 +90,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
@@ -119,6 +120,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.LayersClear
@@ -128,7 +130,7 @@ import androidx.compose.runtime.produceState
 import dev.renkinProject.renkin.apk.EditorGlobalLayer
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.util.runCatchingCancellable
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.NavigationBar
@@ -196,6 +198,9 @@ internal fun OptionsDialog(
     globalLayer: EditorGlobalLayer? = null
 ) {
     val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
+    val optionsViewModel: OptionsViewModel = hiltViewModel()
+    val preferenceSnapshot by optionsViewModel.preferenceSnapshot.collectAsStateWithLifecycle()
+    val reduceTabMotion = preferenceSnapshot.reducesMotion(MotionPart.EDITOR_TABS)
     val app = session.application
     val interactionAllowed = canInteract()
 
@@ -544,6 +549,16 @@ internal fun OptionsDialog(
     val externalEditorScope = rememberCoroutineScope()
     val calendarSelectionScope = rememberCoroutineScope()
     var calendarSelectionJob by remember(session) { mutableStateOf<Job?>(null) }
+    var packSelectionJob by remember(session) { mutableStateOf<Job?>(null) }
+    var packSelectionRequest by remember(session) { mutableStateOf(0L) }
+    var packSelectionPending by remember(session) { mutableStateOf(false) }
+    val packIconUnavailable = stringResource(R.string.packIconUnavailable)
+    val currentCanInteract by rememberUpdatedState(canInteract)
+    LaunchedEffect(session, selectedTab, browserSource, createSearchQuery, dialogTransition.targetState) {
+        packSelectionRequest++
+        packSelectionJob?.cancel()
+        packSelectionPending = false
+    }
 
     LaunchedEffect(selectedTab) {
         // Leaving the icon-pack list re-expands the app bar (other tabs barely scroll).
@@ -552,6 +567,7 @@ internal fun OptionsDialog(
     }
 
     val confirmIcon: () -> Unit = confirm@{
+        if (packSelectionPending) return@confirm
         if (!canInteract()) return@confirm
         if (!session.canConfirmDraft(session.renderWitnessOrNull())) return@confirm
         // Credit the icon to a pack only when it actually came from one: the Create
@@ -690,34 +706,58 @@ internal fun OptionsDialog(
                                 componentMatch = if (session.purpose == EditorPurpose.APPLICATION && createSearchQuery == app.originalName) {
                                     app.toInstalledApplication()
                                 } else null,
-                                onIconSelect = { res, pack, drawableName ->
-                                    calendarSelectionJob?.cancel()
-                                    source = Source.ICON_PACK
-                                    if (customIconList.firstOrNull()?.resourceId != res.resourceId ||
-                                        iconPack != pack.packageName
-                                    ) {
-                                        materialYouPackAdjustments.reset()
-                                    }
-                                    customIconList = listOf(res)
-                                    iconPack = pack.packageName
-                                    activateCreate()
-                                    val newPrefix = drawableName.calendarPrefixOrNull().takeIf {
-                                        session.purpose == EditorPurpose.APPLICATION
-                                    }
-                                    val keepCalendarEnabled = calendarEnabled
-                                    calendarPrefix = null
-                                    calendarPackName = null
-                                    calendarEnabled = false
-                                    if (newPrefix != null) {
-                                        calendarSelectionJob = calendarSelectionScope.launch {
-                                            val validPrefixes = viewModel.calendarPrefixesAmong(pack.packageName, listOf(newPrefix))
-                                            if (source == Source.ICON_PACK && iconPack == pack.packageName &&
-                                                customIconList.singleOrNull()?.resourceId == res.resourceId &&
-                                                newPrefix in validPrefixes) {
-                                                calendarPrefix = newPrefix
-                                                calendarPackName = pack.packageName
-                                                calendarEnabled = keepCalendarEnabled
+                                onIconSelect = { pack, identity, drawableName ->
+                                    packSelectionJob?.cancel()
+                                    val request = ++packSelectionRequest
+                                    val expectedSource = source
+                                    val expectedPack = iconPack
+                                    val expectedIcons = customIconList
+                                    val expectedQuery = createSearchQuery
+                                    packSelectionPending = true
+                                    packSelectionJob = calendarSelectionScope.launch {
+                                        try {
+                                            val res = runCatchingCancellable {
+                                                viewModel.loadPackBrowserResource(pack, identity, drawableName)
+                                            }.getOrNull()
+                                            if (request != packSelectionRequest || !currentCanInteract() ||
+                                                !dialogTransition.targetState || selectedTab != 0 ||
+                                                session.createSourceToDisplay != Source.ICON_PACK ||
+                                                source != expectedSource || iconPack != expectedPack ||
+                                                customIconList != expectedIcons || createSearchQuery != expectedQuery) return@launch
+                                            if (res == null) {
+                                                toaster.show(packIconUnavailable)
+                                                return@launch
                                             }
+                                            calendarSelectionJob?.cancel()
+                                            source = Source.ICON_PACK
+                                            if (customIconList.firstOrNull()?.resourceId != res.resourceId ||
+                                                iconPack != pack.packageName) {
+                                                materialYouPackAdjustments.reset()
+                                            }
+                                            customIconList = listOf(res)
+                                            iconPack = pack.packageName
+                                            activateCreate()
+                                            val newPrefix = drawableName.calendarPrefixOrNull().takeIf {
+                                                session.purpose == EditorPurpose.APPLICATION
+                                            }
+                                            val keepCalendarEnabled = calendarEnabled
+                                            calendarPrefix = null
+                                            calendarPackName = null
+                                            calendarEnabled = false
+                                            if (newPrefix != null) {
+                                                calendarSelectionJob = calendarSelectionScope.launch {
+                                                    val validPrefixes = viewModel.calendarPrefixesAmong(pack.packageName, listOf(newPrefix))
+                                                    if (source == Source.ICON_PACK && iconPack == pack.packageName &&
+                                                        customIconList.singleOrNull()?.resourceId == res.resourceId &&
+                                                        newPrefix in validPrefixes) {
+                                                        calendarPrefix = newPrefix
+                                                        calendarPackName = pack.packageName
+                                                        calendarEnabled = keepCalendarEnabled
+                                                    }
+                                                }
+                                            }
+                                        } finally {
+                                            if (request == packSelectionRequest) packSelectionPending = false
                                         }
                                     }
                                 },
@@ -889,6 +929,7 @@ internal fun OptionsDialog(
                     OptionsBottomBar(
                         selectedTab = selectedTab,
                         modifierEnabled = draft.hasIcon,
+                        reduceMotion = reduceTabMotion,
                         onSelectTab = { selectedTab = it },
                         onModifierBlocked = {
                             toaster.show(selectIconMessage)
@@ -900,9 +941,10 @@ internal fun OptionsDialog(
                     heroBitmap = heroBitmap,
                     appName = app.appName,
                     icon = rotatingPreview.icon,
-                    loading = alternateIconPending || draft.generating || globalPreviewPending || rotatingPreview.pending,
-                    canConfirm = interactionAllowed && session.canConfirmDraft(composedRenderWitness),
-                    variants = rotatingPreview.variants
+                    loading = packSelectionPending || alternateIconPending || draft.generating || globalPreviewPending || rotatingPreview.pending,
+                    canConfirm = interactionAllowed && !packSelectionPending && session.canConfirmDraft(composedRenderWitness),
+                    variants = rotatingPreview.variants,
+                    frostedBackdrop = applicationIcon?.frostedBackdrop.takeIf { session.purpose == EditorPurpose.APPLICATION }
                 )
                 val actions = OptionsPreviewActions(
                     onDismiss = startClose,
@@ -941,6 +983,14 @@ internal fun OptionsDialog(
                     keep = session.keepGlobalStyle,
                     onToggle = { session.keepGlobalStyle = it }
                 )
+                // The pack-wide Themed export already keeps such icons live; the card is the
+                // per-icon way to the same result when that export is off.
+                val themedCard = ThemedSelection(
+                    visible = session.purpose == EditorPurpose.APPLICATION && selectedTab == 0 && !themed &&
+                        selectedMaterialYouPackIcon && session.modifierReplay?.allowsImageEdits != false,
+                    enabled = imageEdit == ImageEdit.THEMED,
+                    onToggle = { imageEdit = if (it) ImageEdit.THEMED else ImageEdit.NONE }
+                )
 
                 if (paneLayout != null) {
                     WideOptionsLayout(
@@ -950,6 +1000,7 @@ internal fun OptionsDialog(
                         packBrowser = packBrowser,
                         calendar = calendar,
                         globalStyle = globalStyle,
+                        themedCard = themedCard,
                         tabContent = tabContent,
                         bottomSection = bottomSection
                     )
@@ -961,6 +1012,7 @@ internal fun OptionsDialog(
                         packBrowser = packBrowser,
                         calendar = calendar,
                         globalStyle = globalStyle,
+                        themedCard = themedCard,
                         headerScrollBehavior = headerScrollBehavior,
                         labelExpand = labelExpand,
                         tabContent = tabContent,
@@ -1049,7 +1101,8 @@ private data class OptionsPreview(
     val icon: IconPackDrawable?,
     val loading: Boolean,
     val canConfirm: Boolean = !loading,
-    val variants: PreviewVariants? = null
+    val variants: PreviewVariants? = null,
+    val frostedBackdrop: Bitmap? = null
 )
 
 @Composable
@@ -1185,6 +1238,13 @@ private data class CalendarSelection(
     val onToggle: (Boolean) -> Unit
 )
 
+// Shown for an icon from a Material You pack: switches the Themed modifier on or off.
+private data class ThemedSelection(
+    val visible: Boolean,
+    val enabled: Boolean,
+    val onToggle: (Boolean) -> Unit
+)
+
 @Composable
 private fun WideOptionsLayout(
     paneLayout: HorizontalPaneLayout,
@@ -1193,6 +1253,7 @@ private fun WideOptionsLayout(
     packBrowser: PackBrowserChrome,
     calendar: CalendarSelection,
     globalStyle: GlobalStyleSelection,
+    themedCard: ThemedSelection,
     tabContent: @Composable (PaddingValues) -> Unit,
     bottomSection: @Composable () -> Unit
 ) {
@@ -1200,15 +1261,17 @@ private fun WideOptionsLayout(
         EditPreviewPane(
             heroBitmap = preview.heroBitmap,
             appName = preview.appName,
+            frostedBackdrop = preview.frostedBackdrop,
             previewIcon = preview.icon,
             previewLoading = preview.loading,
+            contentLoading = packBrowser.visible && packBrowser.busy,
             confirmEnabled = preview.canConfirm,
             onDismiss = actions.onDismiss,
             onClear = actions.onClear,
             onConfirm = actions.onConfirm,
             modifier = Modifier.width(paneLayout.leadingWidth),
             previewVariants = preview.variants,
-            extraCard =if (calendar.visible || globalStyle.layer != null) {
+            extraCard = if (calendar.visible || globalStyle.layer != null || themedCard.visible) {
                 {
                     androidx.compose.foundation.layout.Column {
                         globalStyle.layer?.let { GlobalStyleCard(it, globalStyle.keep, globalStyle.onToggle) }
@@ -1221,6 +1284,7 @@ private fun WideOptionsLayout(
                                 onToggle = calendar.onToggle
                             )
                         }
+                        if (themedCard.visible) ThemedCard(themedCard.enabled, themedCard.onToggle)
                     }
                 }
             } else null
@@ -1243,6 +1307,7 @@ private fun PhoneOptionsLayout(
     packBrowser: PackBrowserChrome,
     calendar: CalendarSelection,
     globalStyle: GlobalStyleSelection,
+    themedCard: ThemedSelection,
     headerScrollBehavior: TopAppBarScrollBehavior,
     labelExpand: Float,
     tabContent: @Composable (PaddingValues) -> Unit,
@@ -1262,6 +1327,7 @@ private fun PhoneOptionsLayout(
                     ComparisonHeader(
                         heroBitmap = preview.heroBitmap,
                         appName = preview.appName,
+                        frostedBackdrop = preview.frostedBackdrop,
                         previewIcon = preview.icon,
                         previewLoading = preview.loading,
                         confirmEnabled = preview.canConfirm,
@@ -1310,6 +1376,9 @@ private fun PhoneOptionsLayout(
                             onToggle = calendar.onToggle
                         )
                     }
+                    AnimatedVisibility(visible = themedCard.visible) {
+                        ThemedCard(themedCard.enabled, themedCard.onToggle)
+                    }
                 }
             }
         ) { headerPadding ->
@@ -1351,13 +1420,6 @@ private fun PackBrowserToolbar(packBrowser: PackBrowserChrome) {
             onPackSortOrderChange = packBrowser.onPackSortChange
         )
     }
-    if (packBrowser.busy) {
-        LinearProgressIndicator(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(3.dp)
-        )
-    }
 }
 
 
@@ -1365,6 +1427,7 @@ private fun PackBrowserToolbar(packBrowser: PackBrowserChrome) {
 private fun OptionsBottomBar(
     selectedTab: Int,
     modifierEnabled: Boolean,
+    reduceMotion: Boolean,
     onSelectTab: (Int) -> Unit,
     onModifierBlocked: () -> Unit
 ) {
@@ -1372,19 +1435,25 @@ private fun OptionsBottomBar(
         NavigationBarItem(
             selected = selectedTab == 0,
             onClick = { onSelectTab(0) },
-            icon = { Icon(Icons.Filled.Refresh, null) },
+            icon = {
+                EditorModeIcon(EditorMode.CREATE, selected = selectedTab == 0, reduceMotion = reduceMotion)
+            },
             label = { Text(stringResource(R.string.create)) }
         )
         NavigationBarItem(
             selected = selectedTab == 1,
             onClick = { onSelectTab(1) },
-            icon = { Icon(Icons.Filled.Face, null) },
+            icon = {
+                EditorModeIcon(EditorMode.UPLOAD, selected = selectedTab == 1, reduceMotion = reduceMotion)
+            },
             label = { Text(stringResource(R.string.upload)) }
         )
         NavigationBarItem(
             selected = selectedTab == 3,
             onClick = { onSelectTab(3) },
-            icon = { Icon(Icons.Filled.Create, null) },
+            icon = {
+                EditorModeIcon(EditorMode.VECTOR, selected = selectedTab == 3, reduceMotion = reduceMotion)
+            },
             label = { Text(stringResource(R.string.editVector)) }
         )
         val disabledTint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
@@ -1392,11 +1461,12 @@ private fun OptionsBottomBar(
             selected = selectedTab == 2,
             onClick = { if (modifierEnabled) onSelectTab(2) else onModifierBlocked() },
             icon = {
-                if (modifierEnabled) {
-                    Icon(Icons.Filled.Tune, null)
-                } else {
-                    Icon(Icons.Filled.Tune, null, tint = disabledTint)
-                }
+                EditorModeIcon(
+                    EditorMode.MODIFIER,
+                    selected = selectedTab == 2,
+                    reduceMotion = reduceMotion || !modifierEnabled,
+                    tint = if (modifierEnabled) LocalContentColor.current else disabledTint
+                )
             },
             label = {
                 if (modifierEnabled) {
@@ -1477,6 +1547,48 @@ private fun GlobalStyleCard(layer: EditorGlobalLayer, keep: Boolean, onToggle: (
             }
             // The whole card toggles, so the switch itself only shows the state.
             Switch(checked = keep, onCheckedChange = null)
+        }
+    }
+}
+
+@Composable
+private fun ThemedCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Surface(
+        shape = dev.renkinProject.renkin.ui.theme.CardShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .toggleable(value = enabled, role = Role.Switch, onValueChange = onToggle)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.ColorLens,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(22.dp)
+            )
+            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.themedIconCard),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = stringResource(R.string.themedIconCardDesc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                )
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = null
+            )
         }
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -45,6 +46,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -71,10 +74,13 @@ import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.drawable.MaterialYouPackEditState
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.PackSearchResult
+import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import dev.renkinProject.renkin.icon.creator.TextCase
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 
 /** How the pack list itself is ordered (the icons inside sort by [IconSortOrder]). */
 enum class PackSortOrder { USAGE, NAME, INSTALL_DATE }
@@ -163,7 +169,7 @@ internal fun CreateTab(
     componentMatch: InstalledApplication? = null,
     // drawableName is the raw resource name (e.g. "bee_calendar_6") — used to derive the
     // calendar prefix when the user opts into day rotation.
-    onIconSelect: (ResourceDrawable, IconPack, String) -> Unit,
+    onIconSelect: (IconPack, String, String) -> Unit,
     onTextTypeChange: (TextType) -> Unit,
     // Text-source extras: the CUSTOM type's string, the letter-case transform and the font.
     customText: String = "",
@@ -213,13 +219,22 @@ internal fun CreateTab(
     // Seeded from the hoisted query so returning to the tab doesn't trigger a spurious
     // re-search (debouncedQuery already matches the preserved searchQuery).
     var debouncedQuery by remember { mutableStateOf(searchQuery) }
+    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
+    val browserRevision by viewModel.packBrowserRevision.collectAsStateWithLifecycle()
+    val configuration = LocalConfiguration.current.toString()
+    val palette = listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary,
+        MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.surface)
+    var searchResults by remember(source, iconPacks, debouncedQuery, sortOrder, componentMatch,
+        browserRevision, configuration, palette, ApplicationManager.displayedNightMode) {
+        mutableStateOf<Map<String, PackSearchResult>>(emptyMap())
+    }
+    val searchPending = source == Source.ICON_PACK && iconPacks.any { searchResults[it.packageName]?.complete != true }
     // In-flight pack-row loads; > 0 (or a pending debounce) means the search is still resolving.
     var activeLoads by remember { mutableIntStateOf(0) }
     val trackLoad: (Boolean) -> Unit = remember { { loading -> activeLoads += if (loading) 1 else -1 } }
-    val busy = activeLoads > 0 || searchQuery != debouncedQuery
+    val busy = activeLoads > 0 || searchPending || searchQuery != debouncedQuery
     LaunchedEffect(busy) { onBusyChange(busy) }
     // Pack first-install times, fetched only once the recently-installed sort is chosen.
-    val viewModel = dev.renkinProject.renkin.feature.buildinstall.iconEditorViewModel()
     val packInstallTimes by produceState(emptyMap<String, Long>(), packSort, iconPacks) {
         if (packSort == PackSortOrder.INSTALL_DATE && value.isEmpty()) {
             value = viewModel.installTimes(iconPacks.map { it.packageName })
@@ -235,8 +250,6 @@ internal fun CreateTab(
             PackSortOrder.INSTALL_DATE -> base.sortedByDescending { packInstallTimes[it.packageName] ?: 0L }
         }
     }
-    // packageName -> whether the pack has icons matching the current query
-    var packMatches by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     // The order actually shown. Updated only once the results settle so the list
     // doesn't shuffle on every pack that finishes loading.
     var orderedPacks by remember(distinctPacks) { mutableStateOf(distinctPacks) }
@@ -248,23 +261,27 @@ internal fun CreateTab(
         }
     }
 
-    // Forget previous results and restore the default order when the query changes
-    LaunchedEffect(debouncedQuery) {
-        packMatches = emptyMap()
+    LaunchedEffect(source, iconPacks, debouncedQuery, sortOrder, componentMatch, browserRevision,
+        configuration, palette, ApplicationManager.displayedNightMode) {
+        searchResults = emptyMap()
         orderedPacks = distinctPacks
+        if (source != Source.ICON_PACK) return@LaunchedEffect
+        viewModel.searchPackIcons(iconPacks, sortOrder, debouncedQuery, componentMatch).collect {
+            searchResults = it
+        }
     }
 
-    // Reorder once the match results settle: never while a visible row is still loading (the
-    // list must not move under the user without a loading indicator on screen), and only after
-    // a short settle so one straggler pack doesn't shuffle the list repeatedly.
-    LaunchedEffect(packMatches, busy) {
-        if (packMatches.isEmpty() || busy) return@LaunchedEffect
-        delay(450)
+    // Reorder once all pack metadata is known; thumbnail completion never moves the list.
+    LaunchedEffect(searchResults, searchPending, distinctPacks) {
+        if (searchPending || searchResults.isEmpty()) return@LaunchedEffect
         // Packs that have a matching icon float to the top; among equals, the chosen pack sort
         // (distinctPacks' order) is the stable tiebreaker.
         val baseIndex = distinctPacks.withIndex().associate { it.value.packageName to it.index }
         val newOrder = distinctPacks.sortedWith(
-            compareByDescending<IconPack> { packMatches[it.packageName] != false }
+            compareByDescending<IconPack> {
+                val result = searchResults[it.packageName]
+                result?.failed == true || !result?.names.isNullOrEmpty()
+            }
                 .thenBy { baseIndex[it.packageName] ?: Int.MAX_VALUE }
         )
         if (newOrder.map { it.packageName } != orderedPacks.map { it.packageName }) {
@@ -295,15 +312,15 @@ internal fun CreateTab(
                         contentPadding = contentPadding,
                         iconPack = detailPack,
                         options = options,
-                        sortOrder = sortOrder,
-                        query = debouncedQuery,
-                        component = componentMatch,
+                        result = searchResults[detailPack.packageName] ?: PackSearchResult(),
                         onLoadingChange = trackLoad,
                         selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.source.primaryIconPack },
                         selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { detailPack.packageName == options.source.primaryIconPack },
                         gridState = gridState,
                         onBack = { onExpandedPackChange(null) },
-                        onSelect = { resource, _, drawableName -> onIconSelect(resource, detailPack, drawableName) }
+                        onSelect = { drawableName ->
+                            onIconSelect(detailPack, searchResults[detailPack.packageName]?.identity.orEmpty(), drawableName)
+                        }
                     )
                 } else if (!contentReady) {
                     // Hold off mounting the (heavy) pack browser until the dialog has
@@ -315,6 +332,15 @@ internal fun CreateTab(
                                 .padding(horizontal = 32.dp)
                         )
                     }
+                } else if (orderedPacks.isEmpty()) {
+                    EmptyState(
+                        text = stringResource(R.string.createNoIconPacks),
+                        icon = Icons.Filled.HideImage,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(contentPadding)
+                            .padding(32.dp)
+                    )
                 } else {
                     Column(Modifier.fillMaxSize()) {
                         val headerInset = contentPadding.calculateTopPadding()
@@ -334,18 +360,13 @@ internal fun CreateTab(
                                     PackIconsRow(
                                         iconPack = pack,
                                         options = options,
-                                        sortOrder = sortOrder,
-                                        query = debouncedQuery,
-                                        component = componentMatch,
+                                        result = searchResults[pack.packageName] ?: PackSearchResult(),
                                         onLoadingChange = trackLoad,
                                         selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.source.primaryIconPack },
                                         selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.source.primaryIconPack },
-                                        onMore = { onExpandedPackChange(pack) },
-                                        onResult = { hasMatches ->
-                                            packMatches = packMatches + (pack.packageName to hasMatches)
-                                        }
-                                    ) { resource, _, drawableName ->
-                                        onIconSelect(resource, pack, drawableName)
+                                        onMore = { onExpandedPackChange(pack) }
+                                    ) { drawableName ->
+                                        onIconSelect(pack, searchResults[pack.packageName]?.identity.orEmpty(), drawableName)
                                     }
                                 }
                             }

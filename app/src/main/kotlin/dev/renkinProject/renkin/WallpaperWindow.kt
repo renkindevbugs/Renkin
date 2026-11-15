@@ -14,3 +14,7 @@ internal fun Window.showWallpaperBehindContent() {
     clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
     setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
 }
+
+internal fun Window.hideWallpaperBehindContent() {
+    clearFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+}

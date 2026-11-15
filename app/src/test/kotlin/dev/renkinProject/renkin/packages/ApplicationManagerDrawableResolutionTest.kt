@@ -21,6 +21,17 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [33])
 class ApplicationManagerDrawableResolutionTest {
 
+    @Test fun drawableExistenceDistinguishesAMissingNameFromAnUnreadableResourceAndMissingPackage() {
+        val context = RuntimeEnvironment.getApplication()
+        val manager = ApplicationManager(context)
+
+        assertEquals(true, manager.resourceDrawableExists(context.packageName, "mdpi_ic_launcher"))
+        assertEquals(false, manager.resourceDrawableExists(context.packageName, "authenticator_google"))
+        assertEquals(true, manager.resourceDrawableExists(context.packageName, "xml/manifest"))
+        assertNull(manager.getResourceDrawableByName(context.packageName, "xml/manifest"))
+        assertNull(manager.resourceDrawableExists("missing.icon.pack", "authenticator_google"))
+    }
+
     private fun assertBrokenWinnerDoesNotReviveEarlierDrawable(brokenName: String) {
         val context = RuntimeEnvironment.getApplication()
         val manager = ApplicationManager(context)

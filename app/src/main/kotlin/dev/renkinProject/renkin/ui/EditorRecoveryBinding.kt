@@ -10,6 +10,7 @@ import dev.renkinProject.renkin.data.editor.EditorDraftOrigin
 import dev.renkinProject.renkin.data.editor.EditorGenerationSnapshot
 import dev.renkinProject.renkin.data.editor.EditorInputSnapshot
 import dev.renkinProject.renkin.data.editor.EditorInsetArtwork
+import dev.renkinProject.renkin.data.editor.EditorThemedArtwork
 import dev.renkinProject.renkin.data.editor.EditorRecoveryResources
 import dev.renkinProject.renkin.data.editor.EditorRecoveryValidation
 import dev.renkinProject.renkin.data.editor.EditorVectorInputs
@@ -18,6 +19,7 @@ import dev.renkinProject.renkin.data.editor.toDraftVectorPath
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
+import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
 import dev.renkinProject.renkin.icon.creator.BackgroundBrushOperation
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconModifierInput
@@ -73,6 +75,7 @@ private suspend fun bindEditorRecoveryValues(
     fun bitmapBytes(value: EditorArtworkSnapshot): Long = when (value) {
         is EditorBitmapArtwork -> value.pixels.size.toLong()
         is EditorInsetArtwork -> bitmapBytes(value.child)
+        is EditorThemedArtwork -> bitmapBytes(value.glyph)
         else -> 0L
     }
     val artworkBitmapBytes = capture.artwork.values.sumOf(::bitmapBytes)
@@ -127,6 +130,7 @@ private fun disposeArtwork(artwork: Map<String, IconPackDrawable>, resources: Bo
         when (icon) {
             is BitmapIconDrawable -> icon.toBitmap().let { if (!it.isRecycled) it.recycle() }
             is InsetIconDrawable -> (icon.drawable as? IconPackDrawable)?.let(::dispose)
+            is ThemedGlyphDrawable -> icon.mask.let { if (!it.isRecycled) it.recycle() }
         }
     }
     artwork.values.forEach(::dispose)

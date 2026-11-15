@@ -11,16 +11,18 @@ import dev.renkinProject.renkin.drawable.InsetIconDrawable
 import dev.renkinProject.renkin.extension.bitmapFromBase64
 import dev.renkinProject.renkin.vector.VectorParser
 import dev.renkinProject.renkin.xml.XmlNode
+import dev.renkinProject.renkin.xml.file.BaseVectorXml
 
 class XmlNodeParser(val resources: Resources, private val defaultColor: Color = Color.Unspecified) {
     private fun parse(node: XmlNode): IconPackDrawable? {
         node.findFirstTag(AdaptiveIconPayload.TAG)?.let { return AdaptiveIconPayload.decode(it) }
+        node.findFirstTag(ThemedGlyphPayload.TAG)?.let { return ThemedGlyphPayload.decode(it) }
 
         if (node.containsTag("vector")) {
             val vector = VectorParser.parse(resources, node, defaultColor)
 
             if (vector != null) {
-                return ImageVectorDrawable(vector)
+                return ImageVectorDrawable(vector, node.hasScalingStrokes())
             }
         }
 
@@ -75,12 +77,15 @@ class XmlNodeParser(val resources: Resources, private val defaultColor: Color = 
                     defaultDims
                 }
 
-                return InsetIconDrawable(ImageVectorDrawable(vector), dims, fractions)
+                return InsetIconDrawable(ImageVectorDrawable(vector, inset.hasScalingStrokes()), dims, fractions)
             }
         }
 
         return null
     }
+
+    private fun XmlNode.hasScalingStrokes(): Boolean =
+        findFirstTag("vector")?.getAttributeValue(BaseVectorXml.SCALING_STROKES_ATTRIBUTE) == "true"
 
     private fun parseInsetValue(value: String): Float {
         if (value.contains('%')) {

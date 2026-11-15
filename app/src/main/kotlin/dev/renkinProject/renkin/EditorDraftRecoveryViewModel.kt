@@ -101,6 +101,7 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
     private var prepared: PreparedEditorRecovery? = null
     private var accepted: Pair<EditorRecoveryAttachment, EditorDraftCheckpoint>? = null
     private var cleanupCheckpoint: EditorDraftCheckpoint? = null
+    private var reviewingSavedEdit = false
     private val postponed get() = recoverySession.postponed.value
     private var lastObservation: Observation? = null
     private var attempt = 0L
@@ -146,6 +147,7 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                             is Request.Discard -> if (mutableState.value === request.shown) performDiscard(request.shown)
                             is Request.Postpone -> if (mutableState.value === request.shown) {
                                 recoverySession.postpone(checkpointOf(request.shown))
+                                reviewingSavedEdit = false
                                 dropPrepared()
                                 mutableState.value = EditorDraftRecoveryState.Hidden
                             }
@@ -297,7 +299,8 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
             StorageOperationGate.recoveryState.value == StorageRecoveryState.READY, requireNotNull(editor).lifetime.value)
     }
 
-    private suspend fun refresh(reviewRequested: Boolean = false) {
+    private suspend fun refresh(reviewRequested: Boolean = reviewingSavedEdit) {
+        reviewingSavedEdit = reviewRequested
         val current = observation()
         lastObservation = current
         dropPrepared()
@@ -309,7 +312,8 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
             when (val inspected = store.inspectCheckpoint()) {
                 is EditorDraftInspection.Unreadable -> {
                     mutableHasSavedEdit.value = true
-                    if (postponed != null && postponed?.checkpoint == null) {
+                    if ((!reviewRequested && cleanupCheckpoint == null) ||
+                        (postponed != null && postponed?.checkpoint == null)) {
                         mutableState.value = EditorDraftRecoveryState.Hidden
                     } else mutableState.value = EditorDraftRecoveryState.Failed(null, inspected.resetLease, cleanupCheckpoint != null)
                     return
@@ -317,6 +321,7 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                 is EditorDraftInspection.Readable -> {
                     val checkpoint = inspected.checkpoint
                     mutableHasSavedEdit.value = checkpoint.draftId != null
+                    if (checkpoint.draftId == null) reviewingSavedEdit = false
                     val pending = cleanupCheckpoint
                     if (pending != null) {
                         if (pending == checkpoint) {
@@ -327,7 +332,8 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                         }
                         cleanupCheckpoint = null
                     }
-                    if (checkpoint.draftId == null || (postponed != null && postponed?.checkpoint == checkpoint)) {
+                    if (!reviewRequested || checkpoint.draftId == null ||
+                        (postponed != null && postponed?.checkpoint == checkpoint)) {
                         mutableState.value = EditorDraftRecoveryState.Hidden
                         return
                     }
@@ -396,6 +402,7 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
             when (outcome) {
                 is EditorRecoveryAcceptance.Accepted -> {
                     accepted = outcome.attachment to draft.checkpoint
+                    reviewingSavedEdit = false
                     mutableState.value = EditorDraftRecoveryState.Hidden
                 }
                 EditorRecoveryAcceptance.Superseded -> refresh()
@@ -405,6 +412,7 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
             // Publication can win cancellation or a failed return dispatch. Trust the attachment.
             requireNotNull(editor).recoveryAttachment.value?.takeIf { it.sessionId == id }?.let {
                 accepted = it to draft.checkpoint
+                reviewingSavedEdit = false
                 autosave.attachRecovered(requireNotNull(editor), draft.checkpoint, draft.owner)
                 mutableState.value = EditorDraftRecoveryState.Hidden
             }

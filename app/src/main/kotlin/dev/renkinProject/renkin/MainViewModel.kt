@@ -53,15 +53,20 @@ import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
+import dev.renkinProject.renkin.feature.buildinstall.PackPreviewSession
 import dev.renkinProject.renkin.apk.ProfilePackIdentityException
 import dev.renkinProject.renkin.apk.ProfilePackIdentityError
 import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.data.Profile
+import dev.renkinProject.renkin.data.ProfilePackIconCodec
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.AppFilterNoIconKey
 import dev.renkinProject.renkin.data.AppSortOrder
 import dev.renkinProject.renkin.data.AppSortOrderKey
 import dev.renkinProject.renkin.data.DarkMode
 import dev.renkinProject.renkin.data.DarkModeKey
+import dev.renkinProject.renkin.data.MotionPart
+import dev.renkinProject.renkin.data.OledBlackKey
 import dev.renkinProject.renkin.data.InstallMethod
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
 import dev.renkinProject.renkin.data.ShowRenkinPacksKey
@@ -98,15 +103,13 @@ import dev.renkinProject.renkin.feature.watch.WatchApplyRequest
 import dev.renkinProject.renkin.feature.watch.WatchApplyState
 import dev.renkinProject.renkin.feature.watch.WatchApplyPhase
 import dev.renkinProject.renkin.service.RenkinNotifications
+import dev.renkinProject.renkin.service.iconAvailableSummaryEntries
 import dev.renkinProject.renkin.data.dataStore
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
-import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews
-import dev.renkinProject.renkin.icon.creator.PackIconPreview
-import dev.renkinProject.renkin.icon.creator.PackRowPreviews
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.util.timeProfilePhase
@@ -180,6 +183,7 @@ class MainViewModel @Inject constructor(
     autoBackupManager: AutoBackupManager,
     private val unsavedSessionMonitor: UnsavedSessionMonitor,
     private val modifierShortcuts: ModifierShortcutStore,
+    private val buildSession: BuildInstallSession,
     savedStateHandle: SavedStateHandle
 ) : AndroidViewModel(application), IconPreviewBuilder {
     private val installerCatalog = InstallerCatalog(application)
@@ -194,11 +198,31 @@ class MainViewModel @Inject constructor(
     val applicationState = appProvider.applicationState
     val installedIcons = appProvider.installedIcons
     val runtimeState = appProvider.runtimeState
-    internal var packPreviewOpen by mutableStateOf(false)
+    val startupProfile = appProvider.startupProfile
+    /** The open Pack preview, hosted inside the home window (PackPreviewHost). */
+    internal var packPreview by mutableStateOf<PackPreviewSession?>(null)
+        private set
+    internal val packPreviewOpen: Boolean get() = packPreview != null
+
+    internal fun openPackPreview() {
+        packPreview = PackPreviewSession(sessionToken, builtKeys, updatedKeys)
+    }
+
+    internal fun holdInstallForBuildAnimation(held: Boolean) = buildCoordinator.holdInstall(held)
+
+    internal fun closePackPreview() {
+        packPreview = null
+    }
+
+    internal fun isCurrentSession(token: ProfileSessionToken): Boolean = appProvider.isCurrentSession(token)
+    internal suspend fun calendarWarnings(preferences: Preferences) = appProvider.calendarWarnings(preferences)
     /** Action-time snapshot only; composables collect [applicationState]. */
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
 
     val iconPackState = appProvider.iconPackState
+    private val packBrowserOwner = lazy { appProvider.packBrowserPreviews() }
+    private val packBrowserPreviews by packBrowserOwner
+    val packBrowserRevision get() = packBrowserPreviews.revision
 
     /** Action-time snapshot only; UI readiness comes from [applicationState]. */
     val applicationsLoaded: Boolean get() = appProvider.applicationsLoaded
@@ -467,6 +491,36 @@ class MainViewModel @Inject constructor(
     // Replaces the old mirrored buildInstalled/syncDone/appsRefreshed flag + consume pairs.
     private val _toastEvents = Channel<Int>(Channel.BUFFERED)
     val toastEvents = _toastEvents.receiveAsFlow()
+    var watchOpenRequested by mutableStateOf(false)
+        private set
+    var watchNotificationProfileIds by mutableStateOf<List<Long>?>(null)
+        private set
+
+    fun consumeWatchOpenRequest() { watchOpenRequested = false }
+    fun dismissWatchNotificationProfiles() { watchNotificationProfileIds = null }
+
+    fun openWatchFromNotification() {
+        launchProfileOperation(serialize = false) {
+            runtimeState.first { it.ready }
+            val knownProfiles = appProvider.profilesFlow().first().mapTo(hashSetOf()) { it.id }
+            val ids = watchRepo.iconAvailableSummaryEntries(getApplication()).map { it.profileId }
+                .filter { it in knownProfiles }.distinct()
+            when (ids.size) {
+                0 -> watchOpenRequested = true
+                1 -> openWatchNotificationProfile(ids.single())
+                else -> watchNotificationProfileIds = ids
+            }
+        }
+    }
+
+    fun openWatchNotificationProfile(profileId: Long) {
+        watchNotificationProfileIds = null
+        launchProfileOperation(serialize = false) {
+            runtimeState.first { it.ready }
+            if (profileId != activeProfileId) performSwitch(profileId, saveFirst = false, saveIfChanged = true)
+            watchOpenRequested = true
+        }
+    }
     private val _installToastEvents = Channel<String>(Channel.BUFFERED)
     val installToastEvents = _installToastEvents.receiveAsFlow()
 
@@ -499,9 +553,10 @@ class MainViewModel @Inject constructor(
         expected: ProfileSessionToken = sessionToken,
         applicationName: String? = null,
         serialize: Boolean = true,
+        profileTarget: ProfileSwitchTarget? = null,
         operation: suspend (ProfileSessionToken) -> Unit
     ) {
-        val progress = ProfileActionProgress(messageRes, applicationName)
+        val progress = ProfileActionProgress(messageRes, applicationName, profileTarget)
         foregroundProfileActions.launch(progress, serialize) {
             launchProfileOperation(expected, serialize = false) { owner ->
                 try {
@@ -626,6 +681,11 @@ class MainViewModel @Inject constructor(
         loadStartup()
         observeProfileSession()
         loadWhatsNewState()
+        viewModelScope.launch {
+            combine(iconPackState, runtimeState.map { it.ready }.distinctUntilChanged()) { state, ready ->
+                state.takeIf { ready && it.loaded }
+            }.filterNotNull().collect { state -> packBrowserPreviews.prewarm(state.packs) }
+        }
     }
 
     private fun cancelRefresh() {
@@ -694,11 +754,13 @@ class MainViewModel @Inject constructor(
         primary: Source,
         primaryPackage: String,
         secondary: Source,
-        secondaryPackage: String
+        secondaryPackage: String,
+        livePrimaryPack: Boolean,
+        liveSecondaryPack: Boolean
     ) {
         launchProfileOperation(expected) {
             val selected = appProvider.selectIconSources(
-                expected, primary, primaryPackage, secondary, secondaryPackage
+                expected, primary, primaryPackage, secondary, secondaryPackage, livePrimaryPack, liveSecondaryPack
             )
             if (primary != Source.NONE) refresh(selected)
         }
@@ -788,6 +850,14 @@ class MainViewModel @Inject constructor(
         setEnumValue(DarkModeKey, mode)
     }
 
+    fun setOledBlack(enabled: Boolean) = updatePreferences {
+        setBooleanValue(OledBlackKey, enabled)
+    }
+
+    fun setReduceMotion(parts: Collection<MotionPart>, reduced: Boolean) = updatePreferences {
+        parts.forEach { setBooleanValue(it.key, reduced) }
+    }
+
     fun appLanguageTag(): String = AppLocales.selectedTag(getApplication())
 
     fun selectAppLanguage(tag: String) = AppLocales.select(getApplication(), tag)
@@ -842,9 +912,10 @@ class MainViewModel @Inject constructor(
     fun openShizukuManager(): Boolean = ShizukuSupport.openManager(getApplication<Application>())
 
     override fun onCleared() {
+        if (packBrowserOwner.isInitialized()) packBrowserPreviews.close()
         backupCoordinator.close()
         shizukuObservation.close()
-        buildCoordinator.close()
+        buildSession.detach(this)
         super.onCleared()
     }
 
@@ -871,15 +942,13 @@ class MainViewModel @Inject constructor(
             }
         }
 
-    private val buildCoordinator = BuildInstallCoordinator(
-        application = getApplication(),
-        provider = appProvider,
-        scope = viewModelScope,
-        syncBaselines = ::syncBuildBaselines,
-        refreshMissingPacks = { refreshMissingPacks(prompt = false) },
+    private val buildCoordinator = buildSession.attach(
+        owner = this,
+        sync = ::syncBuildBaselines,
+        refresh = { refreshMissingPacks(prompt = false) },
         notify = { _toastEvents.trySend(it) },
         notifyText = { _installToastEvents.trySend(it) },
-        pendingApkExport = PendingApkExportState(savedStateHandle)
+        exportState = PendingApkExportState(savedStateHandle)
     )
 
     internal val buildState: BuildInstallState get() = buildCoordinator.state
@@ -900,6 +969,25 @@ class MainViewModel @Inject constructor(
     }
     val buildProgress: Pair<Int, Int>? get() = (buildState as? BuildInstallState.Building)?.progress
     val buildBusy: Boolean get() = buildCoordinator.busy
+    val buildReady: Boolean get() = buildState is BuildInstallState.Ready
+
+    fun setBuildForeground(foreground: Boolean) = buildSession.setForeground(foreground)
+
+    fun openBuildFromNotification(install: Boolean) {
+        launchProfileOperation(serialize = false) {
+            runtimeState.first { it.ready }
+            val profileId = buildCoordinator.pendingProfileId
+            if (profileId != null && profileId != activeProfileId) {
+                performSwitch(profileId, saveFirst = false, saveIfChanged = true)
+            }
+            if (install) {
+                if (buildReady) buildSession.continueWork { buildCoordinator.installReadyPack() }
+                else if (!buildBusy) _toastEvents.trySend(R.string.buildNoPendingPack)
+            }
+        }
+    }
+
+    fun installReadyPack() = openBuildFromNotification(install = true)
 
     enum class BuildOutcome { FIRST_INSTALL, UPDATE }
     data class BuildOutcomeInfo(val outcome: BuildOutcome, val packLabel: String, val installerLabel: String,
@@ -911,40 +999,47 @@ class MainViewModel @Inject constructor(
     fun dismissBuildOutcome() = buildCoordinator.dismissBuildOutcome()
 
     data class InstallFailureInfo(val summary: String, val report: String, val missingSystemInstaller: Boolean,
-        val canSaveApk: Boolean)
+        val canSaveApk: Boolean, @get:StringRes val buildFailureAdvice: Int? = null)
     val installFailure: InstallFailureInfo? get() = (buildState as? BuildInstallState.Failed)?.let {
-        InstallFailureInfo(it.summary, it.report, it.result == ApkInstallResult.NO_SYSTEM_INSTALLER, it.pack != null)
+        InstallFailureInfo(it.summary, it.report, it.result == ApkInstallResult.NO_SYSTEM_INSTALLER, it.pack != null,
+            it.advice)
     }
     fun dismissInstallFailure() = buildCoordinator.dismissInstallFailure()
     fun beginFailedApkExport(openPicker: (String) -> Unit) = buildCoordinator.beginFailedApkExport(openPicker)
     fun finishFailedApkExport(target: Uri?) = buildCoordinator.finishFailedApkExport(target)
 
     val installerPromptReason: InstallerChoiceReason? get() = (buildState as? BuildInstallState.ChoosingInstaller)?.reason
-    fun confirmInstallerSelection(selection: InstallerSelection) = buildCoordinator.confirmInstallerSelection(selection)
+    fun confirmInstallerSelection(selection: InstallerSelection) {
+        if (buildState is BuildInstallState.ChoosingInstaller) {
+            buildSession.continueWork { buildCoordinator.confirmInstallerSelection(selection) }
+        }
+    }
     fun dismissInstallerSelection() = buildCoordinator.dismissInstallerSelection()
     val installFallbackPending: Boolean get() = buildState is BuildInstallState.Conflict
     val installFallbackSignatureMismatch: Boolean get() = (buildState as? BuildInstallState.Conflict)?.signatureMismatch == true
-    fun confirmInstallFallback() = buildCoordinator.confirmInstallFallback()
+    fun confirmInstallFallback() {
+        if (buildState is BuildInstallState.Conflict) {
+            buildSession.continueWork { buildCoordinator.confirmInstallFallback() }
+        }
+    }
     fun dismissInstallFallback() = buildCoordinator.dismissInstallFallback()
 
-    fun build(expected: ProfileSessionToken) {
-        if (buildCoordinator.busy) {
-            _toastEvents.trySend(R.string.buildOperationPending)
-            return
+    /** Starts the build, or explains with a toast why it cannot start now. */
+    fun build(expected: ProfileSessionToken): Boolean {
+        val refusal = when {
+            foregroundProfileActions.progress.value != null -> R.string.profileActionBusy
+            buildCoordinator.busy -> R.string.buildOperationPending
+            longOperationRunning -> R.string.profileRenderBusy
+            !startupComplete || isProfileSwitching -> R.string.profileStillLoading
+            !appProvider.isCurrentSession(expected) -> expected.expiredSessionMessage(sessionToken)
+            else -> null
         }
-        if (longOperationRunning) {
-            _toastEvents.trySend(R.string.profileRenderBusy)
-            return
+        if (refusal != null) {
+            _toastEvents.trySend(refusal)
+            return false
         }
-        if (!startupComplete || isProfileSwitching) {
-            _toastEvents.trySend(R.string.profileStillLoading)
-            return
-        }
-        if (!appProvider.isCurrentSession(expected)) {
-            _toastEvents.trySend(expected.expiredSessionMessage(sessionToken))
-            return
-        }
-        buildCoordinator.build(expected)
+        buildSession.startBuild(expected)
+        return true
     }
 
     // Records that [app] was hand-edited this session (so the build preview marks it "changed").
@@ -1005,9 +1100,10 @@ class MainViewModel @Inject constructor(
     private suspend fun cleanupWatchApply(request: WatchApplyRequest) {
         StorageOperationGate.run {
             val suggestions = watchRepo.deleteAppliedRule(request.snapshot)
+            val remaining = watchRepo.iconAvailableSummaryEntries(getApplication())
             RenkinNotifications().cancelIconAvailable(
                 context = getApplication(), suggestionIds = suggestions,
-                cancelSummary = watchRepo.suggestionCount() == 0
+                cancelSummary = remaining.isEmpty(), summaryEntries = remaining
             )
         }
     }
@@ -1168,6 +1264,8 @@ class MainViewModel @Inject constructor(
     /** Live count of icons taken from each pack — orders the per-app icon picker. */
     fun packUsageCounts(): Map<String, Int> = appProvider.packUsageCounts()
 
+    fun liveIconCount(): ApplicationProvider.LiveIconCount = appProvider.liveIconCount()
+
     /** How many installed apps each pack has an icon for — the pack picker's coverage line. */
     fun packMatchedAppCounts(): Map<String, Int> = appProvider.packMatchedAppCounts()
 
@@ -1211,6 +1309,7 @@ class MainViewModel @Inject constructor(
             try {
                 appProvider.forceSync(expected)
                 packBrowserPreviews.clear()
+                packBrowserPreviews.prewarm(iconPackState.value.packs)
                 // The sync may have unlocked held-back icons — the badge/banner must follow.
                 refreshMissingPacks(prompt = false)
                 _toastEvents.trySend(R.string.packsSynced)
@@ -1260,6 +1359,7 @@ class MainViewModel @Inject constructor(
             try {
                 val reloaded = appProvider.reloadPreservingSession(expected, unsavedKeys())
                 packBrowserPreviews.clear()
+                packBrowserPreviews.prewarm(iconPackState.value.packs)
                 // An uninstalled app no longer has a visible row to carry a session edit.
                 val liveKeys = appProvider.applicationList.mapTo(mutableSetOf()) { it.key }
                 appProvider.commitSessionState(reloaded) {
@@ -1336,28 +1436,17 @@ class MainViewModel @Inject constructor(
         )
     }
 
-    private val packBrowserPreviews by lazy {
-        appProvider.packBrowserPreviews()
-    }
+    fun searchPackIcons(packs: List<IconPack>, sort: IconSortOrder, query: String, component: InstalledApplication?) =
+        packBrowserPreviews.search(packs, sort, query, component)
 
-    /** Collapsed row previews for the icon-pack browser (see [PackBrowserPreviews.rowPreviews]). */
-    suspend fun packRowPreviews(
-        iconPack: IconPack,
-        sortOrder: IconSortOrder,
-        query: String,
-        options: GenerationOptions,
-        component: InstalledApplication? = null
-    ): PackRowPreviews = packBrowserPreviews.rowPreviews(iconPack, sortOrder, query, options, component)
+    fun cachedPackThumbnail(pack: IconPack, identity: String, name: String, options: GenerationOptions, sizePx: Int) =
+        packBrowserPreviews.cachedThumbnail(pack, identity, name, options, sizePx)
 
-    /** Streaming full-pack grid previews for the browser (see [PackBrowserPreviews.detailPreviews]). */
-    suspend fun packDetailPreviews(
-        iconPack: IconPack,
-        sortOrder: IconSortOrder,
-        query: String,
-        options: GenerationOptions,
-        component: InstalledApplication? = null,
-        onChunk: (List<PackIconPreview>) -> Unit
-    ) = packBrowserPreviews.detailPreviews(iconPack, sortOrder, query, options, component, onChunk)
+    suspend fun loadPackThumbnail(pack: IconPack, identity: String, name: String, options: GenerationOptions, sizePx: Int) =
+        packBrowserPreviews.thumbnail(pack, identity, name, options, sizePx)
+
+    suspend fun loadPackBrowserResource(pack: IconPack, identity: String, name: String): ResourceDrawable? =
+        packBrowserPreviews.resource(pack, identity, name)
 
     /** All profiles for the switcher (default first). */
     val profiles = appProvider.profilesFlow()
@@ -1470,13 +1559,25 @@ class MainViewModel @Inject constructor(
     }
 
     /** Switches the active profile (prefs snapshot + icon set swap), optionally saving first. */
-    fun switchProfile(id: Long, saveFirst: Boolean = false) {
+    fun switchProfile(id: Long, saveFirst: Boolean = false, targetProfile: Profile? = null) {
         if (id == activeProfileId) return
+        val target = targetProfile?.takeIf { it.id == id }
         launchVisibleProfileOperation(
             if (saveFirst) R.string.profileSaveAndSwitchInProgress else R.string.profileSwitchInProgress,
-            serialize = false
+            serialize = false,
+            profileTarget = ProfileSwitchTarget(
+                id = id,
+                name = target?.name.orEmpty(),
+                packLabel = target?.packLabel.orEmpty(),
+                packIcon = target?.packIcon.orEmpty()
+            )
         ) { performSwitch(id, saveFirst) }
     }
+
+    suspend fun profileSwitchArtwork(target: ProfileSwitchTarget): IconPackDrawable? =
+        runCatchingCancellable {
+            ProfilePackIconCodec(getApplication()).decode(target.packIcon)?.icon
+        }.getOrNull()
 
     /** Creates a profile and switches straight to it, optionally saving the current one first. */
     fun createProfile(
@@ -1649,9 +1750,12 @@ class MainViewModel @Inject constructor(
     )
 
     val backupInProgress: Boolean get() = backupCoordinator.backupInProgress
+    val backupExportFeedback: BackupExportFeedback? get() = backupCoordinator.backupExportFeedback
+    fun clearBackupExportFeedback() = backupCoordinator.clearBackupExportFeedback()
     val autoBackupIntervalHours get() = backupCoordinator.autoBackupIntervalHours
     val autoBackupTreeUri get() = backupCoordinator.autoBackupTreeUri
     val lastAutoBackupAt get() = backupCoordinator.lastAutoBackupAt
+    val lastAutoBackupFailedAt get() = backupCoordinator.lastAutoBackupFailedAt
     val previousStateAvailable get() = backupCoordinator.previousStateAvailable
     val previousStateStored get() = backupCoordinator.previousStateStored
     val abandonedRecoveryAvailable get() = backupCoordinator.abandonedRecoveryAvailable

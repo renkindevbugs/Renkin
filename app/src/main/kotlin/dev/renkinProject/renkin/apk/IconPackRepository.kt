@@ -10,6 +10,7 @@ import dev.renkinProject.renkin.data.RawCalendar
 import dev.renkinProject.renkin.data.RawDynamicClock
 import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.RawItem
+import dev.renkinProject.renkin.data.drawableNamesFor
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.extension.getIdentifierByName
@@ -47,6 +48,9 @@ class AppFilterIndex internal constructor(
         drawableNamesByPackage[packageName]?.get(app.toComponentInfo())
 
     internal fun covers(app: InstalledApplication): Boolean = app.toComponentInfo() in components
+
+    internal fun browserNamesFor(packageName: String, app: InstalledApplication): List<String>? =
+        elementsFor(packageName, listOf(app))?.drawableNamesFor(app)
 }
 
 /**
@@ -342,6 +346,9 @@ class IconPackRepository(
     // An empty mapping is conclusive only when the index covered every requested component.
     internal fun indexedElements(iconPackageName: String, applications: List<InstalledApplication>): List<RawElement>? =
         state.value.index.elementsFor(iconPackageName, applications)
+
+    internal fun indexedBrowserNames(iconPackageName: String, app: InstalledApplication): List<String>? =
+        state.value.index.browserNamesFor(iconPackageName, app)
 
     internal fun captureIndexedElements(): (String, List<InstalledApplication>) -> List<RawElement>? {
         val index = state.value.index

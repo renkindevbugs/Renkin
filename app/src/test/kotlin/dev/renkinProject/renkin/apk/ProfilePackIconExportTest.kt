@@ -84,7 +84,10 @@ class ProfilePackIconExportTest {
         assertEquals(legacy.resourceId, result.manifest.iconResourceId)
         assertEquals(legacy.resourceId, result.manifest.roundIconResourceId)
         assertTrue(adaptive.valueAsString != themed.valueAsString)
-        assertTrue(result.module.decodeXMLFile(adaptive.valueAsString).toString().contains("adaptive-icon"))
+        val adaptiveXml = com.reandroid.arsc.chunk.xml.ResXmlDocument().apply {
+            result.module.getInputSource(adaptive.valueAsString).openStream().use { readBytes(it) }
+        }
+        assertTrue(adaptiveXml.recursiveElements().asSequence().any { it.name == "adaptive-icon" })
         val themedXml = com.reandroid.arsc.chunk.xml.ResXmlDocument().apply {
             result.module.getInputSource(themed.valueAsString).openStream().use { readBytes(it) }
         }

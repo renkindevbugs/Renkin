@@ -80,8 +80,10 @@ once: `ByteArray.toLowerHex()` for every stored digest, `data/syncDirectory` for
 fsyncs, and `data/editor/EditorBinary.kt` for the bounded text, boolean and capped-buffer
 primitives of the editor draft codecs (their stored format is pinned by golden hash tests).
 
-`MainViewModel` owns a `BuildInstallCoordinator` for its lifetime. The coordinator owns the
-build/install job, APK handoffs and one sealed `BuildInstallState`: Idle, Building,
+The process-wide `BuildInstallSession` owns a `BuildInstallCoordinator` and its build/install job.
+`MainViewModel` attaches UI synchronization callbacks and the current export SavedStateHandle;
+clearing the ViewModel detaches those callbacks without cancelling the foreground operation.
+The coordinator owns APK handoffs and one sealed `BuildInstallState`: Idle, Building, Ready,
 ChoosingInstaller, Installing, Conflict, Done or Failed. Progress and pending artifacts belong
 to their applicable state; the existing MainViewModel UI properties are read-only projections,
 not independently writable flags. Installer catalog/preferences and Shizuku settings remain
@@ -89,8 +91,8 @@ with MainViewModel for this extraction. MainViewModel validates the active sessi
 starting and owns the app-list/diff/undo baseline callbacks; provider/build services retain the
 snapshot, profile/storage gates, epoch checks, installer backends and artifact reservations.
 Installer confirmation claims Installing synchronously. Operation ownership rejects late progress
-and terminal publication, while pending choice/conflict states retain the APK. Cancellation and
-ViewModel clearing release unclaimed artifacts outside cancellation; dismissing the picker finishes
+and terminal publication, while pending ready/choice/conflict states retain the APK. Cancellation
+releases unclaimed artifacts outside cancellation; dismissing the picker finishes
 the captured build without installing and synchronizes the owning profile's build baseline.
 Installer outcomes are published before best-effort UI synchronization. A changed session or
 failed baseline/missing-pack refresh is logged without reclassifying a successful installation,
@@ -100,9 +102,23 @@ still conflicts explicitly releases its APK as completed, so the next build can 
 progress uses one Main collector over conflated complete snapshots rather than a job per tick.
 The picker and conflict-dismiss paths update the diff to reflect the already committed build.
 This synchronization follows the captured pack and the baseline callback's profile/session checks,
-so starting another build does not skip it. Dismissing a pending prompt or clearing the ViewModel
+so starting another build does not skip it. Dismissing a pending prompt
 claims artifact cleanup before changing state; the previous job cannot release that APK as
 unfinished while its completion cleanup is still running.
+
+Builds use a non-exported `PackBuildForegroundService` (`dataSync` for local file processing),
+a timed partial wake lock and silent notifications sampled every 500 ms. Inside Renkin, the
+existing FAB displays the current phase and count while the list remains available for browsing;
+editor/source mutations remain gated. Foreground completion keeps the existing installer flow.
+Background completion saves the captured profile and built baseline before publishing Ready,
+retains the APK and offers Install on return or in the notification. That save updates the
+captured storage revision only if it still owned the profile's persisted state; a newer save
+still wins when installation eventually finishes. A new activity reattaches the same process
+session and transfers any pending export lease to its SavedStateHandle. Work IDs prevent an old
+service instance from cancelling a subsequent operation. This is not resumable build execution
+after process death: an interrupted build must be run again, and a completed Ready handoff is
+in memory, although its profile has already been saved. Service timeout/foreground failure
+cancels active work with a dismissible report; installer result verification remains unchanged.
 
 Confirmed installation is published before saving the captured profile. The same awaited job
 finishes saving; an operation-owned completion marker prevents another build after the success
@@ -198,6 +214,35 @@ screen and watch Apply collect it with `collectAsStateWithLifecycle`; resumed sc
 the latest state even if loading finished while they were stopped. Pack lists passed to stateless
 editor/source widgets come from those collected snapshots. Tap-time readiness and foreground
 installed-pack checks still read the current domain value.
+
+The interactive installed-pack browser uses `PackBrowserSession`, owned and closed by
+MainViewModel. Its metadata search evaluates every offered pack independently of lazy row
+composition. `AppFilterIndex` has a separate multi-name component lookup for browser alternatives;
+the canonical last-wins drawable mapping is unchanged. Exact component results can be published
+before name indexing finishes. Pending and failed metadata are distinct from a confirmed empty
+result. Confirmed missing drawable references are omitted before publication, so a pack with no
+remaining matches shows the normal empty state. Existing resources whose load/render fails still
+appear as unavailable tiles; debug logs distinguish these failures from missing resource names.
+
+`PackBrowserIndex` keeps naturally sorted names in RAM and in a disposable, bounded AtomicFile
+cache under cacheDir, outside profiles, backups and Room. Prewarming starts only after runtime
+readiness and does not delay startup. Package revision and relevant configuration validate names;
+thumbnail identity additionally includes the current dynamic palette. Sync/refresh invalidates
+in-flight work and restarts prewarming. The browser retains its 30/400 candidate limits, but only
+composed lazy tiles request images. A shared 16 MiB thumbnail cache serves both rows and detail;
+it holds no source Drawable or generated export payload. Native adaptive thumbnails skip full
+layer capture/PNG encoding when effects allow it, retaining the existing generator and platform
+fallback otherwise. Full layer capture, persistence and export remain on the selected-icon path.
+Selection resolves the resource asynchronously with fresh identity checks before and after load;
+pending selection blocks confirmation and cannot overwrite a newer query, tab or source choice.
+
+Editor comparison cards display indeterminate activity as a primary segment moving along their
+inside perimeter, for both preview generation and pack browsing. This draw-only overlay has no
+measurement or padding effect. The phone app-bar progress row and wide-toolbar progress row are
+removed, so loading transitions cannot move Current/New flight targets or the Apply action.
+When work finishes, the current border segment closes into the whole outline over 200 ms and
+fades over 120 ms. This draw-only completion does not delay controls or readiness semantics;
+new work cancels the completion and resumes indeterminate activity.
 
 The lifecycle runtime Compose dependency uses the existing lifecycle version. Pack exclusion,
 isolated parallel appfilter parsing, cancellation, cache clearing and refresh/profile ownership
@@ -347,26 +392,25 @@ current activity. A new activity must extend `LocalizedActivity`.
   recreates it in a cold process without MainActivity/MainViewModel. Its editor remains tied to
   the original session: activity recreation in the same process preserves ownership, but a cold
   recreation closes the expired editor and reports that unsaved changes must be repeated.
-- **WallpaperPreviewActivity** — the pack preview before a build. Its theme sets
-  `windowShowWallpaper` + a transparent background so the system draws the real wallpaper
-  behind it (the launcher trick — no permission; `WallpaperManager.getDrawable` is locked
-  behind MANAGE_EXTERNAL_STORAGE since Android 13). It must be an activity: dialog windows
-  never become the wallpaper target. It reads shared state from the `ApplicationProvider`
-  singleton directly — deliberately **not** through a new `MainViewModel`, whose init would
-  re-run provider initialization and drop unsaved icons. RESULT_OK = "user pressed Build";
-  the launching side (BuildPackFab) runs the build. If Android recreates it alone over a killed
-  process (`savedInstanceState != null` while `startupComplete == false`), the reviewed session
-  no longer exists — `onCreate` closes it with `RESULT_CANCELED` + `EXTRA_SESSION_LOST` *before*
-  `setContent`, rather than initializing the provider and silently reviewing the last *saved*
-  state instead.
-  The launch intent and successful result carry the original `ProfileSessionToken`; the preview
-  and build both reject a changed session, including reload/clear and returning to the same
-  profile. This guards session ownership, not an immutable revision of every icon edit.
-  Icon tiles open the normal editor over the preview. `PackPreviewEditorOwners` lends a weak
-  reference to the existing home ViewModel; editor composables read `LocalIconEditorOwner`
-  instead of constructing another home owner. Preview editor/session recovery owners remain
-  activity-scoped. Apply waits for the matching receipt before closing, while the grid keeps its
-  opening order and scroll state. Home pauses its shared toast collector while preview owns it.
+- **Pack preview (`PackPreviewHost`)** — the pack preview before a build, hosted **inside the
+  home window**, not in its own activity. `MainActivity` gives its window a transparent
+  background in `onCreate` (the composition always paints its own), and the host toggles
+  `FLAG_SHOW_WALLPAPER` only while the preview is on screen, so the system draws the real
+  wallpaper behind the transparent icon grid (the launcher trick — no permission;
+  `WallpaperManager.getDrawable` is locked behind MANAGE_EXTERNAL_STORAGE since Android 13).
+  The home content stays composed but invisible (alpha 0, semantics cleared). One window is the
+  point: the Build FAB travels into the preview's Build button and back (`BuildPillMorph`), and
+  the build animation (`BuildSwirlOverlay`, one clock in `BuildSwirlState`) plays above both
+  while the home screen surfaces underneath — none of which two activities could share.
+  `MainViewModel.packPreview` holds the open `PackPreviewSession`: the `ProfileSessionToken` it
+  reviews plus the built/updated keys at opening. The preview and the build both reject a
+  changed session (a watch deep link can switch the profile underneath); this guards session
+  ownership, not an immutable revision of every icon edit. A killed process simply loses the
+  session and the preview with it. Icon tiles open the normal editor over the preview with the
+  same home ViewModel. Apply waits for the matching receipt before closing, while the grid keeps
+  its opening order and scroll state. During the build animation the preview stays composed
+  (faded out) until the animation ends, and `BuildInstallCoordinator.holdInstall` keeps a
+  finished build from opening an installer or dialog before then (bounded by a timeout).
 
 ## Profiles
 
@@ -722,8 +766,17 @@ instead of declaring old hashes ready. Startup has no retained
 edit markers and full import/Previous state reset their baselines explicitly. A load owner also
 rejects late publication from an older read in the same session after a Save/build synchronization.
 
-MainActivity shows the same inert `MainStartupScreen` during CHECKING and ordinary catalog/icon
-loading: home title/actions/search shell with Material's morphing-shape `LoadingIndicator`.
+MainActivity shows an inert `MainStartupScreen` during CHECKING and ordinary catalog/icon
+loading. While storage is checking or launch fire is moving, it keeps the lightweight
+title/search shell and Material's morphing-shape `LoadingIndicator`. After fire settles and
+storage recovery has completed, it shows the saved target profile's identity and pack artwork above placeholder
+rows, reusing `ProfileSwitchLoading`. `ApplicationProvider.startupProfile` publishes only the
+persisted selection's metadata; it does not publish a live profile session or ready icon counts.
+Its publication also proves recovery has finished if initialization owns the first storage gate
+and that gate still reports CHECKING until its outer operation returns.
+The existing apps → icon packs → saved icons initialization order stays intact, and the
+interactive `MainColumn` still waits for startup completion. This Orion presentation change
+is awaiting compilation and on-device review.
 Startup and the interactive screen use the same stateless title-bar content and shared search
 field; the startup branch does
 not instantiate toolbar ViewModels. No profile/edit/build actions are active in that shell.
@@ -734,7 +787,8 @@ changing startup presentation does not bypass them. Crash-report dialogs wait un
 finishes. Only the optional diff follows foreground switching; durable Save and target icon
 loading still finish before dismissing progress.
 
-The startup animation retains the established morphing shapes, as requested after the 7B7
+At the historical 7B7 checkpoint, the startup animation retained the established morphing shapes,
+as requested after the
 device checkpoint. This visual restoration leaves startup/recovery routing and readiness
 ownership unchanged. Its on-device appearance is confirmed; the startup-shell test, all 936
 unit tests across 149 suites and `assembleDebug` pass. The full suite uses the local test-JVM
@@ -1083,11 +1137,17 @@ the dialog never borrows pixels recycled by preparation disposal or transfer. Pr
 including allocation failure, keeps a valid offer recoverable and does not disable autosave.
 Cancellation still propagates. Refresh replaces the UI state without first hiding an offer just
 to dispose its native preparation. Checkpoint/lease and profile/session validation remain with
-the recovery owners. Not now postpones the observed checkpoint during the current profile visit;
-returning to its owning profile offers it again. Automatic checks on other profiles remain hidden;
-explicit review can explain which profile owns the edit without switching silently. A fresh owner
-may offer the draft at launch. A different checkpoint is not hidden by postponement. Unreadable
-catalog postponement remains owner-local because its profile cannot be identified safely.
+the recovery owners. Passive startup/profile observations inspect checkpoint metadata and expose
+`hasSavedEdit` without preparing artwork or opening a recovery dialog. The existing Restore icon
+beside the profile title stays still while a green ring expands/fades behind it, followed by a
+quiet pause. The ring is drawn inside the existing touch area without per-frame recomposition;
+Reduce icon motion suppresses it. Explicit review prepares the offer and can explain which
+profile owns the edit without switching silently. Review intent survives the requested profile switch; Not now/Back/outside
+dismissal ends that intent while preserving the checkpoint and indicator. A fresh process starts
+quietly again. Accepting recovery or finding an empty checkpoint clears review intent. Autosave
+admission, checkpoint/lease fencing, cleanup and confirmed Discard remain with their existing
+owners. A different checkpoint is not hidden by postponement. Unreadable catalog postponement
+remains owner-local because its profile cannot be identified safely.
 Verification status is recorded in
 [editor-recovery-preview-checkpoint.md](editor-recovery-preview-checkpoint.md).
 
@@ -1265,9 +1325,9 @@ this package/import-only move.
 **7D6 (verified)** groups the build/install presentation in
 `feature.buildinstall`: `BuildPack`, `InstallerPickerScreen` and `PackChangesSheet`.
 MainScreen imports the Build action and installer prompt, Settings imports the installer picker,
-and HeroPackCard imports the pending-changes sheet. WallpaperPreviewActivity retains its class,
-manifest registration, wallpaper theme, session/result handoff and activity-owned state; only
-its preview-content import changes. The preview list ordering helper moves with its screen.
+and HeroPackCard imports the pending-changes sheet. Pack preview has since moved from its own
+activity into the home window (`PackPreviewHost`, see Activities); its content composable and
+the preview list ordering helper live with the Build action in this package.
 The shared summary test retains its package/scenarios and imports that helper explicitly.
 Shared icon previews, editor entry point, dialogs, scrolling, haptics and shape tokens remain
 in UI. MainViewModel/BuildInstallCoordinator retain build/install ownership and preferences;
@@ -1391,8 +1451,8 @@ Three earlier notes also need an explicit disposition:
   refresh plan, then rejecting commits after a change; the captured recipe does not currently
   carry that configuration independently. Do not fold a behavior fix into this documentation.
 - Review preview-cache visual keys during performance work: distinguish visual changes from
-  bookkeeping-only option changes and mutable drawable identity/revision. PackBrowserPreviews
-  already keys displayed night mode, pack version and Material You capability; this is not a
+  bookkeeping-only option changes and mutable drawable identity/revision. PackBrowserIndex
+  already keys locale, displayed night mode, density, pack revision and Material You capability; this is not a
   claim that every preview cache lacks those inputs. Global/app/pack caches need separate checks.
 
 The proposed editor-session-checks document has no tracked history or current file to reconcile;
@@ -2045,6 +2105,51 @@ follow-ups; CRC verifies transport integrity only.
   (closing the Watch rule editor or quick-action sheet) is never a toast or a bare SharedFlow:
   `WatchViewModel.ruleSaveState` retains it with the opener's request id until that opener
   acknowledges it, so a detached UI loses nothing and a new editor never takes an older result.
+  The manual full-backup export row additionally observes `BackupUiCoordinator.backupExportFeedback`:
+  writing, completed, or failed. Success follows the finished SAF write and export cleanup;
+  cancellation clears it. Starting another accepted backup operation clears the old result.
+  Existing result toasts remain. This inline feedback is presentation only, not operation control.
+- **Appearance**: Settings → Theme uses schematic System/Light/Dark screen previews and a
+  separate global `OledBlackKey` toggle. DarkMode ordinals are unchanged. `RenkinTheme` applies
+  pure black only to dark-mode base/background surfaces, retaining raised cards and theme
+  foregrounds. The same color-scheme helper supplies the previews.
+- **Editor backdrop**: preparation creates a small software-blurred copy of the original app
+  icon off Main on pre-Android-12 devices; newer devices retain a small sharp source for GPU blur.
+  The approved recipe uses a 92%-height window, a square source at 65% of card width scaled
+  2.2×, 16dp blur before scaling, 85% opacity, 120% saturation, 30% surface wash and a fade
+  starting at 47% of the window. A custom Layout lets the source exceed the window before
+  clipping, matching the mockup's filter/transform geometry. The previous global opacity cap
+  is removed. The foreground icons and generated output are unaffected. API 36 was checked
+  on device; the older-device software approximation has not been checked on a physical device.
+- **Watch schedule**: the compact outlined card places the automatic-check switch and real
+  WorkManager next-run time in its top row. Its bottom strip contains the last-check time,
+  a clickable result icon (check/warning/info), and an interval chip opening a selection sheet.
+  Full results and unreadable pack names live in a `MessageDialog`; refreshing stays on the
+  existing pull-to-refresh gesture, without a Check now button. Hourly/6h/12h/24h intervals
+  are selectable; debug builds additionally offer 15 minutes. The cadence and automatic-mode
+  setters share a busy guard. `WatchAutomaticChecksKey` is global and
+  defaults to true for existing users. Disabling cancels periodic/queued automatic work;
+  workers also check the preference before scanning/publishing. Manual ViewModel checks remain
+  available and never re-enable the schedule. Startup/restore reconciliation honors the choice.
+  New periodic requests delay their first run by the selected interval. Re-enqueuing after a
+  manual refresh therefore schedules the next check instead of immediately running an
+  active-rule-only scan that could overwrite the fuller manual result.
+  Partial results retain structured read issues (pack/component identity, display labels,
+  mapped resource and missing-resource/load-or-render/pack-read reason). The result preference
+  remains compatible with older pack-label-only records; their modal asks for a refresh to
+  collect diagnostics. Manual checks and the worker persist the same details. A failed mapped
+  icon is never a successful empty baseline, and older same-version rows with a mapped name
+  but no hash are retried. Healthy and genuinely unthemed pairs retain version-based skipping.
+  The details modal separates the secondary unreadable-pack heading from stronger pack-name
+  rows with launcher artwork. Installed labels resolve only when unique; unknown or ambiguous
+  legacy labels retain a generic icon. Structured issues resolve artwork by package identity
+  and show the affected app and exact resource, including why the pack cannot provide it.
+  Debug resource diagnostics distinguish missing names from load errors without changing
+  how a pack's winning mapping is resolved. Checks cover all profiles; a broken pack does not
+  discard findings from healthy sources, and a missing asset is never replaced by a guessed icon.
+- **Statistics**: the pack-usage modal keeps true-origin counts, online-source attribution and
+  unavailable sources. It shows the attributed-icon total and per-source percentages with
+  static bars relative to that total, rather than loading indicators or top-source-normalized bars.
 - **Shapes**: use the tokens in `ui/theme/Shapes.kt` (`DialogShape`/`CardShape`/`FieldShape`/
   `InnerShape`/`IconShape`/`SwatchShape`, plus `iconTileShape(size)` for tiles whose corner is a
   quarter of their size) — no raw `RoundedCornerShape(...)` at call sites.
@@ -2052,6 +2157,11 @@ follow-ups; CRC verifies transport integrity only.
   *over* scroll-under content (Mihon-style — the content keeps its size, so flings stay
   smooth while the bar animates; used by the edit dialog), and `Modifier.drawVerticalScrollbar`
   adds the transient scrollbar used on every long list/grid.
+- **Editor navigation icons** (`ui/EditorModeIcon.kt`): the approved 24dp vector set is a
+  rotating plus in a tile (Create), image + plus (Upload), outlined pen + Bezier arc (Vector),
+  and moving Tune heads (Modifier). Selection changes play one finite animation, with frame
+  reads in Draw; the first composition stays still. Reduce icon motion suppresses movement.
+  The existing NavigationBar owns tint, labels, selection and the unavailable Modifier hint.
 - **Loading**: the startup shell and full-page application-list loader use Material's
   morphing-shape `LoadingIndicator`, preserving the established startup animation. Linear
   progress uses the shared `WavyLoadingBar` (ControlWidgets.kt); no hand-rolled indicators.
@@ -2335,6 +2445,9 @@ The controlled device check of generated versus reloaded pack export resources i
 launcher drawables. The shared `InstalledIconLoader` provides an 8 MiB thumbnail cache with source
 identity keys that do not retain Drawables. Full sources are acquired for generator operations and
 one live editor, preserving component/user/resource/configuration provenance and adaptive layers.
+When a package has been reinstalled since catalog discovery, full-source loading resolves both
+the drawable and its resource id from the current launcher entry. A changed APK path alone
+must not make the editor's Current slot or Application icon source unavailable.
 Editor preparation and recovery-original previews run off Main; reviewed/recovered artwork keeps
 its existing ownership. Reload carries fresh descriptors together with preserved optional modifier
 metadata. Details and the accepted developer checkpoint are in
@@ -2504,7 +2617,7 @@ Renkin cannot reproduce that launcher-only selection through the standard resour
 - `ic_launcher_monochrome` PNGs are alpha glyphs (Material You tints alpha only) — don't
   replace them with opaque images.
 - Composition locals (`LocalToaster`, `LocalMainActivity`) are provided per-activity — a new
-  activity hosting shared composables must provide its own (see WallpaperPreviewActivity).
+  activity hosting shared composables must provide its own (see GlobalOptionsActivity).
 
 
 ### Global style Apply history

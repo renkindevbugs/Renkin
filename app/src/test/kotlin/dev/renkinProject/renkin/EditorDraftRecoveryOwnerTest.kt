@@ -161,16 +161,43 @@ class EditorDraftRecoveryOwnerTest {
     private suspend fun connect() = withContext(main) { owner.connect(editor) }
     private suspend inline fun <reified T : EditorDraftRecoveryState> shown(): T =
         withTimeout(30_000) { owner.state.first { it is T } as T }
-    private suspend fun offer(): EditorDraftRecoveryState.Offer { save(); connect(); return shown() }
-    private suspend fun prepared(): PreparedEditorRecovery = withContext(main) {
+    private suspend fun offer(): EditorDraftRecoveryState.Offer {
+        save(); connect()
+        withContext(main) { owner.reviewSavedEdit() }
+        return shown()
+    }
+    private suspend fun preparedOrNull(): PreparedEditorRecovery? = withContext(main) {
         EditorDraftRecoveryViewModel::class.java.getDeclaredField("prepared").apply { isAccessible = true }
-            .get(owner) as PreparedEditorRecovery
+            .get(owner) as PreparedEditorRecovery?
+    }
+    private suspend fun prepared(): PreparedEditorRecovery = requireNotNull(preparedOrNull())
+    private suspend fun savedEditStaysQuiet() {
+        withTimeout(30_000) { owner.hasSavedEdit.first { it } }
+        idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        assertNull(preparedOrNull())
+        assertNull(editor.recoveryAttachment.value)
     }
     private suspend fun restore() = offer().let {
         withContext(main) { owner.restore(it) }
         withTimeout(30_000) { editor.recoveryAttachment.first { it != null }!! }
     }
     private suspend fun idle() { delay(150); withContext(main) { } }
+
+    @Test fun passiveStartupShowsSavedEditWithoutPreparingItUntilExplicitReview() = runBlocking {
+        val candidate = save()
+        val original = provider.applicationList.single().createdIcon
+        connect()
+
+        savedEditStaysQuiet()
+        assertEquals(candidate.checkpoint, store.checkpoint())
+        assertSame(original, provider.applicationList.single().createdIcon)
+
+        withContext(main) { owner.reviewSavedEdit() }
+        assertEquals(candidate.checkpoint, shown<EditorDraftRecoveryState.Offer>().checkpoint)
+        assertTrue(prepared().canTransfer)
+        assertNull(editor.recoveryAttachment.value)
+    }
 
     @Test fun restoreTransfersThemedSessionAndExplicitCloseDiscardsOnlyItsCheckpoint() = runBlocking {
         val attachment = restore()
@@ -197,6 +224,8 @@ class EditorDraftRecoveryOwnerTest {
         assertEquals(offered.checkpoint, store.checkpoint())
         connect(); idle()
         assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        assertTrue(owner.hasSavedEdit.value)
+        assertNull(preparedOrNull())
         assertFalse(bound.canTransfer)
     }
 
@@ -270,12 +299,15 @@ class EditorDraftRecoveryOwnerTest {
         assertEquals(offered.checkpoint, store.checkpoint())
     }
 
-    @Test fun freshProcessOffersMemoryOnlyPostponedDraftAgain() = runBlocking {
+    @Test fun freshProcessKeepsSavedDraftQuietUntilExplicitReview() = runBlocking {
         val offered = offer()
         withContext(main) { owner.postpone(offered) }
         shown<EditorDraftRecoveryState.Hidden>()
         withContext(main) { owner = newOwner(EditorDraftRecoverySession()) }
         connect()
+        savedEditStaysQuiet()
+        assertEquals(offered.checkpoint, store.checkpoint())
+        withContext(main) { owner.reviewSavedEdit() }
         assertEquals(offered.checkpoint, shown<EditorDraftRecoveryState.Offer>().checkpoint)
     }
 
@@ -324,9 +356,11 @@ class EditorDraftRecoveryOwnerTest {
         assertTrue(original.canTransfer)
     }
 
-    @Test fun unexpectedSessionLossPreservesCheckpointAndOffersItAgain() = runBlocking {
+    @Test fun unexpectedSessionLossPreservesCheckpointQuietlyUntilExplicitReview() = runBlocking {
         val attachment = restore(); val checkpoint = store.checkpoint()
         withContext(main) { owner.detach(attachment) }
+        savedEditStaysQuiet()
+        withContext(main) { owner.reviewSavedEdit() }
         assertEquals(checkpoint, shown<EditorDraftRecoveryState.Offer>().checkpoint)
         assertEquals(checkpoint, store.checkpoint())
         assertNull(editor.recoveryAttachment.value)
@@ -369,6 +403,7 @@ class EditorDraftRecoveryOwnerTest {
         repository.replaceAll(provider.sessionToken.profileId,
             listOf(DbApplication(app.packageName, app.activityName, false, false, "changed")))
         connect()
+        withContext(main) { owner.reviewSavedEdit() }
         assertEquals(store.checkpoint(), shown<EditorDraftRecoveryState.Obsolete>().checkpoint)
     }
 
@@ -448,6 +483,28 @@ class EditorDraftRecoveryOwnerTest {
         assertEquals(other, provider.runtimeState.value.activeProfileId)
     }
 
+    @Test fun explicitReviewContinuesAfterSwitchingToTheDraftsOwningProfile() = runBlocking {
+        val candidate = save()
+        val other = provider.createProfile("Other", "", "Other")
+        provider.switchProfile(other)
+        connect()
+        savedEditStaysQuiet()
+
+        withContext(main) { owner.reviewSavedEdit() }
+        val needsProfile = shown<EditorDraftRecoveryState.NeedsProfile>()
+        assertEquals(candidate.record.owner.profileId, needsProfile.profileId)
+        assertNull(preparedOrNull())
+        assertEquals(other, provider.runtimeState.value.activeProfileId)
+
+        provider.switchProfile(needsProfile.profileId)
+        stage(app)
+
+        assertEquals(candidate.checkpoint, shown<EditorDraftRecoveryState.Offer>().checkpoint)
+        assertTrue(prepared().canTransfer)
+        assertEquals(needsProfile.profileId, provider.runtimeState.value.activeProfileId)
+        assertNull(editor.recoveryAttachment.value)
+    }
+
     @Test fun returningToOwningProfileKeepsPostponedDraftQuietUntilHomeReview() = runBlocking {
         val offered = offer()
         val owningProfileId = provider.sessionToken.profileId
@@ -471,6 +528,9 @@ class EditorDraftRecoveryOwnerTest {
         store.checkpoint()
         File(context.noBackupFilesDir, "editor-draft/catalog.json").writeText("broken")
         connect()
+        savedEditStaysQuiet()
+        assertEquals("broken", File(context.noBackupFilesDir, "editor-draft/catalog.json").readText())
+        withContext(main) { owner.reviewSavedEdit() }
         val failed = shown<EditorDraftRecoveryState.Failed>()
         withContext(main) { owner.postpone(failed) }
         shown<EditorDraftRecoveryState.Hidden>()
@@ -488,6 +548,8 @@ class EditorDraftRecoveryOwnerTest {
         val catalog = File(context.noBackupFilesDir, "editor-draft/catalog.json")
         catalog.writeText("broken")
         connect()
+        savedEditStaysQuiet()
+        withContext(main) { owner.reviewSavedEdit() }
         val failed = shown<EditorDraftRecoveryState.Failed>()
         assertNotNull(failed.resetLease)
         withContext(main) { owner.retry(failed) }
@@ -504,6 +566,8 @@ class EditorDraftRecoveryOwnerTest {
         val valid = catalog.readBytes()
         catalog.writeText("broken")
         connect()
+        savedEditStaysQuiet()
+        withContext(main) { owner.reviewSavedEdit() }
         val failed = shown<EditorDraftRecoveryState.Failed>()
         catalog.writeBytes(valid)
         val newer = save()
@@ -612,12 +676,14 @@ class EditorDraftRecoveryOwnerTest {
         assertEquals(0.6f, savedScale(saved(first.checkpoint)), 0f)
     }
 
-    @Test fun repeatedSessionObservationDoesNotPreventLaterRecoveryOffer() = runBlocking {
+    @Test fun repeatedSessionObservationKeepsLaterRecoveryQuietAndAvailableForReview() = runBlocking {
         val session = openLive()
         publish(session) { adjustments.iconScale = 0.7f }
         val first = saved()
         connect(); connect()
         withContext(main) { editor.release("live") }
+        savedEditStaysQuiet()
+        withContext(main) { owner.reviewSavedEdit() }
         assertEquals(first.checkpoint, shown<EditorDraftRecoveryState.Offer>().checkpoint)
     }
 
@@ -792,6 +858,8 @@ class EditorDraftRecoveryOwnerTest {
         }
         val saved = saved()
         withContext(main) { editor.release("live") }
+        savedEditStaysQuiet()
+        withContext(main) { owner.reviewSavedEdit() }
         val offered = shown<EditorDraftRecoveryState.Offer>()
         assertEquals(saved.checkpoint, offered.checkpoint)
         withContext(main) { owner.restore(offered) }

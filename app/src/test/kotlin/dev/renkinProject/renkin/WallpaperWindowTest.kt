@@ -30,4 +30,15 @@ class WallpaperWindowTest {
         val background = activity.window.decorView.background as ColorDrawable
         assertEquals(Color.TRANSPARENT, background.color)
     }
+
+    @Test
+    fun hidingTheWallpaperKeepsTheWindowTransparentForTheNextPreview() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        activity.window.showWallpaperBehindContent()
+
+        activity.window.hideWallpaperBehindContent()
+
+        assertEquals(0, activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+        assertEquals(Color.TRANSPARENT, (activity.window.decorView.background as ColorDrawable).color)
+    }
 }

@@ -64,6 +64,7 @@ class PackPreviewResourcesTest {
         val dex = module.getInputSource("classes.dex").openStream().use { it.readBytes() }.toString(Charsets.ISO_8859_1)
         assertTrue(dex.contains("Ldev/renkinProject/renkinpack/MainActivity;"))
         assertTrue(dex.contains("Ldev/renkinProject/renkinpack/IconAdapter;"))
+        assertTrue(dex.contains("Ldev/renkinProject/renkinpack/IconLoader;"))
     }
 
     private fun writePreview(apps: List<PackageInfoStruct>, profileName: String): Pair<ApkModule, PackageBlock> {

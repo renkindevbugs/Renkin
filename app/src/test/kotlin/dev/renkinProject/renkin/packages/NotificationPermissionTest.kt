@@ -24,8 +24,8 @@ class NotificationPermissionTest {
     private val context: Application get() = ApplicationProvider.getApplicationContext()
 
     @Test
-    @Config(application = Application::class, sdk = [23])
-    fun api23_doesNotGateOnTheUngrantablePermission() {
+    @Config(application = Application::class, sdk = [24])
+    fun api24_doesNotGateOnTheUngrantablePermission() {
         // POST_NOTIFICATIONS can never be granted here, so gating on it would block every
         // notification — the regression this branch exists to prevent. (The toggle itself goes
         // through AppOps below API 24, which Robolectric's NotificationManager shadow can't
@@ -55,8 +55,8 @@ class NotificationPermissionTest {
     }
 
     @Test
-    @Config(application = Application::class, sdk = [23])
-    fun api23_settingsIntent_isTheAppDetailsPage() {
+    @Config(application = Application::class, sdk = [24])
+    fun api24_settingsIntent_isTheAppDetailsPage() {
         val intent = notificationSettingsIntent(context)
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, intent.action)
         assertEquals(context.packageName, intent.data?.schemeSpecificPart)

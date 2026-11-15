@@ -225,6 +225,13 @@ private fun buildInstallEntries(): List<GalleryEntry> {
         GalleryEntry("install.noSystemInstaller", "Install failed — no system installer") { close ->
             InstallFailureDialog(failure.copy(missingSystemInstaller = true, canSaveApk = false),
                 onChooseInstaller = close, onSaveApk = close, onDismiss = close)
+        },
+        GalleryEntry("build.failureStorage", "Build failed — storage full") { close ->
+            InstallFailureDialog(
+                failure.copy(summary = "STORAGE_FULL: ErrnoException: write failed: ENOSPC (No space left on device)",
+                    canSaveApk = false, buildFailureAdvice = R.string.buildFailureStorage),
+                onChooseInstaller = close, onSaveApk = close, onDismiss = close
+            )
         }
     )
 }

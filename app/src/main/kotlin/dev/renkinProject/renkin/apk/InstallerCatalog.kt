@@ -56,16 +56,14 @@ class InstallerCatalog(context: Context) {
                     available = systemAvailable
                 )
             )
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                add(
-                    InstallerOption(
-                        selection = InstallerSelection(InstallMethod.SHIZUKU),
-                        label = appContext.getString(R.string.installerShizuku),
-                        description = appContext.getString(R.string.shizukuReady),
-                        icon = ShizukuSupport.managerPackage(appContext)?.let(::loadApplicationIcon)
-                    )
+            add(
+                InstallerOption(
+                    selection = InstallerSelection(InstallMethod.SHIZUKU),
+                    label = appContext.getString(R.string.installerShizuku),
+                    description = appContext.getString(R.string.shizukuReady),
+                    icon = ShizukuSupport.managerPackage(appContext)?.let(::loadApplicationIcon)
                 )
-            }
+            )
         }
 
         val systemPackage = systemComponent?.packageName

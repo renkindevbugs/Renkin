@@ -74,6 +74,11 @@ internal object EditorArtworkCodec {
                 listOf(value.left, value.top, value.right, value.bottom).forEach(output::writeInt)
                 listOf(value.fractionLeft, value.fractionTop, value.fractionRight, value.fractionBottom).forEach(::number)
             }
+            is EditorThemedArtwork -> {
+                // Kind 5 predates Material You schemes and keeps reading as the system colours.
+                if (value.scheme < 0) output.writeByte(5) else { output.writeByte(6); output.writeInt(value.scheme) }
+                artwork(value.glyph, depth + 1)
+            }
         }
     }
 
@@ -91,6 +96,11 @@ internal object EditorArtworkCodec {
             3 -> EditorAdaptiveArtwork(blob(), blob(), optionalBlob(),
                 if (boolean()) EditorControlsCodec.decodePack(blob().copyBytes()) else null, optionalBlob(), optionalBlob())
             4 -> EditorInsetArtwork(artwork(depth + 1), input.readInt(), input.readInt(), input.readInt(), input.readInt(), number(), number(), number(), number())
+            5 -> EditorThemedArtwork(artwork(depth + 1))
+            6 -> {
+                val scheme = input.readInt().also { require(it >= 0) { "Invalid themed scheme" } }
+                EditorThemedArtwork(artwork(depth + 1), scheme)
+            }
             else -> throw IllegalArgumentException("Unknown editor artwork kind")
         }
     }
@@ -118,7 +128,7 @@ internal object EditorArtworkCodec {
     private fun EditorArtworkSnapshot.hasGradient(): Boolean = when (this) {
         is EditorVectorArtwork -> root.hasGradient()
         is EditorInsetArtwork -> child.hasGradient()
-        is EditorBitmapArtwork, is EditorAdaptiveArtwork -> false
+        is EditorBitmapArtwork, is EditorAdaptiveArtwork, is EditorThemedArtwork -> false
     }
 
     private fun EditorVectorWorkingState.hasGradient(): Boolean =

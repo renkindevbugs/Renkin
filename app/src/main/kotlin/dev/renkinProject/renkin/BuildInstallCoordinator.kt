@@ -23,6 +23,8 @@ import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.apk.SIGNATURE_MISMATCH_DETAIL
+import dev.renkinProject.renkin.apk.buildFailureCause
+import dev.renkinProject.renkin.apk.buildFailureReport
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.apk.resolveHomeLauncher
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
@@ -36,6 +38,7 @@ import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.data.dataStore
+import dev.renkinProject.renkin.util.CrashReporter
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -44,12 +47,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 enum class InstallerChoiceReason { FIRST_CHOICE, ASK_EVERY_TIME }
 
@@ -80,25 +86,31 @@ internal fun installFailureHeadline(detail: String): String {
 internal sealed interface BuildInstallState {
     data object Idle : BuildInstallState
     data class Building(val step: String = "", val progress: Pair<Int, Int>? = null) : BuildInstallState
+    data class Ready(val request: PackInstallRequest, val reason: InstallerChoiceReason?) : BuildInstallState
     data class ChoosingInstaller(val request: PackInstallRequest, val reason: InstallerChoiceReason) : BuildInstallState
     data class Installing(val request: PackInstallRequest, val replacing: Boolean = false,
         val route: ApkInstallRoute? = null) : BuildInstallState
     data class Conflict(val request: PackInstallRequest, val signatureMismatch: Boolean = false) : BuildInstallState
     data class Done(val wasUpdate: Boolean, val packLabel: String, val installerLabel: String,
         val savingProfile: Boolean = false, val profileSaveFailed: Boolean = false) : BuildInstallState
+    /** [advice] is set only for build failures; installer failures explain themselves in [report]. */
     data class Failed(@get:StringRes val message: Int, val summary: String, val report: String,
-        val result: ApkInstallResult? = null, val pack: BuiltIconPack? = null) : BuildInstallState
+        val result: ApkInstallResult? = null, val pack: BuiltIconPack? = null,
+        @get:StringRes val advice: Int? = null) : BuildInstallState
 }
+
+private const val INSTALL_HOLD_LIMIT_MILLIS = 6_000L
+private const val PROGRESS_PUBLISH_INTERVAL_MILLIS = 100L
 
 internal class BuildInstallCoordinator(
     private val application: Application,
     private val provider: ApplicationProvider,
     private val scope: CoroutineScope,
-    private val syncBaselines: suspend (BuiltIconPack) -> Unit,
-    private val refreshMissingPacks: suspend () -> Unit,
-    private val notify: (Int) -> Unit,
-    private val notifyText: (String) -> Unit,
-    private val pendingApkExport: PendingApkExportState
+    private var syncBaselines: suspend (BuiltIconPack) -> Unit,
+    private var refreshMissingPacks: suspend () -> Unit,
+    private var notify: (Int) -> Unit,
+    private var notifyText: (String) -> Unit,
+    private var pendingApkExport: PendingApkExportState
 ) {
     var state by mutableStateOf<BuildInstallState>(BuildInstallState.Idle)
         private set
@@ -110,11 +122,42 @@ internal class BuildInstallCoordinator(
     // Main-confined cleanup ownership survives the prompt's transition to Idle.
     private val finishingPacks = mutableListOf<BuiltIconPack>()
     private var preparingApkExport = false
+    private var installImmediately: () -> Boolean = { true }
+    val hasRunningWork: Boolean get() = job?.isActive == true || finishingPacks.isNotEmpty()
+
+    fun attach(
+        sync: suspend (BuiltIconPack) -> Unit,
+        refresh: suspend () -> Unit,
+        notice: (Int) -> Unit,
+        textNotice: (String) -> Unit,
+        exportState: PendingApkExportState,
+        canInstallImmediately: () -> Boolean
+    ) {
+        pendingApkExport.lease?.let { exportState.lease = it }
+        pendingApkExport = exportState
+        syncBaselines = sync
+        refreshMissingPacks = refresh
+        notify = notice
+        notifyText = textNotice
+        installImmediately = canInstallImmediately
+    }
+
+    fun detach() {
+        syncBaselines = {}
+        refreshMissingPacks = {}
+    }
 
     val busy: Boolean get() = completingInstallOwner != null || when (state) {
-        is BuildInstallState.Building, is BuildInstallState.ChoosingInstaller,
+        is BuildInstallState.Building, is BuildInstallState.Ready, is BuildInstallState.ChoosingInstaller,
         is BuildInstallState.Installing, is BuildInstallState.Conflict -> true
         else -> false
+    }
+
+    private val installHeld = MutableStateFlow(false)
+
+    /** The build animation asks a finished build to wait before it opens an installer or a dialog. */
+    fun holdInstall(held: Boolean) {
+        installHeld.value = held
     }
 
     fun build(expected: ProfileSessionToken) {
@@ -127,6 +170,9 @@ internal class BuildInstallCoordinator(
             val progressObserver = launch {
                 progress.collect { building ->
                     if (state is BuildInstallState.Building) publish(owner, building)
+                    // The state is read by the home screen while the build animation runs; one
+                    // publish per icon recomposed it ~50 times a second. StateFlow keeps the latest.
+                    delay(PROGRESS_PUBLISH_INTERVAL_MILLIS)
                 }
             }
             try {
@@ -144,7 +190,15 @@ internal class BuildInstallCoordinator(
                     preferences.getBooleanValue(AskInstallerEveryTimeKey),
                     preferences.getBooleanValue(InstallerChoiceConfirmedKey)
                 )
-                if (reason != null) {
+                // Bounded: a hold that is never released must not strand a finished pack.
+                withTimeoutOrNull(INSTALL_HOLD_LIMIT_MILLIS) { installHeld.first { !it } }
+                if (!installImmediately()) {
+                    progress.update { it.copy(step = application.getString(R.string.buildSavingReady), progress = null) }
+                    val readyPack = provider.retainReadyBuild(built)
+                    pack = readyPack
+                    synchronizeAfterInstall(readyPack)
+                    publish(owner, BuildInstallState.Ready(request.copy(pack = readyPack), reason))
+                } else if (reason != null) {
                     publish(owner, BuildInstallState.ChoosingInstaller(request, reason))
                 } else if (publish(owner, BuildInstallState.Installing(request))) {
                     installBuiltPack(owner, request, replacing = false)
@@ -158,13 +212,37 @@ internal class BuildInstallCoordinator(
             } catch (error: ProfileSessionChangedException) {
                 fail(owner, error.userMessage())
             } catch (error: Exception) {
-                Log.error("BuildInstallCoordinator", "Icon pack build failed", error)
-                fail(owner, R.string.iconPackBuildFailed)
+                failBuild(owner, error, progress.value.step)
+            } catch (error: OutOfMemoryError) {
+                // The build's allocations are released while this unwinds; report it instead of crashing.
+                failBuild(owner, error, progress.value.step)
             } finally {
                 progressObserver.cancel()
                 try { pack?.let { releaseUnclaimedBuild(it, owner) } } finally { finishRunning(owner) }
             }
         }
+    }
+
+    val pendingProfileId: Long? get() = when (val current = state) {
+        is BuildInstallState.Ready -> current.request.pack.profileId
+        is BuildInstallState.ChoosingInstaller -> current.request.pack.profileId
+        is BuildInstallState.Conflict -> current.request.pack.profileId
+        is BuildInstallState.Installing -> current.request.pack.profileId
+        else -> null
+    }
+
+    fun installReadyPack() {
+        val ready = state as? BuildInstallState.Ready ?: return
+        if (ready.reason != null) state = BuildInstallState.ChoosingInstaller(ready.request, ready.reason)
+        else startInstall(ready.request, replacing = false)
+    }
+
+    fun cancelForegroundWork() {
+        if (state !is BuildInstallState.Building && state !is BuildInstallState.Installing) return
+        operation++
+        job?.cancel()
+        val message = application.getString(R.string.buildInterrupted)
+        state = BuildInstallState.Failed(R.string.buildInterrupted, message, message)
     }
 
     fun confirmInstallerSelection(selection: InstallerSelection) {
@@ -391,9 +469,7 @@ internal class BuildInstallCoordinator(
             ?: "No additional details were provided by Android."
         val report = buildString {
             appendLine("Renkin icon pack installation report")
-            dev.renkinProject.renkin.util.AppBuildInfo.appendTo(this)
-            appendLine("Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
-            appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+            dev.renkinProject.renkin.util.AppBuildInfo.appendEnvironmentTo(this)
             appendLine("Launcher: " + (launcher?.let { "${it.label} (${it.packageName})" } ?: "no default home app"))
             appendLine("Pack: ${request.pack.packageName}")
             appendLine("Requested installer: ${outcome.requestedMethod.name}")
@@ -406,6 +482,20 @@ internal class BuildInstallCoordinator(
         }
         if (publish(owner, BuildInstallState.Failed(request.failedMessage,
             "${outcome.result.name}: ${installFailureHeadline(detail)}", report, outcome.result, request.pack))) notify(request.failedMessage)
+    }
+
+    private suspend fun failBuild(owner: Long, error: Throwable, phase: String) {
+        Log.error("BuildInstallCoordinator", "Icon pack build failed", error)
+        val cause = error.buildFailureCause()
+        val report = withContext(NonCancellable + Dispatchers.IO) {
+            buildFailureReport(application, error, cause, phase).also { report ->
+                runCatching { CrashReporter.recordHandled(application, report) }
+            }
+        }
+        val summary = "${cause.name}: ${installFailureHeadline(report.substringAfter("\n\n"))}"
+        if (publish(owner, BuildInstallState.Failed(R.string.iconPackBuildFailed, summary, report, advice = cause.advice))) {
+            notify(R.string.iconPackBuildFailed)
+        }
     }
 
     private fun fail(owner: Long, @StringRes message: Int) {
@@ -425,6 +515,7 @@ internal class BuildInstallCoordinator(
     }
 
     private fun pendingPack(): BuiltIconPack? = when (val current = state) {
+        is BuildInstallState.Ready -> current.request.pack
         is BuildInstallState.ChoosingInstaller -> current.request.pack
         is BuildInstallState.Conflict -> current.request.pack
         else -> null

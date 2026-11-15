@@ -19,8 +19,13 @@ import dev.renkinProject.renkin.xml.file.VectorXml
 /**
  * [includeGradients] writes readable gradient children for stored editor vectors; APK export turns it
  * off because a real VectorDrawable cannot hold them (the solid fallback colour stays).
+ * [scalingStrokes] marks a stored vector whose strokes scale with its drawn size; never for export.
  */
-class VectorExporter(val vector: ImageVector, private val includeGradients: Boolean = true) {
+class VectorExporter(
+    val vector: ImageVector,
+    private val includeGradients: Boolean = true,
+    private val scalingStrokes: Boolean = false
+) {
     private val lineCapButt = 0
     private val lineCapRound = 1
     private val lineCapSquare = 2
@@ -56,6 +61,7 @@ class VectorExporter(val vector: ImageVector, private val includeGradients: Bool
             vector.viewportWidth,
             vector.viewportHeight
         )
+        if (scalingStrokes) file.markScalingStrokes()
     }
 
     private fun setXmlGroup(file : BaseVectorXml, group: VectorGroup) {
@@ -148,8 +154,8 @@ class VectorExporter(val vector: ImageVector, private val includeGradients: Bool
     }
 
     companion object {
-        fun ImageVector.toXml(): ByteArray {
-            val exporter = VectorExporter(this)
+        fun ImageVector.toXml(scalingStrokes: Boolean = false): ByteArray {
+            val exporter = VectorExporter(this, scalingStrokes = scalingStrokes)
             return exporter.toXml()
         }
 
@@ -158,8 +164,12 @@ class VectorExporter(val vector: ImageVector, private val includeGradients: Bool
             return exporter.toXmlFile()
         }
 
-        fun ImageVector.toXmlFile(parent: BaseVectorXml, includeGradients: Boolean = true): BaseVectorXml {
-            val exporter = VectorExporter(this, includeGradients)
+        fun ImageVector.toXmlFile(
+            parent: BaseVectorXml,
+            includeGradients: Boolean = true,
+            scalingStrokes: Boolean = false
+        ): BaseVectorXml {
+            val exporter = VectorExporter(this, includeGradients, scalingStrokes)
             return exporter.toXmlFile(parent)
         }
     }

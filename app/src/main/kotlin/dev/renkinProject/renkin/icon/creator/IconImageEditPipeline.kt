@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import dev.alembiconsProject.imagetracer.ImageTracer
 import dev.alembiconsProject.tgCannyEdgeCompose.CannyEdgeDetector
 import dev.alembiconsProject.tgCannyEdgeCompose.DetectionOptions
+import dev.renkinProject.renkin.packages.PackageVersion
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.drawable.ADAPTIVE_ICON_SCALE
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
@@ -24,6 +25,7 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
 import dev.renkinProject.renkin.drawable.toImageVectorDrawable
+import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
 import dev.renkinProject.renkin.extension.changeBackgroundColor
 import dev.renkinProject.renkin.extension.emptyLike
 import dev.renkinProject.renkin.extension.newArgbBitmap
@@ -63,6 +65,10 @@ internal class IconImageEditPipeline(
 
     internal fun applyEdit(icon: IconPackDrawable, imageEdit: ImageEdit): IconPackDrawable {
         if (imageEdit == ImageEdit.NONE) return icon
+        if (imageEdit == ImageEdit.THEMED) return themedGlyph(icon)
+        // Its colours are the launcher's: a later colour edit (a Global style layer) would only
+        // bake the current wallpaper colours into a plain bitmap.
+        if (icon is ThemedGlyphDrawable) return icon
 
         if (icon is AdaptiveIconPackDrawable) {
             if (export.themed) {
@@ -107,6 +113,7 @@ internal class IconImageEditPipeline(
                 ImageEdit.PATH -> trace(copy.toBitmap())
                 ImageEdit.EDGE -> detectEdges(copy.toBitmap())
                 ImageEdit.REMOVE_BACKGROUND -> removeBackground(copy.toBitmap())
+                ImageEdit.THEMED -> themedGlyph(icon)
             }
         }
 
@@ -124,6 +131,72 @@ internal class IconImageEditPipeline(
         ImageEdit.EDGE -> detectEdges(bitmap)
         ImageEdit.COLORIZE, ImageEdit.COLORIZE_SEGMENTS -> colorize(bitmap, mode)
         ImageEdit.REMOVE_BACKGROUND -> removeBackground(bitmap)
+        ImageEdit.THEMED -> ThemedGlyphDrawable(flatIconGlyph(bitmap))
+    }
+
+    /**
+     * The icon as a themed glyph. A pack's adaptive icon brings its own glyph in its layer: the
+     * Material You (monochrome) layer when it has one, the foreground otherwise. Flat artwork has
+     * its logo separated from its plate the way the generated Material You variant does it.
+     */
+    private fun themedGlyph(icon: IconPackDrawable): ThemedGlyphDrawable {
+        if (icon is ThemedGlyphDrawable) return icon
+        if (icon is AdaptiveIconPackDrawable) {
+            // The foreground keeps the pack's own glyph size (Lawnicons insets it 32%, its
+            // monochrome layer only 28%, which grew the glyph). The monochrome layer is only for
+            // a foreground that is full artwork rather than a glyph.
+            val foreground = icon.foreground
+            val monochrome = if (foreground.hasTransparentBorder()) null else icon.monochrome
+            val mask = glyphMask(monochrome ?: foreground, ThemedGlyphDrawable.MASK_SIZE, scale = 1f)
+            foreground.recycle()
+            monochrome?.recycle()
+            return ThemedGlyphDrawable(mask)
+        }
+        return ThemedGlyphDrawable(flatIconGlyph(adjustments.rasterFrame(icon)))
+    }
+
+    // Flat artwork fills the launcher's 72dp viewport; as a themed glyph it starts at the size
+    // Renkin's themed export gives icons (half the 108dp layer). Scale in the Modifier tab resizes it.
+    private fun flatIconGlyph(frame: Bitmap): Bitmap =
+        glyphMask(frame, ThemedGlyphDrawable.MASK_SIZE, scale = THEMED_GLYPH_SCALE)
+
+    private fun glyphMask(source: Bitmap, size: Int, scale: Float): Bitmap {
+        val pixels = IntArray(source.width * source.height)
+        source.getPixels(pixels, 0, source.width, 0, 0, source.width, source.height)
+        // Artwork without a plate already is the glyph. The two-tone split would treat a light
+        // glyph on transparency (Lawnicons in dark mode) as background and erase it.
+        if (hasTransparentBorder(pixels, source.width, source.height)) {
+            for (index in pixels.indices) pixels[index] = (pixels[index] and ALPHA_MASK) or WHITE_RGB
+        } else {
+            val coverage = materialYouForegroundCoverage(pixels, source.width, source.height)
+            for (index in pixels.indices) {
+                pixels[index] = android.graphics.Color.argb((coverage[index] * 255).toInt().coerceIn(0, 255), 255, 255, 255)
+            }
+        }
+        val glyph = Bitmap.createBitmap(pixels, source.width, source.height, Bitmap.Config.ARGB_8888)
+        val side = size * scale
+        val offset = (size - side) / 2f
+        return newArgbBitmap(size, size) { canvas ->
+            canvas.drawBitmap(glyph, null, RectF(offset, offset, offset + side, offset + side), Paint(Paint.FILTER_BITMAP_FLAG))
+        }.also { glyph.recycle() }
+    }
+
+    private fun Bitmap.hasTransparentBorder(): Boolean {
+        val pixels = IntArray(width * height)
+        getPixels(pixels, 0, width, 0, 0, width, height)
+        return hasTransparentBorder(pixels, width, height)
+    }
+
+    private fun hasTransparentBorder(pixels: IntArray, width: Int, height: Int): Boolean {
+        val band = maxOf(1, minOf(width, height) / 20)
+        var transparent = 0
+        var total = 0
+        for (y in 0 until height) for (x in 0 until width) {
+            if (x >= band && y >= band && x < width - band && y < height - band) continue
+            total++
+            if ((pixels[y * width + x] ushr 24) < 16) transparent++
+        }
+        return total > 0 && transparent >= total * 0.9f
     }
 
     private fun colorizeAdaptiveForeground(source: Bitmap): Bitmap {
@@ -383,7 +456,11 @@ internal class IconImageEditPipeline(
     private fun addBackground(image: Bitmap): Bitmap {
         if (!export.themed) return image
         val shader = export.background.shader(image.width, image.height)
-            ?: return image.changeBackgroundColor(export.background.color)
+        // A solid themed background is the adaptive icon's own background layer from Android 8 on,
+        // and it follows the wallpaper. Baking it into the glyph left a square of the old colour
+        // there after a wallpaper change, and kept the glyph from exporting as a tintable mask.
+        if (shader == null && PackageVersion.is26OrMore()) return image
+        shader ?: return image.changeBackgroundColor(export.background.color)
         val result = image.emptyLike()
         Canvas(result).apply {
             drawRect(
@@ -452,3 +529,8 @@ internal fun Bitmap.removeMatchedBackground(targets: List<Int>, tolerance: Float
     targets.isNotEmpty() -> removeSegmentColors(this, targets, tolerance)
     else -> removeBackground(tolerance)
 }
+
+// Share of the 108dp layer a flat icon's glyph starts at; the pack-wide themed export uses the same.
+private const val THEMED_GLYPH_SCALE = 0.5f
+private const val ALPHA_MASK = 0xFF000000.toInt()
+private const val WHITE_RGB = 0x00FFFFFF

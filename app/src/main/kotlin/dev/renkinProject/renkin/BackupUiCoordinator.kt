@@ -30,6 +30,11 @@ import kotlinx.coroutines.withContext
 
 data class BackupImportPreview(val preview: BackupManager.BackupPreview)
 
+sealed interface BackupExportFeedback {
+    data object Writing : BackupExportFeedback
+    data class Result(@get:StringRes val messageRes: Int, val successful: Boolean) : BackupExportFeedback
+}
+
 internal class BackupUiCoordinator(
     private val provider: ApplicationProvider,
     private val backupManager: BackupManager,
@@ -54,6 +59,12 @@ internal class BackupUiCoordinator(
         private set
     var backupCancellationRequested by mutableStateOf(false)
         private set
+    var backupExportFeedback by mutableStateOf<BackupExportFeedback?>(null)
+        private set
+
+    fun clearBackupExportFeedback() {
+        if (!backupInProgress) backupExportFeedback = null
+    }
 
     val previousStateAvailable = backupManager.previousStateAvailable
     val previousStateStored = backupManager.previousStateStored
@@ -64,6 +75,7 @@ internal class BackupUiCoordinator(
     val autoBackupIntervalHours = autoBackupManager.intervalHours.stateIn(scope, SharingStarted.Eagerly, 0)
     val autoBackupTreeUri = autoBackupManager.treeUri.stateIn(scope, SharingStarted.Eagerly, null)
     val lastAutoBackupAt = autoBackupManager.lastBackupAt.stateIn(scope, SharingStarted.Eagerly, 0L)
+    val lastAutoBackupFailedAt = autoBackupManager.lastFailureAt.stateIn(scope, SharingStarted.Eagerly, 0L)
 
     fun setAutoBackupInterval(hours: Int) = updateAutoBackup("Could not update automatic backup interval") {
         autoBackupManager.setInterval(hours)
@@ -125,30 +137,37 @@ internal class BackupUiCoordinator(
         @StringRes failureToast: Int,
         onCompletion: () -> Unit = {},
         serializeProfile: Boolean = true,
+        tracksBackupExport: Boolean = false,
         op: suspend (ProfileSessionToken) -> Unit
     ) {
         if (closed || backupInProgress) return
         backupInProgress = true
+        backupExportFeedback = if (tracksBackupExport) BackupExportFeedback.Writing else null
         val expected = provider.sessionToken
         backupJob = scope.launch {
             try {
                 if (serializeProfile) profileSessionOperations.withLock { op(expected) }
                 else op(expected)
             } catch (error: CancellationException) {
+                if (tracksBackupExport) backupExportFeedback = null
                 if (backupCancellationRequested) notify(R.string.backupPreparationCancelled)
                 throw error
             } catch (error: ProfileSessionChangedException) {
-                notify(error.userMessage())
+                val message = error.userMessage()
+                if (tracksBackupExport) backupExportFeedback = BackupExportFeedback.Result(message, successful = false)
+                notify(message)
             } catch (error: Exception) {
                 Log.error("BackupUiCoordinator", "Backup operation failed", error)
-                notify(when (error) {
+                val message = when (error) {
                     is BackupSpaceException -> if (failureToast == R.string.backupImportFailed) {
                         R.string.backupImportInsufficientStorage
                     } else R.string.backupInsufficientStorage
                     is BackupSizeException -> R.string.backupSizeLimitExceeded
                     is BackupMemoryException -> R.string.backupInsufficientMemory
                     else -> failureToast
-                })
+                }
+                if (tracksBackupExport) backupExportFeedback = BackupExportFeedback.Result(message, successful = false)
+                notify(message)
             } finally {
                 backupJob = null
                 backupCancellationRequested = false
@@ -163,7 +182,8 @@ internal class BackupUiCoordinator(
 
     private fun export(uri: Uri, profileId: Long?) = runBackupOp(
         if (profileId == null) R.string.backupExportFailed else R.string.profileExportFailed,
-        serializeProfile = false
+        serializeProfile = false,
+        tracksBackupExport = profileId == null
     ) { expected ->
         var prepared: BackupManager.PreparedExport? = null
         try {
@@ -174,8 +194,12 @@ internal class BackupUiCoordinator(
             }
             // The immutable archive owns the snapshot; SAF copying must not hold the profile mutex.
             backupManager.writePreparedExport(checkNotNull(prepared), uri)
-            notify(if (profileId == null) R.string.backupExported else R.string.profileExported)
         } finally { prepared?.let { backupManager.discardExport(it) } }
+        currentCoroutineContext().ensureActive()
+        if (profileId == null) {
+            backupExportFeedback = BackupExportFeedback.Result(R.string.backupExported, successful = true)
+        }
+        notify(if (profileId == null) R.string.backupExported else R.string.profileExported)
     }
 
     fun confirmBackupImport() {

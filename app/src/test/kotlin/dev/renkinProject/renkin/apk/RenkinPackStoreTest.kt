@@ -2,14 +2,23 @@ package dev.renkinProject.renkin.apk
 
 import android.app.Application
 import android.graphics.Bitmap
+import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.Color as AndroidColor
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.drawable.ADAPTIVE_ICON_SCALE
 import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
+import dev.renkinProject.renkin.drawable.ImageVectorDrawable
+import dev.renkinProject.renkin.drawable.InsetIconDrawable
 import dev.renkinProject.renkin.drawable.MaterialYouPackEditState
+import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
 import dev.renkinProject.renkin.extension.getBytes
 import dev.renkinProject.renkin.extension.toBase64
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
@@ -170,5 +179,40 @@ class RenkinPackStoreTest {
         assertNull(entry.icon)
         assertTrue(entry.baseIcon is BitmapIconDrawable)
         assertEquals(false, entry.decodeFailed)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun storedThemedGlyphRestoresAsThemedGlyph() {
+        val mask = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply { setPixel(3, 3, AndroidColor.WHITE) }
+        val restored = store().decodeStored(ThemedGlyphDrawable(mask).toDbString(), isXml = true, isAdaptive = true, Color.Black)
+
+        assertTrue(restored is ThemedGlyphDrawable)
+        restored as ThemedGlyphDrawable
+        assertTrue(restored.isAdaptiveIcon())
+        assertEquals(AndroidColor.WHITE, restored.mask.getPixel(3, 3))
+        assertEquals(0, restored.mask.getPixel(0, 0))
+        assertEquals(ThemedGlyphDrawable.SYSTEM_PALETTE, restored.scheme)
+
+        val schemed = store().decodeStored(ThemedGlyphDrawable(mask, scheme = 3).toDbString(), isXml = true, isAdaptive = true, Color.Black)
+        assertEquals(3, (schemed as ThemedGlyphDrawable).scheme)
+    }
+
+    @Test
+    fun storedVectorsKeepWhetherTheirStrokesScale() {
+        fun vector(scaling: Boolean) = ImageVectorDrawable(
+            ImageVector.Builder(defaultWidth = 192.dp, defaultHeight = 192.dp, viewportWidth = 192f, viewportHeight = 192f)
+                .addPath(PathParser().parsePathString("M40,40H150").toNodes(), stroke = SolidColor(Color.Black), strokeLineWidth = 12f)
+                .build(),
+            scaleStrokesWithBounds = scaling
+        )
+        fun restore(payload: String) = store().decodeStored(payload, isXml = true, isAdaptive = false, Color.Black)
+
+        val inset = InsetIconDrawable(vector(scaling = true), Rect(61, 61, 61, 61), RectF(0.32f, 0.32f, 0.32f, 0.32f))
+        val restoredInset = restore(inset.toDbString()) as InsetIconDrawable
+        assertTrue((restoredInset.drawable as ImageVectorDrawable).scaleStrokesWithBounds)
+
+        assertTrue((restore(vector(scaling = true).toDbString()) as ImageVectorDrawable).scaleStrokesWithBounds)
+        assertEquals(false, (restore(vector(scaling = false).toDbString()) as ImageVectorDrawable).scaleStrokesWithBounds)
     }
 }

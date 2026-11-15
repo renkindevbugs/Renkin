@@ -38,7 +38,6 @@
     <string name="installerAskEveryTime">Preguntar siempre</string>
     <string name="installerAskEveryTimeDescription">Muestra este selector de instalador cada vez que un paquete de iconos generado esté listo para instalarse.</string>
     <string name="installerAskEveryTimeEnabled">El selector de instalador se abrirá antes de cada instalación</string>
-    <string name="shizukuUnsupported">La instalación con Shizuku requiere Android 7 o superior. Se usará el instalador del sistema.</string>
     <string name="shizukuNotInstalled">Shizuku no está instalado. Se usará el instalador del sistema.</string>
     <string name="shizukuOpenApp">Abrir Shizuku</string>
     <string name="shizukuNotRunning">Shizuku no se está ejecutando. Se usará el instalador del sistema hasta que esté disponible.</string>
@@ -426,7 +425,6 @@
     <string name="buildPreviewTitle">Vista previa del paquete</string>
     <string name="buildPreviewEmpty">Todavía no hay iconos. Primero, asigna iconos a tus aplicaciones.</string>
     <string name="buildPreviewCount">%d iconos</string>
-    <string name="buildPreviewSessionLost">El sistema cerró Renkin — vista previa cancelada, vuelve a abrirla para compilar</string>
     <string name="watchApplyFailed">No se pudo aplicar el icono — se conservó la sugerencia para que puedas intentarlo de nuevo</string>
     <string name="linkOpenFailed">Ninguna aplicación de este dispositivo puede abrir ese enlace</string>
     <string name="shareFailed">Ninguna aplicación de este dispositivo puede compartir ese contenido</string>

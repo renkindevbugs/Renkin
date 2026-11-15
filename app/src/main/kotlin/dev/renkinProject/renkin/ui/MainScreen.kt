@@ -11,6 +11,9 @@ import dev.renkinProject.renkin.EditorDraftRecoveryViewModel
 import dev.renkinProject.renkin.InstallerChoiceReason
 import dev.renkinProject.renkin.expiredSessionMessage
 import dev.renkinProject.renkin.data.TextFontKey
+import dev.renkinProject.renkin.data.MotionPart
+import dev.renkinProject.renkin.data.reducesMotion
+import dev.renkinProject.renkin.feature.watch.WatchNotificationProfileDialog
 import dev.renkinProject.renkin.data.observePreferences
 import java.util.UUID
 import androidx.activity.compose.BackHandler
@@ -59,7 +62,6 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Settings
@@ -149,12 +151,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.GlobalOptionsActivity
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.ProfileActionProgress
+import dev.renkinProject.renkin.ProfileSwitchTarget
 import dev.renkinProject.renkin.apk.ApplicationListState
 import dev.renkinProject.renkin.profileSession
 import dev.renkinProject.renkin.withProfileSession
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.OptionsViewModel
 import dev.renkinProject.renkin.feature.profiles.ProfileSwitcherTitle
+import dev.renkinProject.renkin.feature.profiles.ProfileSwitchLoading
 import dev.renkinProject.renkin.feature.buildinstall.BuildPackFab
 import dev.renkinProject.renkin.feature.buildinstall.InstallerPromptDialog
 import dev.renkinProject.renkin.feature.backup.BackupRestorePreviewDialog
@@ -297,7 +301,11 @@ private fun LazyGridState.isScrollingUp(): Boolean {
 /** The same inert home shell covers storage checking and normal catalog/icon loading. */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun MainStartupScreen() {
+fun MainStartupScreen(
+    profile: dev.renkinProject.renkin.data.Profile? = null,
+    showProfileSkeletons: Boolean = false,
+    loadIcon: suspend (ProfileSwitchTarget) -> dev.renkinProject.renkin.drawable.IconPackDrawable? = { null }
+) {
     Scaffold(
         topBar = { TitleBar(loading = true) }
     ) { padding ->
@@ -309,8 +317,23 @@ fun MainStartupScreen() {
                 placeholder = stringResource(R.string.searchApps),
                 enabled = false
             )
-            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+            if (showProfileSkeletons) {
+                ProfileSwitchLoading(
+                    target = ProfileSwitchTarget(
+                        id = profile?.id ?: 0L,
+                        name = profile?.name.orEmpty(),
+                        packLabel = profile?.packLabel.orEmpty(),
+                        packIcon = profile?.packIcon.orEmpty()
+                    ),
+                    messageRes = R.string.startupProfileLoading,
+                    columns = homeListColumns(LocalConfiguration.current.screenWidthDp),
+                    loadIcon = loadIcon,
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+                }
             }
         }
     }
@@ -389,14 +412,14 @@ fun MainColumn(iconPacks: List<IconPack>) {
         toaster, optionsViewModel.toastEvents,
         texts = listOf(viewModel.installToastEvents, watchViewModel.toastEvents)
     )
-    if (!viewModel.packPreviewOpen) CollectToasts(toaster, viewModel.toastEvents)
+    CollectToasts(toaster, viewModel.toastEvents)
 
     // Undoable changes get a snackbar instead of a toast: a toast cannot be acted on, and the
     // whole point is the action. Only the newest offer is on screen, matching the single step
     // the provider keeps.
     val snackbarHostState = remember { SnackbarHostState() }
     val profileActionProgress by viewModel.profileActionProgress.collectAsStateWithLifecycle()
-    profileActionProgress?.let { ProfileActionProgressDialog(it) }
+    profileActionProgress?.takeIf { it.profileTarget == null }?.let { ProfileActionProgressDialog(it) }
     val undoLabel = stringResource(R.string.undoAction)
     LaunchedEffect(Unit) {
         viewModel.undoEvents.combine(viewModel.undoStepState) { prompt, step ->
@@ -441,51 +464,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
         )
     }
 
-    viewModel.installerPromptReason?.let { reason ->
-        InstallerPromptDialog(
-            selected = prefs.getPreferencesValue().installerSelection(),
-            explainSavedChoice = reason == InstallerChoiceReason.FIRST_CHOICE,
-            onSelect = viewModel::confirmInstallerSelection,
-            onDismiss = viewModel::dismissInstallerSelection
-        )
-    }
-
-    var chooseFailureInstaller by rememberSaveable { mutableStateOf(false) }
-    if (chooseFailureInstaller) {
-        InstallerPromptDialog(
-            selected = prefs.getPreferencesValue().installerSelection(),
-            explainSavedChoice = false,
-            onSelect = { selection ->
-                viewModel.setInstallMethod(selection.method, selection.externalComponent)
-                chooseFailureInstaller = false
-            },
-            onDismiss = { chooseFailureInstaller = false }
-        )
-    }
-    val failedApkExport = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(APK_MIME_TYPE)
-    ) { target -> viewModel.finishFailedApkExport(target) }
-    viewModel.installFailure?.let { installFailure ->
-        InstallFailureDialog(
-            failure = installFailure,
-            onChooseInstaller = {
-                viewModel.dismissInstallFailure()
-                chooseFailureInstaller = true
-            },
-            onSaveApk = { viewModel.beginFailedApkExport { failedApkExport.launch(it) } },
-            onDismiss = { viewModel.dismissInstallFailure() }
-        )
-    }
-
-    if (viewModel.installFallbackPending) {
-        InstallFallbackDialog(
-            signatureMismatch = viewModel.installFallbackSignatureMismatch,
-            onConfirm = { viewModel.confirmInstallFallback() },
-            onDismiss = { viewModel.dismissInstallFallback() }
-        )
-    }
-
-    viewModel.buildOutcome?.let { BuildOutcomeDialog(it, onDismiss = { viewModel.dismissBuildOutcome() }) }
+    BuildInstallDialogs(viewModel)
 
     val pressBackMessage = stringResource(R.string.pressBackToExit)
     var lastBackPress by remember { mutableStateOf(0L) }
@@ -694,6 +673,60 @@ internal fun ProfileActionProgressDialog(
     )
 }
 
+/**
+ * Its own restart scope: these read the build state, which changes with build progress, so
+ * reading it in [MainColumn] recomposed the whole home screen during every build.
+ */
+@Composable
+private fun BuildInstallDialogs(viewModel: MainViewModel) {
+    val prefs = getPreferences()
+    viewModel.installerPromptReason?.let { reason ->
+        InstallerPromptDialog(
+            selected = prefs.getPreferencesValue().installerSelection(),
+            explainSavedChoice = reason == InstallerChoiceReason.FIRST_CHOICE,
+            onSelect = viewModel::confirmInstallerSelection,
+            onDismiss = viewModel::dismissInstallerSelection
+        )
+    }
+
+    var chooseFailureInstaller by rememberSaveable { mutableStateOf(false) }
+    if (chooseFailureInstaller) {
+        InstallerPromptDialog(
+            selected = prefs.getPreferencesValue().installerSelection(),
+            explainSavedChoice = false,
+            onSelect = { selection ->
+                viewModel.setInstallMethod(selection.method, selection.externalComponent)
+                chooseFailureInstaller = false
+            },
+            onDismiss = { chooseFailureInstaller = false }
+        )
+    }
+    val failedApkExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(APK_MIME_TYPE)
+    ) { target -> viewModel.finishFailedApkExport(target) }
+    viewModel.installFailure?.let { installFailure ->
+        InstallFailureDialog(
+            failure = installFailure,
+            onChooseInstaller = {
+                viewModel.dismissInstallFailure()
+                chooseFailureInstaller = true
+            },
+            onSaveApk = { viewModel.beginFailedApkExport { failedApkExport.launch(it) } },
+            onDismiss = { viewModel.dismissInstallFailure() }
+        )
+    }
+
+    if (viewModel.installFallbackPending) {
+        InstallFallbackDialog(
+            signatureMismatch = viewModel.installFallbackSignatureMismatch,
+            onConfirm = { viewModel.confirmInstallFallback() },
+            onDismiss = { viewModel.dismissInstallFallback() }
+        )
+    }
+
+    viewModel.buildOutcome?.let { BuildOutcomeDialog(it, onDismiss = { viewModel.dismissBuildOutcome() }) }
+}
+
 @Composable
 internal fun InstallFailureDialog(
     failure: MainViewModel.InstallFailureInfo,
@@ -704,8 +737,9 @@ internal fun InstallFailureDialog(
     val clipboard = LocalClipboard.current
     val toaster = LocalToaster.current
     val coroutineScope = rememberCoroutineScope()
-    val copiedMessage = stringResource(R.string.installFailureCopied)
-    val reportLabel = stringResource(R.string.installFailureTitle)
+    val buildAdvice = failure.buildFailureAdvice
+    val copiedMessage = stringResource(if (buildAdvice != null) R.string.buildFailureCopied else R.string.installFailureCopied)
+    val reportLabel = stringResource(if (buildAdvice != null) R.string.iconPackBuildFailed else R.string.installFailureTitle)
     val copyReport: () -> Unit = {
         coroutineScope.launch {
             clipboard.copyPlainText(reportLabel, failure.report)
@@ -715,10 +749,12 @@ internal fun InstallFailureDialog(
     MessageDialog(
         onDismissRequest = onDismiss,
         badge = { DialogBadge(Icons.Filled.ErrorOutline, DialogTone.Danger) },
-        title = stringResource(R.string.installFailureTitle),
-        body = AnnotatedString(stringResource(
-            if (failure.missingSystemInstaller) R.string.installNoSystemInstaller else R.string.installFailureText
-        )),
+        title = reportLabel,
+        body = AnnotatedString(stringResource(when {
+            buildAdvice != null -> buildAdvice
+            failure.missingSystemInstaller -> R.string.installNoSystemInstaller
+            else -> R.string.installFailureText
+        })),
         actions = {
             if (failure.missingSystemInstaller) {
                 DialogPrimaryAction(stringResource(R.string.installerSelect), onChooseInstaller)
@@ -740,6 +776,7 @@ internal fun InstallFailureDialog(
                 )
             }
         }
+        if (buildAdvice != null) DialogNote(stringResource(R.string.buildFailureSavedNote))
     }
 }
 
@@ -845,6 +882,17 @@ fun ApplicationList(
     val optionsViewModel: OptionsViewModel = hiltViewModel()
     val applications = applicationState.applications
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
+    val foregroundProgress by viewModel.profileActionProgress.collectAsStateWithLifecycle()
+    val switchingTarget = foregroundProgress?.profileTarget
+    if (switchingTarget != null && runtimeState.startupComplete && !viewModel.startupFailed) {
+        ProfileSwitchLoading(
+            target = switchingTarget,
+            messageRes = requireNotNull(foregroundProgress).messageRes,
+            columns = homeListColumns(LocalConfiguration.current.screenWidthDp),
+            loadIcon = viewModel::profileSwitchArtwork
+        )
+        return
+    }
     val lockedIconKeys = applicationState.lockedIconKeys
 
     // Read preferences once for the whole list — a DataStore subscription per row
@@ -853,6 +901,7 @@ fun ApplicationList(
     val bgColorValue = prefs.getBackgroundColor()
     val preferenceSnapshot by optionsViewModel.preferenceSnapshot.collectAsStateWithLifecycle()
     val themed = preferenceSnapshot.getBooleanValue(ExportThemedKey)
+    val reduceIconFlight = preferenceSnapshot.reducesMotion(MotionPart.ICON_FLIGHT)
 
     // Install times refresh whenever the set of packages changes — keying on size alone missed
     // a reinstall or list refresh that swapped apps without changing the count. Looked up off
@@ -978,7 +1027,7 @@ fun ApplicationList(
         item(key = "options", contentType = "options", span = { GridItemSpan(maxLineSpan) }) {
             Box(Modifier.introTarget(IntroTarget.ADVANCED_OPTIONS)) {
                 AdvancedOptionsCard(iconPacks) {
-                    if (viewModel.longOperationRunning) {
+                    if (viewModel.longOperationRunning || viewModel.buildBusy) {
                         globalOptionsToaster.show(globalOptionsContext.getString(R.string.profileRenderBusy))
                     } else {
                         globalOptionsLauncher.launch(
@@ -1022,6 +1071,7 @@ fun ApplicationList(
                     iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue,
                     sourceSession = sourceSession,
                     isLocked = indexedApp.value.createdIcon == null && indexedApp.value.key in lockedIconKeys,
+                    reduceIconFlight = reduceIconFlight,
                     modifier = Modifier.animateItem().then(introModifier)
                 )
             }
@@ -1158,13 +1208,15 @@ fun ApplicationItem(
     bgColorValue: Color,
     sourceSession: ProfileSessionToken,
     isLocked: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    reduceIconFlight: Boolean = false
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val dynamicColor = themed && supportDynamicColors()
     val view = LocalView.current
     val toaster = LocalToaster.current
     val syncWarning = stringResource(id = R.string.syncText)
+    val context = LocalContext.current
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
     var quickActionsOpen by rememberSaveable { mutableStateOf(false) }
@@ -1188,15 +1240,23 @@ fun ApplicationItem(
                 onClick = {
                     // Its editor is still closing (icons flying home); let that finish first.
                     if (openAppOptions) return@combinedClickable
+                    if (viewModel.buildBusy) {
+                        toaster.show(context.getString(R.string.buildOperationPending))
+                        return@combinedClickable
+                    }
                     view.performTapHaptic()
                     if (viewModel.iconPackState.value.loaded) {
-                        iconFlight = iconAnchor.launch()
+                        iconFlight = if (reduceIconFlight) null else iconAnchor.launch()
                         openAppOptions = true
                     } else {
                         toaster.show(syncWarning)
                     }
                 },
                 onLongClick = {
+                    if (viewModel.buildBusy) {
+                        toaster.show(context.getString(R.string.buildOperationPending))
+                        return@combinedClickable
+                    }
                     view.performLongPressHaptic()
                     quickActionsOpen = true
                 }
@@ -1606,6 +1666,21 @@ fun TitleBar(
     val watchViewModel: WatchViewModel = hiltViewModel()
     val completedCount by watchViewModel.completedCount.collectAsStateWithLifecycle()
     val mainViewModel: MainViewModel = hiltViewModel()
+    val notificationProfiles by mainViewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
+    val requestedProfiles = mainViewModel.watchNotificationProfileIds
+    if (requestedProfiles != null) {
+        WatchNotificationProfileDialog(
+            profiles = notificationProfiles.filter { it.id in requestedProfiles },
+            onSelect = mainViewModel::openWatchNotificationProfile,
+            onDismiss = mainViewModel::dismissWatchNotificationProfiles
+        )
+    }
+    LaunchedEffect(mainViewModel.watchOpenRequested) {
+        if (mainViewModel.watchOpenRequested) {
+            openWatch = true
+            mainViewModel.consumeWatchOpenRequest()
+        }
+    }
     val draftOwner: EditorDraftRecoveryViewModel = hiltViewModel()
     val hasSavedEdit by draftOwner.hasSavedEdit.collectAsStateWithLifecycle()
 
@@ -1623,13 +1698,10 @@ fun TitleBar(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f).introTarget(IntroTarget.PROFILE)) { ProfileSwitcherTitle() }
                 if (hasSavedEdit) {
-                    val label = stringResource(R.string.editorAutosaveReview)
-                    RenkinTooltipBox(label) {
-                        IconButton(onClick = { draftOwner.reviewSavedEdit() }) {
-                            Icon(Icons.Filled.Restore, contentDescription = label,
-                                tint = MaterialTheme.colorScheme.primary)
-                        }
-                    }
+                    SavedEditorDraftButton(
+                        reduceMotion = prefs.reducesMotion(MotionPart.ATTENTION),
+                        onClick = draftOwner::reviewSavedEdit
+                    )
                 }
             }
         }

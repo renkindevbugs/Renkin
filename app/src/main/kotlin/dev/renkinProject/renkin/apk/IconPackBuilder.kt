@@ -20,9 +20,13 @@ import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
+import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
+import dev.renkinProject.renkin.drawable.ThemedGlyphColors
+import dev.renkinProject.renkin.icon.creator.MATERIAL_YOU_SCHEME_COLOR_IDS
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.getDrawableOrNull
 import dev.renkinProject.renkin.extension.toByteArray
+import dev.renkinProject.renkin.extension.isSingleColorGlyph
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.packages.CHANGES_WITH_MATERIAL_YOU_COLORS
 import dev.renkinProject.renkin.packages.PackageInfoStruct
@@ -37,6 +41,7 @@ import dev.renkinProject.renkin.xml.file.AppMapXml
 import dev.renkinProject.renkin.xml.file.ThemeResourcesXml
 import dev.renkinProject.renkin.xml.file.DrawableXml
 import dev.renkinProject.renkin.xml.file.LayerListXml
+import dev.renkinProject.renkin.xml.file.TintedBitmapXml
 import dev.renkinProject.renkin.xml.file.VectorXml
 import dev.renkinProject.renkin.xml.file.XmlMemoryFile
 import com.reandroid.apk.ApkModule
@@ -111,7 +116,7 @@ class IconPackBuilder(
 
         // Smali class assets compiled into the pack's classes.dex; their class package must stay
         // MAIN_ACTIVITY's. The preview screen reads the renkin_preview_* resources by name.
-        private val PACK_SMALI_ASSETS = listOf("MainActivity", "IconAdapter", "BuildConfig")
+        private val PACK_SMALI_ASSETS = listOf("MainActivity", "IconAdapter", "IconLoader", "BuildConfig")
 
         /**
          * The pack-signing keystore in filesDir. Backups carry it (with its password file,
@@ -247,8 +252,12 @@ class IconPackBuilder(
         createColorResource(packageBlock, "icon_color", iconColor)
         createColorResource(packageBlock, "icon_background_color", backgroundColor)
 
-        createRefColor31Resource(packageBlock, "icon_color", "@android:color/system_accent1_100")
-        createRefColor31Resource(packageBlock, "icon_background_color", "@android:color/system_accent1_800")
+        // Themed icons follow light and dark mode like system themed icons. The pairs are the ones
+        // Lawnicons uses, so Renkin and Lawnicons glyphs look alike side by side.
+        createRefColor31Resource(packageBlock, "icon_color", "@android:color/system_accent1_700")
+        createRefColor31Resource(packageBlock, "icon_background_color", "@android:color/system_accent1_100")
+        createRefColor31Resource(packageBlock, "icon_color", "@android:color/system_accent1_200", night = true)
+        createRefColor31Resource(packageBlock, "icon_background_color", "@android:color/system_accent2_800", night = true)
 
         textMethod(ctx.resources.getString(R.string.writingElement))
         val drawableXml = DrawableXml()
@@ -277,7 +286,7 @@ class IconPackBuilder(
                 val legacyName = if (layeredIcon != null) "${appFileName}_legacy" else appFileName
 
                 // Themed builds keep the user's static tint; plain clocks retain their source rotation.
-                val clock = if (themed) null else app.sourcePackName
+                val clock = if (themed || app.createdIcon is ThemedGlyphDrawable) null else app.sourcePackName
                     ?.takeIf { it.isNotEmpty() }
                     ?.let { clockExporter.clockIconFor(app, it, app.createdIcon) }
 
@@ -311,12 +320,17 @@ class IconPackBuilder(
                 }
                 else if (exportAsAdaptive && PackageVersion.is26OrMore()) {
                     val adaptive = AdaptiveIconXml()
-                    adaptive.background("@color/icon_background_color")
+                    val colors = themedColors(packageBlock, (app.createdIcon as? ThemedGlyphDrawable)?.scheme)
+                    adaptive.background(colors.background)
 
                     when (app.createdIcon) {
+                        is ThemedGlyphDrawable -> {
+                            adaptive.foreground(appFileName)
+                            createTintedMaskResource(apkModule, packageBlock, app.createdIcon.mask, appFileName + "_foreground", colors.foreground)
+                        }
                         is AdaptiveIconPackDrawable -> {
                             adaptive.foreground(appFileName)
-                            createBitmapResource(apkModule, packageBlock, app.createdIcon.foreground, appFileName + "_foreground")
+                            createOwnedBitmapResource(apkModule, packageBlock, app.createdIcon.foreground, appFileName + "_foreground")
                         }
                         is InsetIconDrawable -> {
                             adaptive.startForeground()
@@ -329,7 +343,7 @@ class IconPackBuilder(
                             } else {
                                 if (insetDrawable is BitmapIconDrawable) {
                                     adaptive.insetDrawable(appFileName + "_foreground")
-                                    createBitmapResource(apkModule, packageBlock, insetDrawable.toBitmap(), appFileName + "_foreground")
+                                    createGlyphResource(apkModule, packageBlock, insetDrawable.toBitmap(), appFileName + "_foreground", themed)
                                 }
                             }
 
@@ -345,7 +359,7 @@ class IconPackBuilder(
 
                         else -> {
                             adaptive.foreground(appFileName)
-                            createBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground")
+                            createGlyphResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground", themed)
                         }
                     }
 
@@ -364,7 +378,7 @@ class IconPackBuilder(
                                 // the same scaled copy so the icon keeps its size.
                                 if (exportCopy.hasGradientBrush()) {
                                     insetXml.insetDrawable(appFileName + "_foreground")
-                                    createBitmapResource(apkModule, packageBlock, exportCopy.toBitmap(), appFileName + "_foreground")
+                                    createOwnedBitmapResource(apkModule, packageBlock, exportCopy.toBitmap(), appFileName + "_foreground")
                                 } else {
                                     exportVectorIcon(insetXml, exportCopy)
                                 }
@@ -378,7 +392,12 @@ class IconPackBuilder(
 
                         createXmlDrawableResource(apkModule, packageBlock, insetXml, appFileName)
                     } else {
-                        createBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName)
+                        // Only these render a new bitmap; a stored icon hands out the one the UI shows.
+                        if (app.createdIcon is AdaptiveIconPackDrawable || app.createdIcon is ImageVectorDrawable) {
+                            createOwnedBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName)
+                        } else {
+                            createBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName)
+                        }
                     }
                 }
 
@@ -448,7 +467,13 @@ class IconPackBuilder(
 
         textMethod(ctx.resources.getString(R.string.signApk))
         checkActive()
-        signApk(unsignedApk, signedApk)
+        try {
+            signApk(unsignedApk, signedApk)
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            throw PackSigningException("Could not sign the icon pack APK", error)
+        }
         GeneratedPackIdentity.recordBuilt(ctx, iconPackName, signedApk)
         checkActive()
 
@@ -488,7 +513,7 @@ class IconPackBuilder(
 
     @Suppress(SuppressSameParameterValue)
     private fun setSdkVersions(manifest: ResXmlElement, minSdkVersion: Int, targetSdkVersion: Int) {
-        val useSdk = manifest.createChildElement(AndroidManifestBlock.TAG_uses_sdk)
+        val useSdk = manifest.newElement(AndroidManifestBlock.TAG_uses_sdk)
 
         val minSdk = useSdk.getOrCreateAndroidAttribute(
             AndroidManifestBlock.NAME_minSdkVersion,
@@ -505,7 +530,7 @@ class IconPackBuilder(
 
     private fun createMainActivity(manifest: AndroidManifestBlock, changesWithMaterialYouColors: Boolean) {
         val application = manifest.orCreateApplicationElement
-        val activity = application.createChildElement(AndroidManifestBlock.TAG_activity)
+        val activity = application.newElement(AndroidManifestBlock.TAG_activity)
         // The preview grid sits on the user's wallpaper by default.
         activity.getOrCreateAndroidAttribute("theme", android.R.attr.theme)
             .setTypeAndData(ValueType.REFERENCE, android.R.style.Theme_Material_Wallpaper_NoTitleBar)
@@ -548,10 +573,10 @@ class IconPackBuilder(
     }
 
     private fun createIntentFilter(activity: ResXmlElement, actions: Array<String>, categories: Array<String>) {
-        val intentFilter = activity.createChildElement(AndroidManifestBlock.TAG_intent_filter)
+        val intentFilter = activity.newElement(AndroidManifestBlock.TAG_intent_filter)
 
         for (actionValue in actions) {
-            val action = intentFilter.createChildElement(AndroidManifestBlock.TAG_action)
+            val action = intentFilter.newElement(AndroidManifestBlock.TAG_action)
             val attribute = action.getOrCreateAndroidAttribute(
                 AndroidManifestBlock.NAME_name,
                 AndroidManifestBlock.ID_name
@@ -560,7 +585,7 @@ class IconPackBuilder(
         }
 
         for (categoryValue in categories) {
-            val category = intentFilter.createChildElement(AndroidManifestBlock.TAG_category)
+            val category = intentFilter.newElement(AndroidManifestBlock.TAG_category)
             val attribute = category.getOrCreateAndroidAttribute(
                 AndroidManifestBlock.NAME_name,
                 AndroidManifestBlock.ID_name
@@ -588,18 +613,18 @@ class IconPackBuilder(
         type: String = "drawable",
         clockLayers: LayerListXml? = null
     ) {
-        val fallback = createBitmapResource(apkModule, packageBlock, icon.toBitmap(), name, type = type)
+        val fallback = createOwnedBitmapResource(apkModule, packageBlock, icon.toBitmap(), name, type = type)
         if (legacyName != name) {
             packageBlock.getOrCreate("", type, legacyName).setValueAsString(fallback.valueAsString)
         }
         if (clockLayers == null) {
-            createBitmapResource(apkModule, packageBlock, icon.foreground, "${name}_foreground", "nodpi")
+            createOwnedBitmapResource(apkModule, packageBlock, icon.foreground, "${name}_foreground", "nodpi")
         } else {
             createXmlDrawableResource(apkModule, packageBlock, clockLayers, "${name}_foreground")
         }
-        createBitmapResource(apkModule, packageBlock, icon.background, "${name}_background", "nodpi")
+        createOwnedBitmapResource(apkModule, packageBlock, icon.background, "${name}_background", "nodpi")
         icon.monochrome?.let {
-            createBitmapResource(apkModule, packageBlock, it, "${name}_monochrome", "nodpi")
+            createOwnedBitmapResource(apkModule, packageBlock, it, "${name}_monochrome", "nodpi")
         }
 
         fun adaptive(includeMonochrome: Boolean) = AdaptiveIconXml().apply {
@@ -644,6 +669,60 @@ class IconPackBuilder(
         return icon
     }
 
+    /**
+     * For a bitmap this builder decoded or rendered itself: frees its native pixels as soon as it is
+     * encoded instead of at the next GC (the build's native peak was ~345 MB). Never use it for a
+     * bitmap a drawable hands out from its own state: stored icons, calendar days and resources
+     * return the bitmap the UI still draws, and recycling that one crashes the UI.
+     */
+    private fun createOwnedBitmapResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, qualifier: String = "", type: String = "drawable"): Entry =
+        try {
+            createBitmapResource(apkModule, packageBlock, bitmap, name, qualifier, type)
+        } finally {
+            bitmap.recycle()
+        }
+
+    /**
+     * A themed one-colour glyph is written as an alpha mask under [name] tinted with
+     * `@color/icon_color`, so it follows wallpaper and dark-mode changes like a vector glyph does.
+     * Any other bitmap keeps its own colours.
+     */
+    private fun createGlyphResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, themed: Boolean) {
+        if (themed && bitmap.isSingleColorGlyph()) createTintedMaskResource(apkModule, packageBlock, bitmap, name)
+        else createBitmapResource(apkModule, packageBlock, bitmap, name)
+    }
+
+    /** Writes [mask] under [name] as a bitmap the launcher tints with `@color/icon_color`. */
+    private fun createTintedMaskResource(
+        apkModule: ApkModule, packageBlock: PackageBlock, mask: Bitmap, name: String, tint: String = "@color/icon_color"
+    ) {
+        val maskName = "${name}_mask"
+        createBitmapResource(apkModule, packageBlock, mask, maskName)
+        createXmlDrawableResource(apkModule, packageBlock, TintedBitmapXml(maskName, tint), name)
+    }
+
+    private class ThemedColors(val foreground: String, val background: String)
+
+    /**
+     * The colour references of a themed icon. A Material You scheme of the app-icon variant gets
+     * its own pair, which from Android 12 points at that scheme's system colours so the icon
+     * follows the wallpaper; older versions keep the colours the scheme had at build time.
+     */
+    private fun themedColors(packageBlock: PackageBlock, scheme: Int?): ThemedColors {
+        val system = ThemedColors("@color/icon_color", "@color/icon_background_color")
+        if (scheme == null) return system
+        val ids = MATERIAL_YOU_SCHEME_COLOR_IDS.getOrNull(scheme) ?: return system
+        val (foreground, background) = ThemedGlyphColors.current(scheme)
+        val names = listOf("renkin_scheme${scheme}_fg" to (foreground to ids.first), "renkin_scheme${scheme}_bg" to (background to ids.second))
+        for ((name, color) in names) {
+            createColorResource(packageBlock, name, String.format("#%08X", color.first))
+            if (PackageVersion.is31OrMore()) {
+                createRefColor31Resource(packageBlock, name, "@android:color/" + ctx.resources.getResourceEntryName(color.second))
+            }
+        }
+        return ThemedColors("@color/" + names[0].first, "@color/" + names[1].first)
+    }
+
     private fun generateBitmap(image: Bitmap, name: String): InputSource {
         return if (PackageVersion.is30OrMore()) {
             generateLosslessWebp(image, name)
@@ -671,7 +750,7 @@ class IconPackBuilder(
     private fun compressBitmap(image: Bitmap, name: String, format: CompressFormat, quality: Int = 100): InputSource {
         val file = stageResDir.resolve(name.removePrefix("res/"))
         // compress reports a failed write only through its result; a truncated image must not be packed.
-        check(file.outputStream().buffered().use { image.compress(format, quality, it) }) { "Could not encode $name" }
+        if (!file.outputStream().buffered().use { image.compress(format, quality, it) }) throw IconEncodingException(name)
         return StagedFileInputSource(file, name)
     }
 
@@ -681,8 +760,8 @@ class IconPackBuilder(
         res.setValueAsRaw(coder.valueType, coder.value)
     }
 
-    private fun createRefColor31Resource(packageBlock: PackageBlock, name: String, reference: String) {
-        val res = packageBlock.getOrCreate("v31", "color", name)
+    private fun createRefColor31Resource(packageBlock: PackageBlock, name: String, reference: String, night: Boolean = false) {
+        val res = packageBlock.getOrCreate(if (night) "night-v31" else "v31", "color", name)
         val coder = ValueCoder.encodeReference(packageBlock, reference)
         res.setValueAsRaw(coder.valueType, coder.value)
     }
@@ -690,7 +769,7 @@ class IconPackBuilder(
     private fun buildDex(apkModule: ApkModule) {
         val dex = DexFile.createDefault()
         for (asset in PACK_SMALI_ASSETS) {
-            dex.fromSmali(SmaliReader(ctx.assets.toByteArray(asset)))
+            dex.getOrCreateFirst().fromSmali(SmaliReader(ctx.assets.toByteArray(asset)))
         }
         apkModule.add(ByteInputSource(getBytesFromDex(dex), "classes.dex"))
     }
@@ -699,7 +778,7 @@ class IconPackBuilder(
         dex.refresh()
         dex.version = apiToDexVersion(minSdkVersion)
         dex.clearEmptySections()
-        dex.sortSection(SectionType.getR8Order())
+        dex.forEach { it.sortSection(SectionType.getR8Order()) }
         dex.shrink()
         dex.refreshFull()
         val bytes = dex.bytes

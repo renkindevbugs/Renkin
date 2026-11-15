@@ -854,7 +854,7 @@ private fun OfflineSetCard(set: IconifyCollection, state: SetDownloadState?, vie
                     is SetDownloadState.Downloading -> {
                         Text(
                             text = stringResource(R.string.onlineSetDownloading, (state.progress * 100).toInt()),
-                            style = MaterialTheme.typography.titleSmallEmphasized
+                            style = MaterialTheme.typography.titleSmallEmphasized.copy(fontFeatureSettings = "tnum")
                         )
                         WavyProgressBar(state.progress, Modifier.fillMaxWidth().padding(top = 6.dp))
                     }
@@ -1151,8 +1151,9 @@ private fun rememberOnlineIconPreview(
     load: Boolean = true
 ): State<OnlinePreviewLoadState> {
     val loadRequested by rememberUpdatedState(load)
+    val revision = viewModel.previewRevision(icon.prefix)
     return produceState<OnlinePreviewLoadState>(
-        OnlinePreviewLoadState.Loading, icon, viewModel, tint, attempt, detail
+        OnlinePreviewLoadState.Loading, icon, viewModel, tint, attempt, detail, revision
     ) {
         value = OnlinePreviewLoadState.Loading
         val preview = try {

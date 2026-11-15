@@ -14,9 +14,12 @@ internal suspend fun WatchRepository.deleteRulesAndNotifications(context: Contex
     if (ruleIds.isEmpty()) return
     StorageOperationGate.run {
         val notifications = RenkinNotifications()
-        notifications.cancelIconAvailable(context, suggestionIdsForRules(ruleIds), cancelSummary = false)
+        val removedIds = suggestionIdsForRules(ruleIds)
+        val remaining = iconAvailableSummaryEntries(context, removedIds)
+        notifications.cancelIconAvailable(
+            context, removedIds, cancelSummary = remaining.isEmpty(), summaryEntries = remaining
+        )
         deleteRules(ruleIds)
-        if (suggestionCount() == 0) notifications.cancelIconAvailable(context, emptyList(), cancelSummary = true)
     }
 }
 

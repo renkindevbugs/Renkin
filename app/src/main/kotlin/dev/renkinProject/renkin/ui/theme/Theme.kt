@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.darkColorScheme
@@ -10,6 +11,10 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
+import dev.renkinProject.renkin.data.OledBlackKey
+import dev.renkinProject.renkin.data.dataStore
+import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.packages.PackageVersion
 
 private val LightColorScheme = lightColorScheme(
@@ -42,6 +47,13 @@ private val LightColorScheme = lightColorScheme(
     surfaceTint = md_theme_light_surfaceTint,
     outlineVariant = md_theme_light_outlineVariant,
     scrim = md_theme_light_scrim,
+    surfaceDim = md_theme_light_surfaceDim,
+    surfaceBright = md_theme_light_surfaceBright,
+    surfaceContainerLowest = md_theme_light_surfaceContainerLowest,
+    surfaceContainerLow = md_theme_light_surfaceContainerLow,
+    surfaceContainer = md_theme_light_surfaceContainer,
+    surfaceContainerHigh = md_theme_light_surfaceContainerHigh,
+    surfaceContainerHighest = md_theme_light_surfaceContainerHighest,
 )
 
 
@@ -75,6 +87,13 @@ private val DarkColorScheme = darkColorScheme(
     surfaceTint = md_theme_dark_surfaceTint,
     outlineVariant = md_theme_dark_outlineVariant,
     scrim = md_theme_dark_scrim,
+    surfaceDim = md_theme_dark_surfaceDim,
+    surfaceBright = md_theme_dark_surfaceBright,
+    surfaceContainerLowest = md_theme_dark_surfaceContainerLowest,
+    surfaceContainerLow = md_theme_dark_surfaceContainerLow,
+    surfaceContainer = md_theme_dark_surfaceContainer,
+    surfaceContainerHigh = md_theme_dark_surfaceContainerHigh,
+    surfaceContainerHighest = md_theme_dark_surfaceContainerHighest,
 )
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -85,6 +104,23 @@ fun RenkinTheme(
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
+    val pureBlack = LocalContext.current.applicationContext.dataStore.getBooleanValue(OledBlackKey)
+    val colorScheme = renkinColorScheme(darkTheme, dynamicColor, pureBlack)
+
+    MaterialExpressiveTheme(
+        colorScheme = colorScheme,
+        motionScheme = MotionScheme.expressive(),
+        typography = Typography,
+        content = content
+    )
+}
+
+@Composable
+internal fun renkinColorScheme(
+    darkTheme: Boolean,
+    dynamicColor: Boolean = true,
+    pureBlack: Boolean = false
+): ColorScheme {
     val colorScheme = when {
         dynamicColor && PackageVersion.is31OrMore() -> {
             val context = LocalContext.current
@@ -95,10 +131,10 @@ fun RenkinTheme(
         else -> LightColorScheme
     }
 
-    MaterialExpressiveTheme(
-        colorScheme = colorScheme,
-        motionScheme = MotionScheme.expressive(),
-        typography = Typography,
-        content = content
-    )
+    return if (darkTheme && pureBlack) colorScheme.copy(
+        background = Color.Black,
+        surface = Color.Black,
+        surfaceDim = Color.Black,
+        surfaceContainerLowest = Color.Black
+    ) else colorScheme
 }

@@ -20,6 +20,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.data.watch.WatchLastCheckResultKey
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.extension.toNullableColor
 import dev.renkinProject.renkin.icon.creator.DEFAULT_SHAPE_CORNER_PERCENT
@@ -99,15 +100,37 @@ val TEXT_TYPE_DEFAULT = TextType.FULL_NAME
 val FALLBACK_SOURCE_DEFAULT = FallbackSource.NONE
 
 val DarkModeKey = intPreferencesKey(DARK_MODE_NAME)
+/** App-wide: use a black canvas whenever the selected theme resolves to dark mode. */
+val OledBlackKey = booleanPreferencesKey("OLED_BLACK")
 val InstallMethodKey = intPreferencesKey(INSTALL_METHOD_NAME)
 val ExternalInstallerComponentKey = stringPreferencesKey(EXTERNAL_INSTALLER_COMPONENT_NAME)
 val AskInstallerEveryTimeKey = booleanPreferencesKey(ASK_INSTALLER_EVERY_TIME_NAME)
 /** App-wide, not per profile: offer other profiles' generated packs as icon sources (issue #25). */
 val ShowRenkinPacksKey = booleanPreferencesKey(SHOW_RENKIN_PACKS_NAME)
+/** Legacy app-wide switch: still the fallback for every [MotionPart] the user has not set on its own. */
+val ReduceIconMotionKey = booleanPreferencesKey("REDUCE_ICON_MOTION")
+
+/** Decorative animations the user can reduce one by one; loading feedback is never part of them. */
+enum class MotionPart(val key: Preferences.Key<Boolean>) {
+    ICON_FLIGHT(booleanPreferencesKey("REDUCE_MOTION_ICON_FLIGHT")),
+    EDITOR_TABS(booleanPreferencesKey("REDUCE_MOTION_EDITOR_TABS")),
+    BUILD(booleanPreferencesKey("REDUCE_MOTION_BUILD")),
+    ATTENTION(booleanPreferencesKey("REDUCE_MOTION_ATTENTION"))
+}
+
+fun Preferences.reducesMotion(part: MotionPart): Boolean =
+    this[part.key] ?: this[ReduceIconMotionKey] ?: false
+
+fun Preferences.reducedMotionParts(): Set<MotionPart> =
+    MotionPart.entries.filterTo(mutableSetOf()) { reducesMotion(it) }
 val InstallerChoiceConfirmedKey = booleanPreferencesKey(INSTALLER_CHOICE_CONFIRMED_NAME)
 val IncludeVectorKey = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
 val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
 val ExportThemedKey = booleanPreferencesKey(EXPORT_THEMED_NAME)
+// Refresh gives icons from a Material You pack (Lawnicons) live wallpaper colours. On by default.
+val MaterialYouPackLiveColorsKey = booleanPreferencesKey("MATERIAL_YOU_PACK_LIVE_COLORS")
+// The same for the Secondary source, chosen separately in the hero sheet.
+val SecondaryMaterialYouPackLiveColorsKey = booleanPreferencesKey("SECONDARY_MATERIAL_YOU_PACK_LIVE_COLORS")
 val IconColorKey = stringPreferencesKey(ICON_COLOR_NAME)
 val BackgroundColorKey = stringPreferencesKey(BACKGROUND_COLOR_NAME)
 // The pack-wide background can carry a gradient of its own, described like the colourizer's.
@@ -257,6 +280,7 @@ fun MutablePreferences.setGlobalShapeCornerPercent(percent: Int) {
 val AppSortOrderKey = intPreferencesKey(APP_SORT_ORDER_NAME)
 val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
 val WatchCheckIntervalKey = intPreferencesKey(WATCH_CHECK_INTERVAL_NAME)
+val WatchAutomaticChecksKey = booleanPreferencesKey("WATCH_AUTOMATIC_CHECKS")
 val LastWatchCheckAtKey = longPreferencesKey(LAST_WATCH_CHECK_AT_NAME)
 val AutoBackupIntervalKey = intPreferencesKey(AUTO_BACKUP_INTERVAL_NAME)
 val AutoBackupTreeUriKey = stringPreferencesKey(AUTO_BACKUP_TREE_URI_NAME)
@@ -264,6 +288,8 @@ val LastAutoBackupAtKey = longPreferencesKey(LAST_AUTO_BACKUP_AT_NAME)
 // Content digest of the newest automatic backup, so an unchanged period writes nothing.
 val LastAutoBackupDigestKey = stringPreferencesKey("LAST_AUTO_BACKUP_DIGEST")
 val LastAutoBackupDocumentUriKey = stringPreferencesKey("LAST_AUTO_BACKUP_DOCUMENT_URI")
+// When the newest automatic backup attempt failed; removed by the next successful one.
+val LastAutoBackupFailedAtKey = longPreferencesKey("LAST_AUTO_BACKUP_FAILED_AT")
 
 // Which profile's icons/preferences are active. Profiles snapshot/restore the keys below.
 val ActiveProfileIdKey = longPreferencesKey("ACTIVE_PROFILE_ID")
@@ -279,12 +305,15 @@ val LastSeenWhatsNewVersionKey = intPreferencesKey("LAST_SEEN_WHATS_NEW_VERSION"
 // installed on the other device). App-level: it's about the user's understanding, not a profile.
 val HideProfileShareWarningKey = booleanPreferencesKey("HIDE_PROFILE_SHARE_WARNING")
 
+// The Global style beta notice is shown once. App-level, like the share warning.
+val GlobalBetaNoticeSeenKey = booleanPreferencesKey("GLOBAL_BETA_NOTICE_SEEN")
+
 /**
  * Profile fields represented by the typed style and its [Profile.prefsSnapshot]/UI projections.
  * App-level settings (dark mode, watch interval, sort/filter) intentionally stay global.
  */
 private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
-    IncludeVectorKey, MonochromeKey, ExportThemedKey, CalendarIconsKey, OverrideIconKey,
+    IncludeVectorKey, MonochromeKey, ExportThemedKey, MaterialYouPackLiveColorsKey, SecondaryMaterialYouPackLiveColorsKey, CalendarIconsKey, OverrideIconKey,
     OutlineAddKey, GlobalShapeCropKey, GlobalColorizeKey, GlobalColorizeFlatKey,
     GlobalColorizeLightenKey,
     GlobalColorizeMonochromeKey, GlobalColorizeInverseKey,
@@ -339,18 +368,19 @@ private val legacyProfilePreferences = LegacyProfilePreferences(
 private val persistedPreferenceTypes: Map<String, (Any) -> Boolean> = buildMap {
     for (key in ProfileBooleanPrefKeys + listOf(
         AskInstallerEveryTimeKey, InstallerChoiceConfirmedKey, AppFilterNoIconKey,
-        OnboardingSeenKey, HideProfileShareWarningKey, ShowRenkinPacksKey
-    )) put(key.name) { it is Boolean }
+        OnboardingSeenKey, HideProfileShareWarningKey, GlobalBetaNoticeSeenKey, ShowRenkinPacksKey, ReduceIconMotionKey, OledBlackKey, WatchAutomaticChecksKey
+    ) + MotionPart.entries.map { it.key }) put(key.name) { it is Boolean }
     for (key in ProfileIntPrefKeys + listOf(
         DarkModeKey, InstallMethodKey, AppSortOrderKey, WatchCheckIntervalKey,
         AutoBackupIntervalKey, LastSeenWhatsNewVersionKey
     )) put(key.name) { it is Int }
     for (key in ProfileStringPrefKeys + listOf(
-        ExternalInstallerComponentKey, AutoBackupTreeUriKey, LastAutoBackupDigestKey, LastAutoBackupDocumentUriKey
+        ExternalInstallerComponentKey, AutoBackupTreeUriKey, LastAutoBackupDigestKey, LastAutoBackupDocumentUriKey,
+        WatchLastCheckResultKey
     )) {
         put(key.name) { it is String }
     }
-    for (key in listOf(ActiveProfileIdKey, LastWatchCheckAtKey, LastAutoBackupAtKey)) put(key.name) { it is Long }
+    for (key in listOf(ActiveProfileIdKey, LastWatchCheckAtKey, LastAutoBackupAtKey, LastAutoBackupFailedAtKey)) put(key.name) { it is Long }
 }
 
 internal fun isValidPersistedPreference(name: String, value: Any): Boolean =
@@ -504,6 +534,9 @@ internal fun MutablePreferences.replaceProfilePrefs(snapshot: String) {
 fun DataStore<Preferences>.getPreferencesValue(): Preferences {
     return remember(this) { observePreferences() }.collectAsStateWithLifecycle(initialValue = emptyPreferences()).value
 }
+
+@Composable
+fun DataStore<Preferences>.reducesMotion(part: MotionPart): Boolean = getPreferencesValue().reducesMotion(part)
 
 @Composable
 fun DataStore<Preferences>.getDefaultIconColor(): Color {
@@ -923,16 +956,18 @@ fun getSourceLabels(): Map<Source, String> {
 }
 
 @Composable
-fun getImageEditLabels(includeSegments: Boolean = false): Map<ImageEdit, String> {
+fun getImageEditLabels(includeSegments: Boolean = false, includeThemed: Boolean = false): Map<ImageEdit, String> {
     val base = mapOf(ImageEdit.NONE to stringResource(id = R.string.none)
         , ImageEdit.PATH to stringResource(id = R.string.pathDetection)
         , ImageEdit.EDGE to stringResource(id = R.string.edgeDetection)
         , ImageEdit.COLORIZE to stringResource(id = R.string.colorize)
         , ImageEdit.REMOVE_BACKGROUND to stringResource(id = R.string.removeBackground))
     // Segments are picked on one icon's own artwork, so only the edit dialog offers them.
-    return if (includeSegments) {
+    val withSegments = if (includeSegments) {
         base + (ImageEdit.COLORIZE_SEGMENTS to stringResource(id = R.string.colorizeSegments))
     } else base
+    // Pack-wide refresh has its own Themed export switch, so only per-icon hosts offer it.
+    return if (includeThemed) withSegments + (ImageEdit.THEMED to stringResource(id = R.string.themedEdit)) else withSegments
 }
 
 @Composable
@@ -990,7 +1025,9 @@ enum class FallbackSource {
 enum class ImageEdit {
     // New entries go at the END: ordinals are persisted by index. COLORIZE_SEGMENTS is the
     // per-app "colourize only these regions" modifier, so the pack-wide dropdowns skip it.
-    NONE, PATH, EDGE, COLORIZE, REMOVE_BACKGROUND, COLORIZE_SEGMENTS
+    NONE, PATH, EDGE, COLORIZE, REMOVE_BACKGROUND, COLORIZE_SEGMENTS,
+    // Per-icon (editor and Global style) only: the pack-wide Themed export already covers refresh.
+    THEMED
 }
 
 enum class TextType {

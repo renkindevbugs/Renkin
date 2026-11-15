@@ -1,8 +1,6 @@
 package dev.renkinProject.renkin.icon.creator
 
 import androidx.compose.ui.graphics.ImageBitmap
-import dev.renkinProject.renkin.drawable.IconPackDrawable
-import dev.renkinProject.renkin.drawable.ResourceDrawable
 
 /** Sort order for the icon-pack browser's icon lists. */
 enum class IconSortOrder { NAME_ASC, NAME_DESC }
@@ -14,22 +12,11 @@ const val PACK_ROW_LIMIT = 30
 // and eagerly generated previews for all of them would run out of memory.
 const val PACK_DETAIL_LIMIT = 400
 
-/**
- * A pack icon ready to show: the source [resource] (passed back on tap), the built
- * [drawable], and a [preview] bitmap rasterised once on a background thread. Rendering this
- * bitmap is far cheaper per frame than rebuilding a vector painter for every grid item.
- */
-data class PackIconPreview(
-    val resource: ResourceDrawable,
-    val drawable: IconPackDrawable,
-    val preview: ImageBitmap,
-    /** Raw drawable name in the pack (e.g. `"google_cal_14"`). Empty when unknown. */
-    val drawableName: String = ""
+data class PackSearchResult(
+    val names: List<String> = emptyList(),
+    val complete: Boolean = false,
+    val failed: Boolean = false,
+    val identity: String = ""
 )
 
-/**
- * A generated icon-pack browser row ready to display: its preview icons plus how many further
- * icons didn't fit the row (the "+N" chip). Cached in the view model so a row that scrolls
- * off-screen (and is discarded from composition) doesn't regenerate its bitmaps on the way back.
- */
-data class PackRowPreviews(val previews: List<PackIconPreview>, val moreCount: Int)
+data class PackThumbnail(val resourceId: Int, val preview: ImageBitmap)

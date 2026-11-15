@@ -91,7 +91,7 @@ class InsetIconDrawable(val drawable: Drawable, val dimensions: Rect, val fracti
 
         if (drawable is ImageVectorDrawable) {
             file.startVector()
-            drawable.toImageVector().toXmlFile(file)
+            drawable.toImageVector().toXmlFile(file, scalingStrokes = drawable.scaleStrokesWithBounds)
             file.endVector()
         }
         if (drawable is BitmapIconDrawable) {

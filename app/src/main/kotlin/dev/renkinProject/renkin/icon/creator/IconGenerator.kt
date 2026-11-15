@@ -24,6 +24,7 @@ import android.util.LruCache
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -40,6 +41,7 @@ import dev.renkinProject.renkin.drawable.ForegroundIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
+import dev.renkinProject.renkin.drawable.ThemedGlyphDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.foregroundVectorOrNull
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
@@ -49,6 +51,7 @@ import dev.renkinProject.renkin.drawable.isAdaptiveIconDrawable
 import dev.renkinProject.renkin.drawable.newAdaptiveIconDrawable
 import dev.renkinProject.renkin.drawable.shrinkIfBiggerThan
 import dev.renkinProject.renkin.extension.newArgbBitmap
+import dev.renkinProject.renkin.extension.contentBounds
 import dev.renkinProject.renkin.extension.scaleFromCenter
 import dev.renkinProject.renkin.icon.parser.IconParser
 import dev.renkinProject.renkin.packages.IconPackCatalog
@@ -57,6 +60,8 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.drawable.toImageVectorDrawable
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.packages.PackageVersion
+import dev.renkinProject.renkin.packages.supportDynamicColors
+import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.vector.PathConverter.Companion.toNodes
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyAndRemoveGroup
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.editStrokePaths
@@ -170,7 +175,7 @@ class IconGenerator(
                 val primary = generateIcon(
                     app,
                     source.primarySource,
-                    modifiers.effect.imageEdit,
+                    refreshImageEdit(source.primarySource, modifiers.effect.imageEdit, primaryIconPackApplications, export.livePrimaryMaterialYouPack),
                     source.primaryTextType,
                     primaryIconPackApplications
                 )
@@ -184,7 +189,7 @@ class IconGenerator(
                     val secondary = generateIcon(
                         app,
                         source.secondarySource,
-                        source.secondaryImageEdit,
+                        refreshImageEdit(source.secondarySource, source.secondaryImageEdit, secondaryIconPackApplications, export.liveSecondaryMaterialYouPack),
                         source.secondaryTextType,
                         secondaryIconPackApplications
                     )
@@ -207,6 +212,16 @@ class IconGenerator(
             }
         }
     }
+
+    /**
+     * Refresh gives a Material You pack's icons live wallpaper colours when its source's switch in
+     * the hero sheet is on ([live]): the same Themed modifier the editor offers per icon. Any effect
+     * the user chose wins, and the pack-wide Themed export already keeps such icons live on its own.
+     */
+    private fun refreshImageEdit(source: Source, imageEdit: ImageEdit, pack: IconPackContainer, live: Boolean): ImageEdit =
+        if (live && source == Source.ICON_PACK && imageEdit == ImageEdit.NONE &&
+            !export.themed && packChangesWithMaterialYouColors(pack.iconPackName)
+        ) ImageEdit.THEMED else imageEdit
 
     private fun sourcePackNameFor(app: PackageInfoStruct, source: Source, iconPack: IconPackContainer): String = when {
         source == Source.ICON_PACK -> iconPack.iconPackName
@@ -291,7 +306,7 @@ class IconGenerator(
                 else -> it
             }
         }
-        val bitmapIcon = getIconBitmap(icon.drawable) ?: return null
+        val bitmapIcon = getIconBitmap(icon.drawable.copyForRendering()) ?: return null
         val changesWithMaterialYou = packChangesWithMaterialYouColors(iconPackName)
         val parsedIcon = exportIconPackXML(iconPackName, icon).let {
             if (changesWithMaterialYou) styleMaterialYouPackIcon(it) else it
@@ -307,6 +322,62 @@ class IconGenerator(
                 parsedIcon,
                 preserveAdaptiveAppearance = changesWithMaterialYou
             )
+    }
+
+    fun packBrowserBitmap(iconPackName: String, icon: ResourceDrawable, size: Int): Bitmap? {
+        require(size > 0)
+        val effect = modifiers.effect.imageEdit
+        if (!export.themed && !modifiers.materialYouPack.hasRestyling &&
+            effect != ImageEdit.COLORIZE && effect != ImageEdit.COLORIZE_SEGMENTS &&
+            icon.drawable.isAdaptiveIconDrawable()
+        ) {
+            val preview = try {
+                icon.drawable.copyForRendering().renderBrowserBitmap(size)
+                    .takeIf { it.contentBounds() != null }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
+            if (preview != null) return preview
+        }
+
+        return try {
+            val generated = colorizeFromIconPack(iconPackName, icon) ?: return null
+            val rendered = generated.toBrowserPreviewBitmap(size)
+            if (rendered.contentBounds() != null) rendered
+            else browserPlatformPreview(icon.drawable.copyForRendering(), size) ?: rendered
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun Drawable.renderBrowserBitmap(size: Int, foregroundOnly: Boolean = false): Bitmap {
+        val previousBounds = Rect(bounds)
+        return try {
+            newArgbBitmap(size, size) { canvas ->
+                val overdraw = if (foregroundOnly) (size * (ADAPTIVE_ICON_SCALE - 1f) / 2f).toInt() else 0
+                setBounds(-overdraw, -overdraw, size + overdraw, size + overdraw)
+                draw(canvas)
+            }
+        } finally {
+            bounds = previousBounds
+        }
+    }
+
+    private fun browserPlatformPreview(drawable: Drawable, size: Int): Bitmap? {
+        val rendered = if (drawable.isAdaptiveIconDrawable()) {
+            (drawable as AdaptiveIconDrawable).foreground
+                ?.renderBrowserBitmap(256, foregroundOnly = true)
+                ?.takeIf { it.contentBounds() != null }
+                ?: drawable.renderBrowserBitmap(256).takeIf { it.contentBounds() != null }
+        } else {
+            drawable.renderBrowserBitmap(256).takeIf { it.contentBounds() != null }
+        } ?: return null
+        if (size >= rendered.width) return rendered
+        return Bitmap.createScaledBitmap(rendered, size, size, true)
     }
 
     private fun generateIcon(
@@ -342,7 +413,9 @@ class IconGenerator(
                 modifiers.materialYouPack.isReplayableOn(adaptiveLayers = true))
         }
 
-        val bitmapIcon = getIconBitmap(resIcon.drawable) ?: return null
+        // A mutated copy: drawables loaded from the pack share one native vector tree, and editor
+        // previews render concurrently. Drawing the shared one from two threads crashed natively.
+        val bitmapIcon = getIconBitmap(resIcon.drawable.copyForRendering()) ?: return null
         val changesWithMaterialYou = packChangesWithMaterialYouColors(iconPack.iconPackName)
         val parsedIcon = exportIconPackXML(iconPack.iconPackName, resIcon).let {
             if (changesWithMaterialYou) styleMaterialYouPackIcon(it) else it
@@ -463,10 +536,29 @@ class IconGenerator(
         mono.setTintList(null)
         mono.setBounds(0, 0, size, size)
         val mask = newArgbBitmap(size, size) { mono.draw(it) }
+        liveMaterialYouScheme()?.let { return ThemedGlyphDrawable(mask, it) }
 
         // Opaque results stay adaptive so the launcher applies its mask. A translucent background
         // takes the flat path below because an adaptive export would insert the pack background.
         return materialYouDrawable(recolorMaterialYouLayer(mask))
+    }
+
+    /**
+     * The Material You scheme the variant is painted in, when it is one of the wallpaper schemes.
+     * Such an icon stays live: the pack references that scheme's system colours, so it follows
+     * later wallpaper changes. Custom colours and gradients are the user's own and stay as painted.
+     */
+    private fun liveMaterialYouScheme(): Int? {
+        if (!supportDynamicColors()) return null
+        if (export.foregroundStyle?.mode == ColorizerMode.GRADIENT ||
+            export.background.style?.mode == ColorizerMode.GRADIENT) return null
+        val foreground = modifiers.effect.colorizer.firstColor
+        val background = export.background.color
+        return materialYouSchemes(ctx)
+            .indexOfFirst { (schemeForeground, schemeBackground) ->
+                schemeForeground.toArgb() == foreground && schemeBackground.toArgb() == background
+            }
+            .takeIf { it >= 0 }
     }
 
     /**
@@ -489,7 +581,7 @@ class IconGenerator(
      * The artwork's plate (its outer tone, or transparency) becomes the selected background and
      * the contrasting tone the foreground; see [materialYouForegroundCoverage].
      */
-    private fun generateMaterialYouFromOriginal(icon: Bitmap): BitmapIconDrawable {
+    private fun generateMaterialYouFromOriginal(icon: Bitmap): IconPackDrawable {
         val pixels = IntArray(icon.width * icon.height)
         icon.getPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
 
@@ -507,6 +599,17 @@ class IconGenerator(
 
         val foreground = Bitmap.createBitmap(icon.width, icon.height, Bitmap.Config.ARGB_8888)
         foreground.setPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
+
+        liveMaterialYouScheme()?.let { scheme ->
+            // The same 72dp-in-108dp placement as below, as a glyph the launcher tints.
+            val glyph = newArgbBitmap(icon.width, icon.height) { canvas ->
+                val insetScale = 1f / adaptiveIconScale
+                canvas.scale(insetScale, insetScale, icon.width / 2f, icon.height / 2f)
+                canvas.drawBitmap(foreground, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
+            }
+            foreground.recycle()
+            return ThemedGlyphDrawable(glyph, scheme)
+        }
 
         // Adaptive launchers display only the inner 72dp of a 108dp foreground. Inset the complete
         // original icon by that ratio before export; previewScale reverses the inset in the flat
@@ -581,7 +684,8 @@ class IconGenerator(
         }
 
         if (imageEdit == ImageEdit.NONE) return IconSourceStage(
-            getDefaultIcon(bitmapIcon, parsedIcon), ModifierInputPipeline.IMAGE_EDIT, imageEdit, retainable
+            getDefaultIcon(bitmapIcon, parsedIcon, preserveAdaptiveAppearance),
+            ModifierInputPipeline.IMAGE_EDIT, imageEdit, retainable
         )
 
         // Generic modifiers run on ONE canonical frame — the pixels ImageEdit.NONE would show —
@@ -737,6 +841,12 @@ class IconGenerator(
                 if (preserveAdaptiveAppearance && !export.themed) {
                     renderAdaptivePackIcon(parsedIcon)?.let { return it }
                 }
+                // A Material You pack is already a themed icon: keep its own inset and vector
+                // instead of Renkin's themed inset, which shrank it (Lawnicons) and turned it into
+                // a bitmap whose colour could no longer follow the wallpaper.
+                if (preserveAdaptiveAppearance && export.themed) {
+                    themedPackForeground(parsedIcon)?.let { return it }
+                }
                 // The bitmap path already unwraps and normalises the adaptive foreground. In
                 // themed mode, feeding the pack-authored foreground inset back into the standard
                 // themed inset applied it twice and made the comparison preview microscopic.
@@ -751,6 +861,30 @@ class IconGenerator(
             else -> getDefaultBitmapIcon(bitmapIcon)
         }
     }
+
+    /**
+     * The pack's vector foreground in its own adaptive inset, drawn in the themed glyph colour.
+     * The export replaces that colour with `@color/icon_color`; this one is what Renkin previews.
+     */
+    private fun themedPackForeground(icon: AdaptiveIconDrawable): IconPackDrawable? {
+        val foreground = icon.foreground
+        val vector = when (foreground) {
+            is InsetIconDrawable -> foreground.drawable as? ImageVectorDrawable
+            is ImageVectorDrawable -> foreground
+            else -> null
+        } ?: return null
+        // Themed parsing keeps strokes at a fixed pixel width (Renkin's own themed stroke). The
+        // pack's strokes are part of its design and must shrink with the icon, as on the launcher.
+        val glyph = ImageVectorDrawable(vector.toImageVector(), scaleStrokesWithBounds = true).also {
+            it.root.setReferenceColorPaths(SolidColor(Color(themedGlyphColor())))
+            it.tintColor = Color.Unspecified
+        }
+        return if (foreground is InsetIconDrawable) foreground.newDrawable(glyph) else glyph
+    }
+
+    private fun themedGlyphColor(): Int =
+        if (supportDynamicColors()) ctx.resources.getColor(R.color.icon_color, null)
+        else modifiers.effect.colorizer.firstColor
 
     private fun getDefaultBitmapIcon(bitmap: Bitmap): IconPackDrawable {
         return if (export.themed) {

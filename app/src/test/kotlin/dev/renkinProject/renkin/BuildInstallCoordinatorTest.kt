@@ -41,6 +41,7 @@ import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -288,5 +289,121 @@ class BuildInstallCoordinatorTest {
         preferences = application.dataStore.getPreferencesAfterPendingWrites()
         assertEquals(system, preferences.installerSelection())
         assertTrue(preferences.getBooleanValue(InstallerChoiceConfirmedKey))
+    }
+
+    @Test
+    fun readyBuildRetainsItsApkWhenUiDetachesAndForegroundServiceStops() = runBlocking {
+        val owner = SupervisorJob(coroutineContext[Job])
+        val coordinator = coordinator(CoroutineScope(coroutineContext + owner))
+        val request = pendingRequest()
+        val apk = java.io.File(requireNotNull(request.pack.uri.path))
+        val ready = BuildInstallState.Ready(request, InstallerChoiceReason.FIRST_CHOICE)
+        coordinator.restorePendingState(ready)
+        try {
+            assertTrue(apk.parentFile!!.setLastModified(System.currentTimeMillis() - 25L * 60 * 60 * 1000))
+            coordinator.detach()
+            coordinator.cancelForegroundWork()
+            artifacts.create()
+
+            assertSame(ready, coordinator.state)
+            assertTrue(coordinator.busy)
+            assertFalse(coordinator.hasRunningWork)
+            assertEquals(request.pack.profileId, coordinator.pendingProfileId)
+            assertTrue("A ready APK must remain pinned while no screen owns it", apk.isFile)
+            assertTrue(notifications.isEmpty())
+
+            coordinator.close()
+            owner.awaitChildren()
+            artifacts.create()
+            assertFalse("Closing the actual session must release its retained APK", apk.exists())
+        } finally { coordinator.close(); owner.cancelAndJoin() }
+    }
+
+    @Test
+    fun readyInstallerChoiceIsHandedOffOnceAndDismissedOnce() = runBlocking {
+        val owner = SupervisorJob(coroutineContext[Job])
+        var synchronized = 0
+        val coordinator = coordinator(CoroutineScope(coroutineContext + owner)) { synchronized++ }
+        val request = pendingRequest()
+        val ready = BuildInstallState.Ready(request, InstallerChoiceReason.FIRST_CHOICE)
+        coordinator.restorePendingState(ready)
+        try {
+            coordinator.dismissInstallerSelection()
+            coordinator.dismissInstallFallback()
+            coordinator.build(provider.sessionToken)
+            assertSame(ready, coordinator.state)
+
+            coordinator.installReadyPack()
+            val choosing = coordinator.state
+            coordinator.installReadyPack()
+            assertEquals(BuildInstallState.ChoosingInstaller(request, InstallerChoiceReason.FIRST_CHOICE), choosing)
+            assertSame("Repeated Ready taps must not start an installer", choosing, coordinator.state)
+            assertFalse(coordinator.hasRunningWork)
+
+            coordinator.dismissInstallerSelection()
+            coordinator.dismissInstallerSelection()
+            owner.awaitChildren()
+            assertEquals(1, synchronized)
+            assertEquals(BuildInstallState.Idle, coordinator.state)
+            assertTrue(java.io.File(requireNotNull(request.pack.uri.path)).parentFile!!.resolve(".finished").isFile)
+            assertTrue(notifications.isEmpty())
+        } finally { coordinator.close(); owner.cancelAndJoin() }
+    }
+
+    @Test
+    fun readyDirectInstallClaimsOneJobBeforeAnotherTapCanRun() = runBlocking {
+        val owner = SupervisorJob(coroutineContext[Job])
+        val coordinator = coordinator(CoroutineScope(coroutineContext + owner))
+        val request = pendingRequest()
+        val apk = java.io.File(requireNotNull(request.pack.uri.path))
+        coordinator.restorePendingState(BuildInstallState.Ready(request, reason = null))
+        try {
+            assertTrue(apk.parentFile!!.setLastModified(System.currentTimeMillis() - 25L * 60 * 60 * 1000))
+            coordinator.installReadyPack()
+            val installing = coordinator.state
+            coordinator.installReadyPack()
+            assertEquals(BuildInstallState.Installing(request), installing)
+            assertSame(installing, coordinator.state)
+            assertEquals(1, owner.children.count())
+            assertTrue(coordinator.busy)
+            assertTrue(coordinator.hasRunningWork)
+            artifacts.create()
+            assertTrue(apk.isFile)
+
+            coordinator.close()
+            owner.awaitChildren()
+            artifacts.create()
+            assertFalse("A cancelled installation must release its artifact reservation", apk.exists())
+            assertTrue(notifications.isEmpty())
+        } finally { coordinator.close(); owner.cancelAndJoin() }
+    }
+
+    @Test
+    fun foregroundCancellationKeepsInterruptedReportAfterBlockedBuildUnwinds() = runBlocking {
+        val release = CompletableDeferred<Unit>()
+        val blocker = launch(start = CoroutineStart.UNDISPATCHED) {
+            StorageOperationGate.run { release.await() }
+        }
+        val owner = SupervisorJob(coroutineContext[Job])
+        val coordinator = coordinator(CoroutineScope(coroutineContext + owner))
+        try {
+            coordinator.build(provider.sessionToken)
+            yield()
+            assertTrue(coordinator.state is BuildInstallState.Building)
+            coordinator.cancelForegroundWork()
+            val interrupted = coordinator.state as BuildInstallState.Failed
+            assertEquals(R.string.buildInterrupted, interrupted.message)
+            assertFalse(coordinator.busy)
+            owner.awaitChildren()
+            release.complete(Unit)
+            blocker.join()
+            assertSame("Cancelled work must not overwrite its interruption report", interrupted, coordinator.state)
+            assertTrue(notifications.isEmpty())
+        } finally {
+            release.complete(Unit)
+            blocker.join()
+            coordinator.close()
+            owner.cancelAndJoin()
+        }
     }
 }

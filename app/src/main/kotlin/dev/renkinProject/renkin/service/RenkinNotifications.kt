@@ -39,7 +39,8 @@ class RenkinNotifications {
         suggestionId: Long,
         appPackage: String,
         packPackages: List<String>,
-        profileName: String
+        profileName: String,
+        summaryEntries: List<IconAvailableSummaryEntry>? = null
     ) {
         createIconAvailableChannel(context)
         val pm = context.packageManager
@@ -85,18 +86,11 @@ class RenkinNotifications {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .setGroup(iconAvailableGroupKey)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setOnlyAlertOnce(true)
         if (largeIcon != null) builder.setLargeIcon(largeIcon)
 
-        // The summary the system shows when several of these are collapsed together
-        val summary = NotificationCompat.Builder(context, iconAvailableChannelId)
-            .setSmallIcon(R.mipmap.ic_launcher_monochrome)
-            .setContentTitle(context.getString(R.string.iconAvailableSummaryTitle))
-            .setContentText(context.getString(R.string.iconAvailableSummaryText))
-            .setStyle(NotificationCompat.InboxStyle())
-            .setGroup(iconAvailableGroupKey)
-            .setGroupSummary(true)
-            .setAutoCancel(true)
-            .build()
+        val summary = buildSummary(context, summaryEntries ?: listOf(IconAvailableSummaryEntry(appName, profileName)))
 
         with(NotificationManagerCompat.from(context)) {
             if (!canPostNotifications(context)) return
@@ -117,12 +111,51 @@ class RenkinNotifications {
     fun cancelIconAvailable(
         context: Context,
         suggestionIds: Collection<Long>,
-        cancelSummary: Boolean
+        cancelSummary: Boolean,
+        summaryEntries: List<IconAvailableSummaryEntry>? = null
     ) {
         with(NotificationManagerCompat.from(context)) {
             suggestionIds.forEach { cancel(iconAvailableId(it)) }
-            if (cancelSummary) cancel(iconAvailableSummaryId)
+            if (cancelSummary || summaryEntries?.isEmpty() == true) {
+                cancel(iconAvailableSummaryId)
+            } else if (summaryEntries != null && canPostNotifications(context)) {
+                try {
+                    notify(iconAvailableSummaryId, buildSummary(context, summaryEntries))
+                } catch (_: SecurityException) {
+                    // Notification permission can change while the summary is being rebuilt.
+                }
+            }
         }
+    }
+
+    private fun buildSummary(context: Context, entries: List<IconAvailableSummaryEntry>): android.app.Notification {
+        val summaryText = context.resources.getQuantityString(
+            R.plurals.watchNotificationAvailableCount, entries.size, entries.size
+        )
+        val style = NotificationCompat.InboxStyle().setSummaryText(summaryText)
+        entries.take(7).forEach { entry ->
+            style.addLine(context.getString(R.string.watchNotificationSummaryLine, entry.appName, entry.profileName))
+        }
+        val intent = Intent(context, MainActivity::class.java).apply {
+            action = MainActivity.ACTION_OPEN_WATCH
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context, iconAvailableSummaryId, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        return NotificationCompat.Builder(context, iconAvailableChannelId)
+            .setSmallIcon(R.mipmap.ic_launcher_monochrome)
+            .setContentTitle(summaryText)
+            .setContentText(entries.take(3).joinToString(" · ") { it.appName })
+            .setContentIntent(pendingIntent)
+            .setStyle(style)
+            .setGroup(iconAvailableGroupKey)
+            .setGroupSummary(true)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(true)
+            .build()
     }
 
     private fun iconAvailableId(suggestionId: Long): Int = iconAvailableBaseId + suggestionId.toInt()

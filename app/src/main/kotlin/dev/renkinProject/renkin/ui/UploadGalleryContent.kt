@@ -36,7 +36,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -348,7 +348,7 @@ internal fun UploadLoadingOverlay() {
                 modifier = Modifier.padding(horizontal = 32.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                LoadingIndicator(color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(16.dp))
                 Text(
                     text = stringResource(R.string.addingImages),

@@ -18,7 +18,8 @@ internal data class EditorApplicationIcon(
     val hero: Bitmap?,
     val background: AppBackgroundColor?,
     val adaptive: Boolean,
-    val monochrome: Boolean
+    val monochrome: Boolean,
+    val frostedBackdrop: Bitmap? = null
 )
 
 /** A launcher alias's own icon, loaded once so slider-rate previews never query PackageManager. */
@@ -47,5 +48,6 @@ internal fun prepareEditorApplicationIcon(app: PackageInfoStruct, loader: Instal
     val adaptive = drawable.isAdaptiveIconDrawable()
     val monochrome = Build.VERSION.SDK_INT >= 26 && adaptive && (drawable as AdaptiveIconDrawable).haveMonochrome()
     return EditorApplicationIcon(app.withLoadedApplicationIcon(loaded), hero,
-        runCatching { appBackgroundColor(drawable) }.getOrNull(), adaptive, monochrome)
+        runCatching { appBackgroundColor(drawable) }.getOrNull(), adaptive, monochrome,
+        runCatching { hero?.let(::prepareEditorBackdrop) }.getOrNull())
 }

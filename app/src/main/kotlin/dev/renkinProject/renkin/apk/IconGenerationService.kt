@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.apk
 import dev.renkinProject.renkin.packages.InstalledIconLoader
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Typeface
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.InstalledApplication
@@ -240,34 +241,21 @@ class IconGenerationService(
     private fun modifierPipeline(options: GenerationOptions) =
         IconImageEditPipeline(context.resources, options)
 
-    suspend fun getIconPackIcons(
+    suspend fun packBrowserBitmap(
         iconPackName: String,
         options: GenerationOptions,
-        drawables: List<ResourceDrawable>
-    ): Map<ResourceDrawable, IconPackDrawable?> = withContext(Dispatchers.Default) {
-        val exportDrawables = mutableMapOf<ResourceDrawable, IconPackDrawable?>()
-
+        resource: ResourceDrawable,
+        size: Int
+    ): Bitmap? = withContext(Dispatchers.Default) {
+        currentCoroutineContext().ensureActive()
         val pack = IconPackContainer("", emptyMap())
-
-        val builder = IconGenerator(
+        IconGenerator(
             context,
             options,
             pack,
             pack,
             iconPackCatalog = iconPackCatalog
-        )
-        for (drawable in drawables) {
-            // A superseded search cancels this batch; stop before the next icon instead of finishing it.
-            ensureActive()
-            // One broken icon must not take the whole pack down (#119)
-            exportDrawables[drawable] = try {
-                builder.colorizeFromIconPack(iconPackName, drawable)
-            } catch (_: Exception) {
-                null
-            }
-        }
-
-        exportDrawables
+        ).packBrowserBitmap(iconPackName, resource, size)
     }
 }
 

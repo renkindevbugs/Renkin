@@ -8,5 +8,9 @@ data class IconExportOptions(
     val materialYou: Boolean = false,
     val themed: Boolean = false,
     val background: ColorFill = ColorFill(android.graphics.Color.TRANSPARENT),
-    val foregroundStyle: ColorizerStyle? = null
+    val foregroundStyle: ColorizerStyle? = null,
+    // Refresh turns icons from a Material You Primary or Secondary pack into live themed glyphs
+    // (see IconGenerator); each source has its own switch in the hero sheet.
+    val livePrimaryMaterialYouPack: Boolean = false,
+    val liveSecondaryMaterialYouPack: Boolean = false
 )

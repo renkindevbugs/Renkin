@@ -105,6 +105,8 @@ internal data class ProfileExportStyle(
     val includeVector: Boolean? = null,
     val monochrome: Boolean? = null,
     val themed: Boolean? = null,
+    val materialYouPackLive: Boolean? = null,
+    val secondaryMaterialYouPackLive: Boolean? = null,
     val background: ProfileColorStyle = ProfileColorStyle()
 )
 
