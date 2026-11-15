@@ -555,9 +555,9 @@ class MainViewModel @Inject constructor(
         serialize: Boolean = true,
         profileTarget: ProfileSwitchTarget? = null,
         operation: suspend (ProfileSessionToken) -> Unit
-    ) {
+    ): Boolean {
         val progress = ProfileActionProgress(messageRes, applicationName, profileTarget)
-        foregroundProfileActions.launch(progress, serialize) {
+        return foregroundProfileActions.launch(progress, serialize) {
             launchProfileOperation(expected, serialize = false) { owner ->
                 try {
                     operation(owner)
@@ -1361,41 +1361,57 @@ class MainViewModel @Inject constructor(
 
     fun closeAddedAppEditor() { addedAppEditorKey = null }
 
-    // True while the app list reload runs — drives the home list's pull-to-refresh spinner.
     var appsRefreshing by mutableStateOf(false)
         private set
 
     /** Reloads apps, icon packs and saved rows while preserving this session's unsaved keys. */
-    fun refreshApps() {
+    fun refreshAppsAndPacks() {
         if (appsRefreshing) return
         appsRefreshing = true
-        launchProfileOperation { expected ->
-            val previousEdits = updatedKeys
-            val previousBaselines = changeBaselinesSession
-            try {
-                val reloaded = appProvider.reloadPreservingSession(expected, unsavedKeys())
-                packBrowserPreviews.clear()
-                packBrowserPreviews.prewarm(iconPackState.value.packs)
-                // An uninstalled app no longer has a visible row to carry a session edit.
-                val liveKeys = appProvider.applicationList.mapTo(mutableSetOf()) { it.key }
-                appProvider.commitSessionState(reloaded) {
-                    updatedKeys = previousEdits.filterTo(mutableSetOf()) { it in liveKeys }
-                    changeBaselinesSession = reloaded.takeIf { previousBaselines == expected }
-                }
-                _toastEvents.trySend(R.string.appListRefreshed)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: ProfileSessionChangedException) {
-                throw error
-            } catch (error: ProfileReloadFailedException) {
-                appProvider.commitSessionState(error.restoredSession) {
-                    updatedKeys = previousEdits
-                    if (previousBaselines == expected) changeBaselinesSession = error.restoredSession
-                }
-                throw error
-            } finally {
-                appsRefreshing = false
+        viewModelScope.launch {
+            // The reload empties the list first; the profile-switch skeleton keeps the hero
+            // and tiles in place for the active profile instead of a blank screen.
+            val profile = appProvider.profilesFlow().first().firstOrNull { it.id == activeProfileId }
+            val target = ProfileSwitchTarget(
+                id = activeProfileId,
+                name = profile?.name.orEmpty(),
+                packLabel = profile?.packLabel.orEmpty(),
+                packIcon = profile?.packIcon.orEmpty()
+            )
+            val started = launchVisibleProfileOperation(R.string.refreshingAppsAndPacks, profileTarget = target) { expected ->
+                reloadAppsAndPacks(expected)
             }
+            if (!started) appsRefreshing = false
+        }
+    }
+
+    private suspend fun reloadAppsAndPacks(expected: ProfileSessionToken) {
+        val previousEdits = updatedKeys
+        val previousBaselines = changeBaselinesSession
+        try {
+            val reloaded = appProvider.reloadPreservingSession(expected, unsavedKeys())
+            packBrowserPreviews.clear()
+            packBrowserPreviews.prewarm(iconPackState.value.packs)
+            // An uninstalled app no longer has a visible row to carry a session edit.
+            val liveKeys = appProvider.applicationList.mapTo(mutableSetOf()) { it.key }
+            appProvider.commitSessionState(reloaded) {
+                updatedKeys = previousEdits.filterTo(mutableSetOf()) { it in liveKeys }
+                changeBaselinesSession = reloaded.takeIf { previousBaselines == expected }
+            }
+            refreshMissingPacks(prompt = false)
+            _toastEvents.trySend(R.string.appsAndPacksRefreshed)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: ProfileSessionChangedException) {
+            throw error
+        } catch (error: ProfileReloadFailedException) {
+            appProvider.commitSessionState(error.restoredSession) {
+                updatedKeys = previousEdits
+                if (previousBaselines == expected) changeBaselinesSession = error.restoredSession
+            }
+            throw error
+        } finally {
+            appsRefreshing = false
         }
     }
 

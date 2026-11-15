@@ -27,16 +27,17 @@ internal class ForegroundProfileActions(
     private val mutableProgress = MutableStateFlow<ProfileActionProgress?>(null)
     val progress = mutableProgress.asStateFlow()
 
-    fun launch(progress: ProfileActionProgress, serialize: Boolean, start: () -> Job) {
+    /** False when another foreground action or the session lock is busy; nothing starts then. */
+    fun launch(progress: ProfileActionProgress, serialize: Boolean, start: () -> Job): Boolean {
         if (!mutableProgress.compareAndSet(null, progress)) {
             onBusy()
-            return
+            return false
         }
         val ownsSessionLock = serialize && sessionMutex.tryLock()
         if (serialize && !ownsSessionLock) {
             mutableProgress.compareAndSet(progress, null)
             onBusy()
-            return
+            return false
         }
         fun release() {
             if (ownsSessionLock) sessionMutex.unlock()
@@ -45,6 +46,7 @@ internal class ForegroundProfileActions(
         try {
             // Completion also handles cancellation before the coroutine body ever starts.
             start().invokeOnCompletion { release() }
+            return true
         } catch (error: Throwable) {
             release()
             throw error

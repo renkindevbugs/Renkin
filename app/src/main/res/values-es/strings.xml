@@ -60,7 +60,6 @@
     <string name="close">Cerrar</string>
     <string name="packsSynced">Paquetes de iconos sincronizados</string>
     <string name="packsSyncFailed">No se pudieron sincronizar los paquetes de iconos</string>
-    <string name="appListRefreshed">Lista de aplicaciones actualizada</string>
     <string name="crashLogsShortcutShort">Registros de errores</string>
     <string name="crashLogsShortcutLong">Abrir los registros de errores de Renkin</string>
     <string name="undoAction">Deshacer</string>
@@ -129,7 +128,6 @@
     <string name="automaticallyCenter">Centrar automáticamente</string>
     <string name="deadZone">Zona muerta</string>
     <string name="uploadImageError">No se puede subir la imagen</string>
-    <string name="syncPacks">Sincronizar paquetes de iconos</string>
     <string name="retrieveCalendarIcon">Obtener iconos de calendario</string>
     <string name="calendarDayIcons">Iconos de días del calendario</string>
     <string name="calendarDayIconsDesc">%1$s de %2$s · rota con la fecha</string>
@@ -141,7 +139,6 @@
     <string name="overrideIcon">Actualizar reemplaza los iconos existentes</string>
     <string name="deleteIconPack">Desinstalar paquete de iconos</string>
     <string name="iconPackUninstalled">Paquete de Renkin desinstalado</string>
-    <string name="refreshApplicationList">Actualizar lista de aplicaciones</string>
     <string name="applicationIcon">Icono de la aplicación</string>
     <string name="primarySource">Fuente principal</string>
     <string name="primaryIconPack">Paquete de iconos principal</string>
