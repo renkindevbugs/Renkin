@@ -263,7 +263,6 @@
     <string name="themedEdit">Themed</string>
     <string name="themedEditHint">The icon becomes a one-colour glyph that follows your wallpaper colours and dark mode. Use Scale below to change its size.</string>
     <string name="themedIconCard">Follow wallpaper colours</string>
-    <string name="liveIconsDescription">Change colour with your wallpaper</string>
     <string name="themedPackCardDesc">%1$s icons change with your wallpaper and dark mode</string>
     <string name="themedIconCardDesc">Keeps this pack\'s themed icon in your wallpaper colours</string>
     <string name="colorizeCancel">Cancel</string>
@@ -1137,9 +1136,9 @@
         <item quantity="one">Adds %1$d missing icon</item>
         <item quantity="other">Adds %1$d missing icons</item>
     </plurals>
-    <plurals name="liveIconsCount">
-        <item quantity="one">%1$d of %2$d icon</item>
-        <item quantity="other">%1$d of %2$d icons</item>
+    <plurals name="liveIconsOutOf">
+        <item quantity="one">Out of %1$d icon · %2$d%%</item>
+        <item quantity="other">Out of %1$d icons · %2$d%%</item>
     </plurals>
     <string name="previewMaskSquare">Square</string>
     <string name="previewMaskRounded">Rounded square</string>

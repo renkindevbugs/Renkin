@@ -67,32 +67,25 @@ internal fun PackUsageContent(
 /** How many of the profile's icons follow the wallpaper colours (themed glyphs), out of all of them. */
 @Composable
 private fun LiveIconsCard(count: ApplicationProvider.LiveIconCount) {
-    val fraction = count.live.toFloat() / count.total
-    val fill = MaterialTheme.colorScheme.primary
+    val fraction = (count.live.toFloat() / count.total).coerceIn(0f, 1f)
+    val percent = kotlin.math.round(fraction * 100).toInt()
+    val fill = MaterialTheme.colorScheme.onSecondaryContainer
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
-    Surface(shape = CardShape, color = MaterialTheme.colorScheme.surfaceContainer,
+    Surface(shape = CardShape, color = MaterialTheme.colorScheme.secondaryContainer,
         modifier = Modifier.semantics(mergeDescendants = true) { }) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Surface(shape = IconShape, color = MaterialTheme.colorScheme.secondaryContainer) {
-                    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.ColorLens, contentDescription = null, modifier = Modifier.size(22.dp),
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                    }
-                }
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(R.string.themedIconCard), style = MaterialTheme.typography.titleSmallEmphasized)
-                    Text(stringResource(R.string.liveIconsDescription), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(
-                    pluralStringResource(R.plurals.liveIconsCount, count.total, count.live, count.total),
-                    style = MaterialTheme.typography.titleMediumEmphasized.copy(fontFeatureSettings = "tnum")
-                )
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Filled.ColorLens, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text(stringResource(R.string.themedIconCard), style = MaterialTheme.typography.labelLarge)
             }
-            Canvas(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).clearAndSetSemantics { }) {
+            Text(count.live.toString(), style = MaterialTheme.typography.headlineLarge.copy(fontFeatureSettings = "tnum"))
+            Text(
+                pluralStringResource(R.plurals.liveIconsOutOf, count.total, count.total, percent),
+                style = MaterialTheme.typography.bodySmall
+            )
+            Canvas(Modifier.fillMaxWidth().padding(top = 4.dp).height(6.dp).clip(CircleShape).clearAndSetSemantics { }) {
                 drawRect(track)
-                if (fraction > 0f) drawRect(fill, size = Size(size.width * fraction.coerceIn(0f, 1f), size.height))
+                if (fraction > 0f) drawRect(fill, size = Size(size.width * fraction, size.height))
             }
         }
     }
