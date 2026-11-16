@@ -78,6 +78,8 @@ other. To switch, make a backup in Renkin, uninstall, install the other build an
 **Launcher support**
 - Built packs include appfilter.xml, appmap.xml, theme_resources.xml and the icon_pack
   resource array, so most launchers can read them.
+- Packs with themed icons also work as a Themed icons source in Lawnchair and Kvaesitso, and
+  Material You packs tell Smart Launcher to theme the apps they don't cover.
 
 ## Reporting bugs
 

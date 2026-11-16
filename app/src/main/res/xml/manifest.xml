@@ -56,6 +56,10 @@
         <action android:name="ch.deletescape.lawnchair.ICONPACK" />
         <category android:name="ch.deletescape.lawnchair.PICK_ICON" />
     </intent-filter>
+    <!-- Lawnchair / Kvaesitso themed icon source (dropped when the pack has no grayscale_icon_map) -->
+    <intent-filter>
+        <action android:name="app.lawnchair.icons.THEMED_ICON" />
+    </intent-filter>
     <!-- Nova Launcher Custom Icon Picker -->
     <intent-filter>
         <action android:name="com.novalauncher.THEME" />
