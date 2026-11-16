@@ -1,0 +1,38 @@
+name: Feature request
+description: Suggest something new or a change to how Renkin works.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search [existing issues](https://github.com/renkindevbugs/Renkin/issues?q=is%3Aissue) first, open and closed. One idea per request.
+
+  - type: textarea
+    id: feature
+    attributes:
+      label: What you want
+      description: Describe the feature or change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why
+      description: What problem does it solve for you? How do you work around it today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Other details
+      description: Mockups, screenshots, or how another app does it.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true

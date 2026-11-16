@@ -1,0 +1,124 @@
+name: Bug report
+description: Something in Renkin does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please search [existing issues](https://github.com/renkindevbugs/Renkin/issues?q=is%3Aissue) first, open and closed.
+        One bug per report. The more exact the details below, the faster it can be fixed.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: A short description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the icon editor for Chrome
+        2. Pick an icon from Arcticons
+        3. Tap Apply
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: What should have happened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: What happened instead.
+    validations:
+      required: true
+
+  - type: input
+    id: renkin-version
+    attributes:
+      label: Renkin version
+      description: Shown at the bottom of Settings and in the About dialog.
+      placeholder: "2026.11.02"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-source
+    attributes:
+      label: Installed from
+      options:
+        - GitHub Releases
+        - F-Droid
+        - Obtainium
+        - Built from source
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: android-version
+    attributes:
+      label: Android version
+      placeholder: "Android 14"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Manufacturer and model. Add the system skin if there is one (One UI, HyperOS, ColorOS …).
+      placeholder: "Samsung Galaxy S23, One UI 6.1"
+    validations:
+      required: true
+
+  - type: input
+    id: launcher
+    attributes:
+      label: Launcher
+      description: The home screen app you apply the pack in, with its version if you know it.
+      placeholder: "Nova Launcher 8.1.4"
+    validations:
+      required: true
+
+  - type: input
+    id: icon-pack
+    attributes:
+      label: Icon pack involved
+      description: If the bug is about a specific source icon pack, name it.
+      placeholder: "Arcticons 11.4.0"
+
+  - type: textarea
+    id: crash-log
+    attributes:
+      label: Crash log
+      description: If Renkin crashed, open Settings → Crash logs, copy the log and paste it here.
+      render: shell
+
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Screenshots or screen recording
+      description: Drag files here. Useful for anything visual, like a wrong icon or a layout bug.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched the existing issues and this is not a duplicate.
+          required: true
+        - label: I am on the [latest release](https://github.com/renkindevbugs/Renkin/releases/latest), or the bug still happens there.
+          required: true
+        - label: I filled in the exact versions, not "latest".
+          required: true
