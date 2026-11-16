@@ -39,6 +39,7 @@ import dev.renkinProject.renkin.xml.file.AdaptiveIconXml
 import dev.renkinProject.renkin.xml.file.AppFilterXml
 import dev.renkinProject.renkin.xml.file.AppMapXml
 import dev.renkinProject.renkin.xml.file.ThemeResourcesXml
+import dev.renkinProject.renkin.xml.file.GrayscaleIconMapXml
 import dev.renkinProject.renkin.xml.file.DrawableXml
 import dev.renkinProject.renkin.xml.file.LayerListXml
 import dev.renkinProject.renkin.xml.file.TintedBitmapXml
@@ -113,6 +114,11 @@ class IconPackBuilder(
         /** Base package id of the generated Renkin icon pack (profiles append ".p<id>"). */
         const val PACKAGE_NAME = "dev.renkinProject.renkinpack"
         private const val MAIN_ACTIVITY = "dev.renkinProject.renkinpack.MainActivity"
+
+        private const val LAWNCHAIR_THEMED_ICON_ACTION = "app.lawnchair.icons.THEMED_ICON"
+        private const val FALLBACK_TO_THEMED_ICON = "org.icontheme.FALLBACK_TO_THEMED_ICON"
+        /** The discovery filters the org.icontheme.* categories ride on: ADW (Lawnchair) and Smart Launcher. */
+        private val ICON_THEME_FLAG_ACTIONS = setOf("org.adw.launcher.THEMES", "ginlemon.smartlauncher.THEMES")
 
         // Smali class assets compiled into the pack's classes.dex; their class package must stay
         // MAIN_ACTIVITY's. The preview screen reads the renkin_preview_* resources by name.
@@ -245,8 +251,6 @@ class IconPackBuilder(
         setSdkVersions(manifest.manifestElement, minSdkVersion, framework.versionCode)
         manifest.setApplicationLabel(packLabel)
 
-        createMainActivity(manifest, themed)
-
         insertIconPackAppIcons(apkModule, packageBlock, manifest)
 
         createColorResource(packageBlock, "icon_color", iconColor)
@@ -258,6 +262,12 @@ class IconPackBuilder(
         createRefColor31Resource(packageBlock, "icon_background_color", "@android:color/system_accent1_100")
         createRefColor31Resource(packageBlock, "icon_color", "@android:color/system_accent1_200", night = true)
         createRefColor31Resource(packageBlock, "icon_background_color", "@android:color/system_accent2_800", night = true)
+        if (themed) {
+            // Smart Launcher tints monochrome and fallback icons with these, so apps the pack
+            // misses match its own themed icons.
+            createColorReferenceResource(packageBlock, "org.icontheme.icon_color", "@color/icon_color")
+            createColorReferenceResource(packageBlock, "org.icontheme.icon_background_color", "@color/icon_background_color")
+        }
 
         textMethod(ctx.resources.getString(R.string.writingElement))
         val drawableXml = DrawableXml()
@@ -267,6 +277,7 @@ class IconPackBuilder(
         // advertises them, so the pack must speak their format too.
         val appMapXml = AppMapXml()
         val themeResourcesXml = ThemeResourcesXml(packLabel)
+        val grayscaleIconMapXml = GrayscaleIconMapXml()
 
         val vectorBrush = ReferenceBrush("@color/icon_color")
 
@@ -288,6 +299,7 @@ class IconPackBuilder(
                 val appFileName = appFileNames.getValue(app.key)
                 val layeredIcon = (app.createdIcon as? AdaptiveIconPackDrawable)?.takeUnless { themed }
                 val legacyName = if (layeredIcon != null) "${appFileName}_legacy" else appFileName
+                var themedGlyph = if (layeredIcon?.hasMonochrome == true) "${appFileName}_monochrome" else null
 
                 // Themed builds keep the user's static tint; plain clocks retain their source rotation.
                 val clock = if (themed || app.createdIcon is ThemedGlyphDrawable) null else app.sourcePackName
@@ -327,45 +339,48 @@ class IconPackBuilder(
                     val colors = themedColors(packageBlock, (app.createdIcon as? ThemedGlyphDrawable)?.scheme)
                     adaptive.background(colors.background)
 
-                    when (app.createdIcon) {
+                    // Every foreground is its own drawable, so the themed-icon map can point at it.
+                    adaptive.foreground(appFileName)
+                    val foregroundName = appFileName + "_foreground"
+                    val foregroundIsGlyph = when (app.createdIcon) {
                         is ThemedGlyphDrawable -> {
-                            adaptive.foreground(appFileName)
-                            createTintedMaskResource(apkModule, packageBlock, app.createdIcon.mask, appFileName + "_foreground", colors.foreground)
+                            createTintedMaskResource(apkModule, packageBlock, app.createdIcon.mask, foregroundName, colors.foreground)
+                            true
                         }
                         is AdaptiveIconPackDrawable -> {
-                            adaptive.foreground(appFileName)
-                            createOwnedBitmapResource(apkModule, packageBlock, app.createdIcon.foreground, appFileName + "_foreground")
+                            createOwnedBitmapResource(apkModule, packageBlock, app.createdIcon.foreground, foregroundName)
+                            false
                         }
                         is InsetIconDrawable -> {
-                            adaptive.startForeground()
-                            adaptive.startInset()
-                            exportInsetIcon(adaptive, app.createdIcon)
+                            val insetXml = InsetXml()
+                            exportInsetIcon(insetXml, app.createdIcon)
 
                             val insetDrawable = app.createdIcon.drawable
-                            if (insetDrawable is ImageVectorDrawable) {
-                                exportVectorIcon(adaptive, insetDrawable, vectorBrush)
-                            } else {
-                                if (insetDrawable is BitmapIconDrawable) {
-                                    adaptive.insetDrawable(appFileName + "_foreground")
-                                    createGlyphResource(apkModule, packageBlock, insetDrawable.toBitmap(), appFileName + "_foreground", themed)
+                            val isGlyph = when (insetDrawable) {
+                                is ImageVectorDrawable -> {
+                                    exportVectorIcon(insetXml, insetDrawable, vectorBrush)
+                                    themed
                                 }
+                                is BitmapIconDrawable -> {
+                                    insetXml.insetDrawable(appFileName + "_inset")
+                                    createGlyphResource(apkModule, packageBlock, insetDrawable.toBitmap(), appFileName + "_inset", themed)
+                                }
+                                else -> false
                             }
-
-                            adaptive.endInset()
-                            adaptive.endForeground()
+                            createXmlDrawableResource(apkModule, packageBlock, insetXml, foregroundName)
+                            isGlyph
                         }
 
                         is ImageVectorDrawable -> {
-                            adaptive.startForeground()
-                            exportVectorIcon(adaptive, app.createdIcon, vectorBrush)
-                            adaptive.endForeground()
+                            val vectorXml = InsetXml()
+                            exportVectorIcon(vectorXml, app.createdIcon, vectorBrush)
+                            createXmlDrawableResource(apkModule, packageBlock, vectorXml, foregroundName)
+                            themed
                         }
 
-                        else -> {
-                            adaptive.foreground(appFileName)
-                            createGlyphResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground", themed)
-                        }
+                        else -> createGlyphResource(apkModule, packageBlock, app.createdIcon.toBitmap(), foregroundName, themed)
                     }
+                    if (foregroundIsGlyph) themedGlyph = foregroundName
 
                     createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
                 }
@@ -415,6 +430,7 @@ class IconPackBuilder(
                 appfilterXml.item(app.packageName, app.activityName, appFileName)
                 if (app.activityName !in ambiguousClasses) appMapXml.item(app.activityName, legacyName)
                 themeResourcesXml.item(app.packageName, app.activityName, legacyName)
+                themedGlyph?.let { grayscaleIconMapXml.item(app.packageName, app.activityName, it) }
             }
         }
 
@@ -453,6 +469,9 @@ class IconPackBuilder(
         createXmlResource(apkModule, packageBlock, appfilterXml, "appfilter")
         createXmlResource(apkModule, packageBlock, appMapXml, "appmap")
         createXmlResource(apkModule, packageBlock, themeResourcesXml, "theme_resources")
+        val isThemedIconSource = !grayscaleIconMapXml.isEmpty
+        if (isThemedIconSource) createXmlResource(apkModule, packageBlock, grayscaleIconMapXml, "grayscale_icon_map")
+        createMainActivity(manifest, themed, isThemedIconSource)
 
         // Flat icon list as a compiled string-array — the format icon pickers and the old
         // theme engines look up via resources.getIdentifier("icon_pack", "array", pkg).
@@ -532,7 +551,7 @@ class IconPackBuilder(
         targetSdk.setTypeAndData(ValueType.DEC, targetSdkVersion)
     }
 
-    private fun createMainActivity(manifest: AndroidManifestBlock, changesWithMaterialYouColors: Boolean) {
+    private fun createMainActivity(manifest: AndroidManifestBlock, themed: Boolean, isThemedIconSource: Boolean) {
         val application = manifest.orCreateApplicationElement
         val activity = application.newElement(AndroidManifestBlock.TAG_activity)
         // The preview grid sits on the user's wallpaper by default.
@@ -556,8 +575,15 @@ class IconPackBuilder(
                 }
             }
 
-            if (changesWithMaterialYouColors && actions.contains("org.adw.launcher.THEMES")) {
+            // Without a grayscale_icon_map Lawnchair would offer the pack as an empty themed source.
+            if (!isThemedIconSource && LAWNCHAIR_THEMED_ICON_ACTION in actions) continue
+
+            if (themed && actions.any { it in ICON_THEME_FLAG_ACTIONS }) {
                 categories.add(CHANGES_WITH_MATERIAL_YOU_COLORS)
+                // Apps the pack misses get the launcher's themed icon instead of their colourful one.
+                // Smart Launcher honours it only for packs without iconback/mask/scale, which Renkin
+                // never writes.
+                categories.add(FALLBACK_TO_THEMED_ICON)
             }
 
             createIntentFilter(activity, actions.toTypedArray(), categories.toTypedArray())
@@ -689,11 +715,13 @@ class IconPackBuilder(
     /**
      * A themed one-colour glyph is written as an alpha mask under [name] tinted with
      * `@color/icon_color`, so it follows wallpaper and dark-mode changes like a vector glyph does.
-     * Any other bitmap keeps its own colours.
+     * Any other bitmap keeps its own colours. Returns whether [name] became such a glyph.
      */
-    private fun createGlyphResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, themed: Boolean) {
-        if (themed && bitmap.isSingleColorGlyph()) createTintedMaskResource(apkModule, packageBlock, bitmap, name)
+    private fun createGlyphResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, themed: Boolean): Boolean {
+        val isGlyph = themed && bitmap.isSingleColorGlyph()
+        if (isGlyph) createTintedMaskResource(apkModule, packageBlock, bitmap, name)
         else createBitmapResource(apkModule, packageBlock, bitmap, name)
+        return isGlyph
     }
 
     /** Writes [mask] under [name] as a bitmap the launcher tints with `@color/icon_color`. */
@@ -764,8 +792,11 @@ class IconPackBuilder(
         res.setValueAsRaw(coder.valueType, coder.value)
     }
 
-    private fun createRefColor31Resource(packageBlock: PackageBlock, name: String, reference: String, night: Boolean = false) {
-        val res = packageBlock.getOrCreate(if (night) "night-v31" else "v31", "color", name)
+    private fun createRefColor31Resource(packageBlock: PackageBlock, name: String, reference: String, night: Boolean = false) =
+        createColorReferenceResource(packageBlock, name, reference, if (night) "night-v31" else "v31")
+
+    private fun createColorReferenceResource(packageBlock: PackageBlock, name: String, reference: String, qualifier: String = "") {
+        val res = packageBlock.getOrCreate(qualifier, "color", name)
         val coder = ValueCoder.encodeReference(packageBlock, reference)
         res.setValueAsRaw(coder.valueType, coder.value)
     }

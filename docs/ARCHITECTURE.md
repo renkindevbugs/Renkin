@@ -2563,10 +2563,20 @@ fall back to it give one pack's icon to every other profile pack without its own
 Monochrome is captured from the framework on API 33+, or from the selected source XML on older
 systems. A source variant available only under v33 cannot be selected by Android 26–32.
 
-Global themed builds additionally declare `org.icontheme.CHANGES_WITH_MATERIAL_YOU_COLORS` on
-their ADW theme intent filter. Smart Launcher uses that capability to reload packs whose resources
-refer to Material system colours when the wallpaper palette changes. Plain preserved adaptive
-icons do not declare it because their original colour layers are intentionally static.
+Global themed builds additionally declare `org.icontheme.CHANGES_WITH_MATERIAL_YOU_COLORS` and
+`org.icontheme.FALLBACK_TO_THEMED_ICON` on their ADW and Smart Launcher intent filters, plus the
+`org.icontheme.icon_color` / `icon_background_color` colour resources. Smart Launcher uses them to
+reload packs whose resources refer to Material system colours when the wallpaper palette changes,
+and to draw apps the pack misses as themed icons in the pack's colours (it honours the fallback
+only for packs without iconback/mask/scale, which Renkin never writes). Plain preserved adaptive
+icons do not declare them because their original colour layers are intentionally static.
+
+Every icon with a one-colour glyph is also listed in `res/xml/grayscale_icon_map.xml` (exact
+component plus a package-only entry for the package's first glyph), and only then does the pack
+declare `app.lawnchair.icons.THEMED_ICON`, so Lawnchair and Kvaesitso offer it as a themed-icon
+source. Glyphs are the monochrome layer of preserved adaptive icons, Material You glyph icons, and
+in global themed builds every vector or single-colour foreground. Adaptive exports therefore write
+each foreground as its own `<name>_foreground` drawable instead of inlining it.
 
 The Material You swatches in the per-app editor read Android's public `system_accent*` resources.
 They are refreshed when Android reports a configuration change. Some OEM launchers, including
