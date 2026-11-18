@@ -11,6 +11,11 @@ class AdaptiveIconXml: InsetWrapperXml() {
         startTag("adaptive-icon")
     }
 
+    /**
+     * A single-item layer list, not a bare drawable reference: the Moto launcher casts a pack icon's
+     * foreground to [android.graphics.drawable.LayerDrawable] when it builds its animated clock icon,
+     * and throws - dropping the whole icon - for anything else (see ClockDrawableWrapper).
+     */
     fun foreground(drawableName: String) {
         startForeground()
         attribute("drawable", "@drawable/${drawableName}_foreground", androidNamespace)
@@ -32,9 +37,13 @@ class AdaptiveIconXml: InsetWrapperXml() {
 
     fun startForeground() {
         startTag("foreground")
+        startTag("layer-list")
+        startTag("item")
     }
 
     fun endForeground() {
+        endTag("item")
+        endTag("layer-list")
         endTag("foreground")
     }
 
