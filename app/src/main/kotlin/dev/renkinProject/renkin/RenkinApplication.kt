@@ -10,6 +10,7 @@ import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import dagger.hilt.android.HiltAndroidApp
+import dev.renkinProject.renkin.drawable.ThemedGlyphColors
 import dev.renkinProject.renkin.feature.language.AppLocales
 import dev.renkinProject.renkin.data.transfer.BackupManagerEntryPoint
 import dev.renkinProject.renkin.data.StorageOperationGate
@@ -57,6 +58,7 @@ class RenkinApplication : Application() {
         // Capture uncaught exceptions to a local file so the next launch can offer to email
         // the log (see CrashReporter / the crash dialog in MainActivity).
         CrashReporter.install(this)
+        ThemedGlyphColors.install(this)
         registerCrashLogsShortcut()
         if (isMainProcess()) {
             applicationScope.launch {

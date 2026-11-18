@@ -383,6 +383,16 @@ class IconPackBuilder(
                     if (foregroundIsGlyph) themedGlyph = foregroundName
 
                     createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
+                    if (foregroundIsGlyph) {
+                        // Launchers theme an icon through its monochrome layer. Without one they flatten
+                        // the whole icon, background included, into a single silhouette (issue #33).
+                        val withMonochrome = AdaptiveIconXml().apply {
+                            background(colors.background)
+                            foreground(appFileName)
+                            monochrome("@drawable/$foregroundName")
+                        }
+                        createXmlDrawableResource(apkModule, packageBlock, withMonochrome, appFileName, "anydpi-v33")
+                    }
                 }
                 else {
                     if (app.createdIcon is InsetIconDrawable) {
@@ -471,7 +481,9 @@ class IconPackBuilder(
         createXmlResource(apkModule, packageBlock, themeResourcesXml, "theme_resources")
         val isThemedIconSource = !grayscaleIconMapXml.isEmpty
         if (isThemedIconSource) createXmlResource(apkModule, packageBlock, grayscaleIconMapXml, "grayscale_icon_map")
-        createMainActivity(manifest, themed, isThemedIconSource)
+        // Global themed packs and every per-icon wallpaper glyph reference the system palette.
+        val followsWallpaper = themed || apps.any { it.createdIcon is ThemedGlyphDrawable }
+        createMainActivity(manifest, themed, followsWallpaper, isThemedIconSource)
 
         // Flat icon list as a compiled string-array — the format icon pickers and the old
         // theme engines look up via resources.getIdentifier("icon_pack", "array", pkg).
@@ -551,7 +563,12 @@ class IconPackBuilder(
         targetSdk.setTypeAndData(ValueType.DEC, targetSdkVersion)
     }
 
-    private fun createMainActivity(manifest: AndroidManifestBlock, themed: Boolean, isThemedIconSource: Boolean) {
+    private fun createMainActivity(
+        manifest: AndroidManifestBlock,
+        themed: Boolean,
+        followsWallpaper: Boolean,
+        isThemedIconSource: Boolean
+    ) {
         val application = manifest.orCreateApplicationElement
         val activity = application.newElement(AndroidManifestBlock.TAG_activity)
         // The preview grid sits on the user's wallpaper by default.
@@ -578,12 +595,14 @@ class IconPackBuilder(
             // Without a grayscale_icon_map Lawnchair would offer the pack as an empty themed source.
             if (!isThemedIconSource && LAWNCHAIR_THEMED_ICON_ACTION in actions) continue
 
-            if (themed && actions.any { it in ICON_THEME_FLAG_ACTIONS }) {
-                categories.add(CHANGES_WITH_MATERIAL_YOU_COLORS)
+            if (actions.any { it in ICON_THEME_FLAG_ACTIONS }) {
+                // Smart Launcher caches pack icons and reloads them on a palette change only for
+                // packs that declare this, so a single wallpaper-coloured icon needs it too (#33).
+                if (followsWallpaper) categories.add(CHANGES_WITH_MATERIAL_YOU_COLORS)
                 // Apps the pack misses get the launcher's themed icon instead of their colourful one.
                 // Smart Launcher honours it only for packs without iconback/mask/scale, which Renkin
                 // never writes.
-                categories.add(FALLBACK_TO_THEMED_ICON)
+                if (themed) categories.add(FALLBACK_TO_THEMED_ICON)
             }
 
             createIntentFilter(activity, actions.toTypedArray(), categories.toTypedArray())

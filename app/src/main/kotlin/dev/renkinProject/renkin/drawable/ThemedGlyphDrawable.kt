@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.drawable
 
+import android.content.Context
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.Bitmap
@@ -118,15 +119,25 @@ class ThemedGlyphDrawable(mask: Bitmap, val scheme: Int = SYSTEM_PALETTE) : Icon
  * the pack, resolved from the system the way the launcher resolves them.
  */
 internal object ThemedGlyphColors {
+    // Resources.getSystem() keeps the palette the process inherited from zygote, so after a
+    // wallpaper change it reads stale or default (blue) system colours (issue #33). The
+    // application's resources receive the wallpaper colour overlay like the launcher does.
+    @Volatile
+    private var appResources: Resources? = null
+
+    fun install(context: Context) {
+        appResources = context.applicationContext.resources
+    }
+
     fun current(scheme: Int = ThemedGlyphDrawable.SYSTEM_PALETTE): Pair<Int, Int> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return Color.WHITE to Color.BLACK
-        val system = Resources.getSystem()
+        val resources = appResources ?: Resources.getSystem()
         MATERIAL_YOU_SCHEME_COLOR_IDS.getOrNull(scheme)?.let { (foreground, background) ->
-            return system.getColor(foreground, null) to system.getColor(background, null)
+            return resources.getColor(foreground, null) to resources.getColor(background, null)
         }
-        val night = (system.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val foreground = if (night) android.R.color.system_accent1_200 else android.R.color.system_accent1_700
         val background = if (night) android.R.color.system_accent2_800 else android.R.color.system_accent1_100
-        return system.getColor(foreground, null) to system.getColor(background, null)
+        return resources.getColor(foreground, null) to resources.getColor(background, null)
     }
 }
