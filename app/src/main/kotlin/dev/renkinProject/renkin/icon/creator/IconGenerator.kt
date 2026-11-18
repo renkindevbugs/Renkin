@@ -214,14 +214,19 @@ class IconGenerator(
     }
 
     /**
-     * Refresh gives a Material You pack's icons live wallpaper colours when its source's switch in
-     * the hero sheet is on ([live]): the same Themed modifier the editor offers per icon. Any effect
-     * the user chose wins, and the pack-wide Themed export already keeps such icons live on its own.
+     * The image modifier a refresh generates with. An effect the user chose always wins; otherwise
+     * a Material You pack's icons follow its source's live-colours switch ([live]). A themed export
+     * needs no forcing here: it already draws the app's own icons the Material You way, and those
+     * glyphs are the ones the launcher tints.
      */
-    private fun refreshImageEdit(source: Source, imageEdit: ImageEdit, pack: IconPackContainer, live: Boolean): ImageEdit =
-        if (live && source == Source.ICON_PACK && imageEdit == ImageEdit.NONE &&
-            !export.themed && packChangesWithMaterialYouColors(pack.iconPackName)
-        ) ImageEdit.THEMED else imageEdit
+    private fun refreshImageEdit(source: Source, imageEdit: ImageEdit, pack: IconPackContainer, live: Boolean): ImageEdit {
+        if (imageEdit != ImageEdit.NONE) return imageEdit
+        return if (live && source == Source.ICON_PACK && packChangesWithMaterialYouColors(pack.iconPackName)) {
+            ImageEdit.THEMED
+        } else {
+            imageEdit
+        }
+    }
 
     private fun sourcePackNameFor(app: PackageInfoStruct, source: Source, iconPack: IconPackContainer): String = when {
         source == Source.ICON_PACK -> iconPack.iconPackName
@@ -536,6 +541,9 @@ class IconGenerator(
         mono.setTintList(null)
         mono.setBounds(0, 0, size, size)
         val mask = newArgbBitmap(size, size) { mono.draw(it) }
+        // A themed export paints the glyph in the launcher's tint, so the variant's own colours —
+        // a chosen wallpaper scheme or the user's custom pair — give way to the live ones.
+        if (export.themed) return ThemedGlyphDrawable(mask)
         liveMaterialYouScheme()?.let { return ThemedGlyphDrawable(mask, it) }
 
         // Opaque results stay adaptive so the launcher applies its mask. A translucent background
@@ -600,7 +608,8 @@ class IconGenerator(
         val foreground = Bitmap.createBitmap(icon.width, icon.height, Bitmap.Config.ARGB_8888)
         foreground.setPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
 
-        liveMaterialYouScheme()?.let { scheme ->
+        val liveScheme = liveMaterialYouScheme()
+        if (export.themed || liveScheme != null) {
             // The same 72dp-in-108dp placement as below, as a glyph the launcher tints.
             val glyph = newArgbBitmap(icon.width, icon.height) { canvas ->
                 val insetScale = 1f / adaptiveIconScale
@@ -608,7 +617,7 @@ class IconGenerator(
                 canvas.drawBitmap(foreground, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
             }
             foreground.recycle()
-            return ThemedGlyphDrawable(glyph, scheme)
+            return if (liveScheme != null) ThemedGlyphDrawable(glyph, liveScheme) else ThemedGlyphDrawable(glyph)
         }
 
         // Adaptive launchers display only the inner 72dp of a 108dp foreground. Inset the complete

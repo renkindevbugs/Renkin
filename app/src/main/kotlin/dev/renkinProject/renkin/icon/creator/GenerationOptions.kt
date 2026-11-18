@@ -110,12 +110,16 @@ data class GenerationOptions(
             )
 
             val materialYou = pathOptionsRelevant && preferences.getBooleanValue(MonochromeKey)
+            // The themed export is a switch, not a style: every icon is drawn the Material You way
+            // (the app's own monochrome glyph) so the launcher can tint it, whatever variant the
+            // profile picked — that choice only matters when the switch is off.
+            val themed = preferences.getBooleanValue(ExportThemedKey)
             // The app-icon style applies when the app's own icon is the primary source; path
             // tracing keeps its own Material You export switch instead, so the two never compete.
             val appIconStyle = preferences.applicationIconStyle()
                 .takeIf { primarySource == Source.APPLICATION_ICON && !pathOptionsRelevant }
             val appIconColors = appIconStyle
-                ?.takeIf { it.variant == ApplicationIconVariant.MATERIAL_YOU }
+                ?.takeIf { it.variant == ApplicationIconVariant.MATERIAL_YOU || themed }
                 ?.let { preferences.applicationIconMaterialYouColors(context, it.materialYouScheme) }
             return GenerationOptions(
                 source = IconSourceOptions(
@@ -129,7 +133,7 @@ data class GenerationOptions(
                     fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
                     textFontPath = FontCatalog.usablePathOrDefault(preferences.getStringValue(TextFontKey)),
                     applicationIconVariant = when {
-                        materialYou -> ApplicationIconVariant.MATERIAL_YOU
+                        materialYou || themed -> ApplicationIconVariant.MATERIAL_YOU
                         appIconStyle != null -> appIconStyle.variant
                         else -> ApplicationIconVariant.DEFAULT
                     },
@@ -141,7 +145,7 @@ data class GenerationOptions(
                 export = IconExportOptions(
                     vector = pathOptionsRelevant && preferences.getBooleanValue(IncludeVectorKey),
                     materialYou = materialYou,
-                    themed = preferences.getBooleanValue(ExportThemedKey),
+                    themed = themed,
                     livePrimaryMaterialYouPack = preferences.getBooleanValue(MaterialYouPackLiveColorsKey, default = true),
                     liveSecondaryMaterialYouPack = preferences.getBooleanValue(SecondaryMaterialYouPackLiveColorsKey, default = true),
                     background = appIconColors?.let { ColorFill(it.backgroundColor, it.background) }

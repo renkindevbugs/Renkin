@@ -26,7 +26,6 @@ import dev.renkinProject.renkin.icon.creator.MATERIAL_YOU_SCHEME_COLOR_IDS
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.getDrawableOrNull
 import dev.renkinProject.renkin.extension.toByteArray
-import dev.renkinProject.renkin.extension.isSingleColorGlyph
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.packages.CHANGES_WITH_MATERIAL_YOU_COLORS
 import dev.renkinProject.renkin.packages.PackageInfoStruct
@@ -330,7 +329,7 @@ class IconPackBuilder(
                         }
                         is AdaptiveIconPackDrawable -> {
                             adaptive.foreground(appFileName)
-                            createOwnedBitmapResource(apkModule, packageBlock, app.createdIcon.foreground, appFileName + "_foreground")
+                            createOwnedGlyphResource(apkModule, packageBlock, app.createdIcon.foreground, appFileName + "_foreground", themed)
                         }
                         is InsetIconDrawable -> {
                             adaptive.startForeground()
@@ -683,13 +682,29 @@ class IconPackBuilder(
         }
 
     /**
-     * A themed one-colour glyph is written as an alpha mask under [name] tinted with
-     * `@color/icon_color`, so it follows wallpaper and dark-mode changes like a vector glyph does.
-     * Any other bitmap keeps its own colours.
+     * A themed export paints every icon in the launcher's tint, so only the glyph's shape has to
+     * survive: a bitmap cut out of transparency is written as an alpha mask under [name] tinted
+     * with `@color/icon_color`, and follows wallpaper and dark-mode changes like a vector glyph.
+     * Artwork that fills its frame has no shape to cut, so it keeps its own pixels.
      */
     private fun createGlyphResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, themed: Boolean) {
-        if (themed && bitmap.isSingleColorGlyph()) createTintedMaskResource(apkModule, packageBlock, bitmap, name)
+        if (themed && bitmap.hasAnyTransparency()) createTintedMaskResource(apkModule, packageBlock, bitmap, name)
         else createBitmapResource(apkModule, packageBlock, bitmap, name)
+    }
+
+    /** [createGlyphResource] for a bitmap the builder owns: frees it once it is encoded. */
+    private fun createOwnedGlyphResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, themed: Boolean) =
+        try {
+            createGlyphResource(apkModule, packageBlock, bitmap, name, themed)
+        } finally {
+            bitmap.recycle()
+        }
+
+    private fun Bitmap.hasAnyTransparency(): Boolean {
+        if (width <= 0 || height <= 0) return false
+        val pixels = IntArray(width * height)
+        getPixels(pixels, 0, width, 0, 0, width, height)
+        return pixels.any { it ushr 24 != 0xFF }
     }
 
     /** Writes [mask] under [name] as a bitmap the launcher tints with `@color/icon_color`. */
