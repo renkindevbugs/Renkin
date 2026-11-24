@@ -108,3 +108,14 @@ This area has flipped several times. Before touching `ThemedGlyphDrawable`, `The
   in `3b31c581`.
 - **ED-5** An animation must never add waiting time (rejected: pick flight from Create/Upload
   tiles, bell reveal into Watched icons).
+
+## Build
+
+### BD-1 Release builds are shrunk but not obfuscated
+
+- **Decision:** `app/proguard-rules.pro` sets `-dontobfuscate` and keeps `SourceFile` and
+  `LineNumberTable`. R8 still shrinks and optimises.
+- **Why:** Renkin is open source, so renaming hides nothing; obfuscated crash logs needed the
+  exact build's `mapping.txt`, which had to be copied and attached to every release. Mihon and
+  Morphe do the same (2026-11-24).
+- **Rejected:** keeping obfuscation and publishing a mapping file with each GitHub release.
