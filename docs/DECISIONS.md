@@ -33,6 +33,9 @@ This area has flipped several times. Before touching `ThemedGlyphDrawable`, `The
 - **Decision:** a custom foreground/background pair or a gradient is the user's own choice and
   is exported as painted, not turned into a live glyph (`liveMaterialYouScheme` returns null).
   Only the global themed export replaces every colour with the launcher's tint.
+  With an opaque background it is exported as foreground and background layers plus the glyph as
+  `<monochrome>`, so a launcher theming icons shows the glyph instead of a solid square (issue #33,
+  second report 2026-11-24). A translucent background stays a flat bitmap.
 - **Why:** users pick custom colours precisely so they do not follow the wallpaper.
 - **Open:** PR #34 (2026-11-18) would make every Material You icon live, custom pairs included,
   whenever the themed export is on. The 2026-11-24 review advises against merging it as is
