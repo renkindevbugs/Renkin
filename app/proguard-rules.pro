@@ -1,44 +1,18 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.kts.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Renkin is open source, so renaming classes hides nothing and only makes crash logs unreadable
+# without a per-build mapping file; Mihon and Morphe skip it too. Shrinking and optimisation stay on.
+-dontobfuscate
+# Crash logs keep real file names and line numbers.
+-keepattributes SourceFile,LineNumberTable
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
-
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
-
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
-
-# General options
-#-dontshrink
-#-dontoptimize
-#-dontobfuscate
-
-# Keep XmlParser, fix obfuscate errors
+# ARSCLib bundles its own XmlPull API and android.content.res classes, which share names with the
+# framework's. Upstream kept them whole to fix errors after enabling R8.
 -dontwarn org.xmlpull.v1.**
 -dontnote org.xmlpull.v1.**
 -keep class org.xmlpull.** { *; }
+-keep class android.content.res** { *; }
 
-# Fix resource errors
--keep class android.content.res** { * ; }
+# apksig builds its ASN.1 models reflectively; shrinking them breaks pack signing.
+-keep class com.android.apksig.internal** { *; }
 
-# Fix signing errors
--keep class com.android.apksig.internal** { * ; }
-
-# Fix some antivirus trojan flag
--keep class ru.solrudev.ackpine** { * ; }
-
-# For shrinking troubleshooting, check these files in "app/build/outputs/mapping/release/"
-#   - "usage.txt" lists what ProGuard considers as dead code
-#   - "seeds.txt" exhaustively lists classes and classes members matched by "keep" rules
+# Shrinking Ackpine made some antivirus scanners flag the APK as a trojan.
+-keep class ru.solrudev.ackpine** { *; }

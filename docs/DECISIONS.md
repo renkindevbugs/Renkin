@@ -33,6 +33,9 @@ This area has flipped several times. Before touching `ThemedGlyphDrawable`, `The
 - **Decision:** a custom foreground/background pair or a gradient is the user's own choice and
   is exported as painted, not turned into a live glyph (`liveMaterialYouScheme` returns null).
   Only the global themed export replaces every colour with the launcher's tint.
+  With an opaque background it is exported as foreground and background layers plus the glyph as
+  `<monochrome>`, so a launcher theming icons shows the glyph instead of a solid square (issue #33,
+  second report 2026-11-24). A translucent background stays a flat bitmap.
 - **Why:** users pick custom colours precisely so they do not follow the wallpaper.
 - **Open:** PR #34 (2026-11-18) would make every Material You icon live, custom pairs included,
   whenever the themed export is on. The 2026-11-24 review advises against merging it as is
@@ -108,3 +111,14 @@ This area has flipped several times. Before touching `ThemedGlyphDrawable`, `The
   in `3b31c581`.
 - **ED-5** An animation must never add waiting time (rejected: pick flight from Create/Upload
   tiles, bell reveal into Watched icons).
+
+## Build
+
+### BD-1 Release builds are shrunk but not obfuscated
+
+- **Decision:** `app/proguard-rules.pro` sets `-dontobfuscate` and keeps `SourceFile` and
+  `LineNumberTable`. R8 still shrinks and optimises.
+- **Why:** Renkin is open source, so renaming hides nothing; obfuscated crash logs needed the
+  exact build's `mapping.txt`, which had to be copied and attached to every release. Mihon and
+  Morphe do the same (2026-11-24).
+- **Rejected:** keeping obfuscation and publishing a mapping file with each GitHub release.

@@ -15,6 +15,7 @@ import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextType
+import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
@@ -420,10 +421,13 @@ class IconGeneratorTest {
             ),
             sourceApp
         )!!
-        val bitmap = generated.toBitmap()
+        val layered = generated as AdaptiveIconPackDrawable
+        val foreground = layered.foreground
 
         assertTrue(generated.isAdaptiveIcon())
-        assertEquals(Color.BLACK, bitmap.getPixel(30, 45))
+        // Launchers theming icons read only the monochrome layer (issue #33).
+        assertTrue(layered.hasMonochrome)
+        assertEquals(Color.BLACK, foreground.getPixel(foreground.width * 3 / 10, foreground.height / 2))
     }
 
     @Test
@@ -459,14 +463,13 @@ class IconGeneratorTest {
                 applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU
             ),
             app(icon = BitmapDrawable(context.resources, sourceBitmap))
-        ) as BitmapIconDrawable
+        )
 
-        assertTrue(modified.isAdaptiveIcon())
-        assertEquals(1.5f, modified.previewScale)
+        assertTrue(modified!!.isAdaptiveIcon())
     }
 
     @Test
-    fun materialYouShapeBakesPreviewZoomBeforeDroppingAdaptiveMetadata() {
+    fun materialYouShapeFlattensTheLauncherFrameWithoutExtraZoom() {
         val sourceBitmap = Bitmap.createBitmap(90, 90, Bitmap.Config.ARGB_8888).apply {
             eraseColor(Color.BLACK)
             for (y in 30 until 60) for (x in 30 until 60) setPixel(x, y, Color.WHITE)
@@ -478,7 +481,7 @@ class IconGeneratorTest {
                 applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU
             ),
             sourceApp
-        ) as BitmapIconDrawable
+        ) as AdaptiveIconPackDrawable
         val shaped = generateOnce(
             options(
                 source = Source.APPLICATION_ICON,
@@ -486,12 +489,12 @@ class IconGeneratorTest {
                 iconShape = IconShape.CIRCLE
             ),
             sourceApp
-        ) as BitmapIconDrawable
+        )
 
-        assertEquals(1.5f, previewScaleToBakeForShape(plain, shaped = true))
-        assertEquals(1f, previewScaleToBakeForShape(plain, shaped = false))
-        assertFalse(shaped.isAdaptiveIcon())
-        assertEquals(1f, shaped.previewScale)
+        // The layered export already flattens the 72dp frame the launcher shows, so nothing is re-zoomed.
+        assertEquals(1f, previewScaleToBakeForShape(plain, shaped = true))
+        assertFalse(shaped!!.isAdaptiveIcon())
+        assertEquals(1f, (shaped as? BitmapIconDrawable)?.previewScale ?: 1f)
     }
 
     @Test

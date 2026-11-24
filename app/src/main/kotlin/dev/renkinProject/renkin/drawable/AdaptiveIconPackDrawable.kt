@@ -213,9 +213,9 @@ class AdaptiveIconPackDrawable internal constructor(
                 originalBackgroundPng
             )
 
-        /** Layers already captured at [LAYER_SIZE], e.g. one clock hand on a transparent background. */
-        internal fun ofLayers(foreground: Bitmap, background: Bitmap): AdaptiveIconPackDrawable =
-            AdaptiveIconPackDrawable(foreground, background)
+        /** Layers already rendered as full 108dp layers, e.g. one clock hand on a transparent background. */
+        internal fun ofLayers(foreground: Bitmap, background: Bitmap, monochrome: Bitmap? = null): AdaptiveIconPackDrawable =
+            AdaptiveIconPackDrawable(foreground, background, monochrome)
 
         // Capture the whole 108dp layer, including its own inset, before Android applies 72dp masking.
         fun captureLayer(layer: Drawable): Bitmap {

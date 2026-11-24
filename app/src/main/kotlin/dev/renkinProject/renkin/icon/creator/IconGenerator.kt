@@ -537,9 +537,10 @@ class IconGenerator(
         mono.setBounds(0, 0, size, size)
         val mask = newArgbBitmap(size, size) { mono.draw(it) }
         liveMaterialYouScheme()?.let { return ThemedGlyphDrawable(mask, it) }
+        layeredMaterialYouDrawable(recolorMaterialYouForeground(mask), mask)?.let { return it }
 
-        // Opaque results stay adaptive so the launcher applies its mask. A translucent background
-        // takes the flat path below because an adaptive export would insert the pack background.
+        // A translucent background takes the flat path because an adaptive export would insert
+        // the pack background.
         return materialYouDrawable(recolorMaterialYouLayer(mask))
     }
 
@@ -600,16 +601,21 @@ class IconGenerator(
         val foreground = Bitmap.createBitmap(icon.width, icon.height, Bitmap.Config.ARGB_8888)
         foreground.setPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
 
+        // The same 72dp-in-108dp placement as the flat export below.
+        val glyph = newArgbBitmap(icon.width, icon.height) { canvas ->
+            val insetScale = 1f / adaptiveIconScale
+            canvas.scale(insetScale, insetScale, icon.width / 2f, icon.height / 2f)
+            canvas.drawBitmap(foreground, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
+        }
         liveMaterialYouScheme()?.let { scheme ->
-            // The same 72dp-in-108dp placement as below, as a glyph the launcher tints.
-            val glyph = newArgbBitmap(icon.width, icon.height) { canvas ->
-                val insetScale = 1f / adaptiveIconScale
-                canvas.scale(insetScale, insetScale, icon.width / 2f, icon.height / 2f)
-                canvas.drawBitmap(foreground, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
-            }
             foreground.recycle()
             return ThemedGlyphDrawable(glyph, scheme)
         }
+        layeredMaterialYouDrawable(glyph, glyph)?.let {
+            foreground.recycle()
+            return it
+        }
+        glyph.recycle()
 
         // Adaptive launchers display only the inner 72dp of a 108dp foreground. Inset the complete
         // original icon by that ratio before export; previewScale reverses the inset in the flat
@@ -633,6 +639,30 @@ class IconGenerator(
         }
         return materialYouDrawable(generated)
     }
+
+    /**
+     * Custom colours stay as painted, but a launcher theming icons reads only the monochrome layer;
+     * without one it flattened the whole plate into a solid square (issue #33). With an opaque
+     * background the variant is therefore exported as foreground and background layers with the
+     * glyph as its monochrome layer. Null for a translucent background, which stays flat.
+     */
+    private fun layeredMaterialYouDrawable(foreground: Bitmap, monochrome: Bitmap): IconPackDrawable? {
+        if (android.graphics.Color.alpha(export.background.color) != 255) return null
+        val background = newArgbBitmap(foreground.width, foreground.height) { canvas ->
+            val shader = options.backgroundShader(foreground.width, foreground.height)
+            if (shader == null) canvas.drawColor(export.background.color)
+            else canvas.drawPaint(Paint(Paint.ANTI_ALIAS_FLAG).apply { this.shader = shader })
+        }
+        return AdaptiveIconPackDrawable.ofLayers(foreground, background, monochrome)
+    }
+
+    /** [recolorMaterialYouLayer] without its background: the glyph alone, for the foreground layer. */
+    private fun recolorMaterialYouForeground(mask: Bitmap): Bitmap = recolorMaterialYouMask(
+        mask,
+        modifiers.effect.colorizer.firstColor,
+        android.graphics.Color.TRANSPARENT,
+        export.foregroundStyle
+    )
 
     /**
      * An adaptive icon always receives the pack's global background during export. A translucent
