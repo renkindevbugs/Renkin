@@ -72,6 +72,30 @@ private val releaseHistory = listOf(
             WhatsNewSection(
                 R.string.whatsNewSectionNew,
                 listOf(
+                    R.string.whatsNewThemedIconSource,
+                    R.string.whatsNewPullToRefresh
+                )
+            ),
+            WhatsNewSection(
+                R.string.whatsNewSectionChanged,
+                listOf(R.string.whatsNewQuietUnsavedIcons)
+            ),
+            WhatsNewSection(
+                R.string.whatsNewSectionFixed,
+                listOf(
+                    R.string.whatsNewMaterialYouThemed,
+                    R.string.whatsNewMotoClock,
+                    R.string.whatsNewSmallFixes
+                )
+            )
+        )
+    ),
+    WhatsNewRelease(
+        "2026.11.02",
+        listOf(
+            WhatsNewSection(
+                R.string.whatsNewSectionNew,
+                listOf(
                     R.string.whatsNewWallpaperColours,
                     R.string.whatsNewOnlineIconSets,
                     R.string.whatsNewLiveCalendarClock,

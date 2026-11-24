@@ -1069,6 +1069,12 @@
     <string name="whatsNewFasterBrowsing">**Faster:** Icon pack browsing, editor loading, pack builds and Pack preview scrolling are quicker and use less memory.</string>
     <string name="whatsNewAndroid7">**Requirements:** Renkin now needs Android 7.0 or newer.</string>
     <string name="whatsNewOlderAndroidBuilds">**Builds:** Pack builds work again on Android 9 and 10, and a failed build shows a readable report.</string>
+    <string name="whatsNewThemedIconSource">**Themed icon source:** Lawnchair and Kvaesitso can use a built pack as their themed icon source, and Smart Launcher themes the apps a Material You pack misses.</string>
+    <string name="whatsNewPullToRefresh">**Pull to refresh:** Pull down on the home list to reload apps and icon packs.</string>
+    <string name="whatsNewQuietUnsavedIcons">**Unsaved icons:** No dialog at startup; lost icons wait behind the restore icon next to the profile name.</string>
+    <string name="whatsNewMaterialYouThemed">**Material You icons:** They follow the current wallpaper colours again and keep their layers when the launcher themes icons.</string>
+    <string name="whatsNewMotoClock">**Moto launcher:** Clock icons show again. Thanks to Mr-WHT!</string>
+    <string name="whatsNewSmallFixes">**Smaller fixes:** Vector clip paths, six-digit hex colours, emoji app names and backup reliability.</string>
     <string name="whatsNewProfilePackIcons">**Profiles:** One profile’s pack icon no longer shows up on your other profiles’ packs.</string>
     <string name="whatsNewBuildMemory">**Reliability:** Lower memory use while building, a warning when the latest automatic backup failed, and fewer crashes with pack icons.</string>
     <string name="whatsNewGlobalStyleTools">**Global Style:** Customize shadows in the panel while keeping icons visible, revisit Apply history, keep the style during individual edits, and bake or undo a look.</string>
