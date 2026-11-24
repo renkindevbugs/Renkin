@@ -659,7 +659,7 @@ class IconPackBuilder(
 
         fun adaptive(includeMonochrome: Boolean) = AdaptiveIconXml().apply {
             background("@drawable/${name}_background")
-            foreground(name)
+            foreground(name, isLayerList = clockLayers != null)
             if (includeMonochrome) monochrome("@drawable/${name}_monochrome")
         }
         createXmlDrawableResource(apkModule, packageBlock, adaptive(false), name, "anydpi-v26", type)
