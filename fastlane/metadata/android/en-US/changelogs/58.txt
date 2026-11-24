@@ -1,0 +1,7 @@
+• Material You icons follow wallpaper colours again and keep their layers when themed.
+• Built packs work as a themed icon source in Lawnchair and Kvaesitso.
+• Smart Launcher themes apps a Material You pack misses.
+• Clock icons now show on the Moto launcher. Thanks to @Mr-WHT!
+• Pull down on the home list to refresh apps and icon packs.
+• Lost unsaved icons wait behind the restore icon, no startup dialog.
+• Fixes for vector clip paths, hex colours, emoji app names and backups.
