@@ -61,7 +61,6 @@
     <string name="close">关闭</string>
     <string name="packsSynced">图标包已同步</string>
     <string name="packsSyncFailed">无法同步图标包</string>
-    <string name="appListRefreshed">应用列表已刷新</string>
     <string name="crashLogsShortcutShort">崩溃日志</string>
     <string name="crashLogsShortcutLong">打开 Renkin 崩溃日志</string>
     <string name="undoAction">撤销</string>
@@ -130,7 +129,6 @@
     <string name="automaticallyCenter">自动居中</string>
     <string name="deadZone">死区</string>
     <string name="uploadImageError">无法上传图片</string>
-    <string name="syncPacks">同步图标包</string>
     <string name="retrieveCalendarIcon">获取日历图标</string>
     <string name="calendarDayIcons">日历日期图标</string>
     <string name="calendarDayIconsDesc">来自 %2$s 的 %1$s · 随日期轮换</string>
@@ -142,7 +140,6 @@
     <string name="overrideIcon">刷新会替换现有图标</string>
     <string name="deleteIconPack">卸载图标包</string>
     <string name="iconPackUninstalled">Renkin 图标包已卸载</string>
-    <string name="refreshApplicationList">刷新应用列表</string>
     <string name="applicationIcon">应用图标</string>
     <string name="primarySource">主要来源</string>
     <string name="primaryIconPack">主要图标包</string>

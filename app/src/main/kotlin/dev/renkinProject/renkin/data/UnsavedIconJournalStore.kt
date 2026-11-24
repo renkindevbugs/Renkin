@@ -94,7 +94,7 @@ class UnsavedIconJournalStore @Inject constructor(@param:ApplicationContext priv
     }
 
     private fun read(file: AtomicFile): UnsavedIconJournal? {
-        if (!file.baseFile.exists()) return null
+        if (!file.hasCommittedData()) return null
         return try {
             UnsavedIconJournalCodec.decode(String(file.readFully(), Charsets.UTF_8))
         } catch (error: Exception) {

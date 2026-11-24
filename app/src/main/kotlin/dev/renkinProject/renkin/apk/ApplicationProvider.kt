@@ -423,6 +423,8 @@ class ApplicationProvider internal constructor(
             isProfileSwitching = true
             try {
                 invalidateSession()
+                // Reinstalled or updated packs can map their icons differently now.
+                lockManager.clearProvenanceCache()
                 initialize()
                 replaceApplications(mergeApplicationReload(session, applicationList.toList(), keptKeys))
                 val liveKeys = applicationList.mapTo(mutableSetOf()) { it.key }

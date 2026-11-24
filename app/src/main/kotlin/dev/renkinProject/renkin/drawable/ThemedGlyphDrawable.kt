@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.drawable
 
+import android.content.Context
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.Bitmap
@@ -18,6 +19,8 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.view.Gravity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.painter.Painter
 import dev.renkinProject.renkin.extension.newArgbBitmap
 import dev.renkinProject.renkin.icon.creator.MATERIAL_YOU_SCHEME_COLOR_IDS
@@ -52,12 +55,16 @@ class ThemedGlyphDrawable(mask: Bitmap, val scheme: Int = SYSTEM_PALETTE) : Icon
     override fun getIntrinsicHeight(): Int = PREVIEW_SIZE
 
     @Composable
-    override fun getPainter(): Painter = rememberPreviewPainter(PREVIEW_SIZE)
+    override fun getPainter(): Painter {
+        val configuration = LocalConfiguration.current
+        val revision = remember(configuration, scheme) { colorRevision() }
+        return rememberPreviewPainter(PREVIEW_SIZE, revision = revision)
+    }
 
     override fun draw(canvas: Canvas) {
         val size = maxOf(bounds.width(), bounds.height()).coerceAtMost(PREVIEW_SIZE)
         if (size <= 0) return
-        val bitmap = IconPreviewCache.getOrRender(IconPreviewCacheKey(this, size)) ?: return
+        val bitmap = IconPreviewCache.getOrRender(IconPreviewCacheKey(this, size, colorRevision())) ?: return
         canvas.drawBitmap(bitmap, null, bounds, paint)
     }
 
@@ -66,6 +73,9 @@ class ThemedGlyphDrawable(mask: Bitmap, val scheme: Int = SYSTEM_PALETTE) : Icon
 
     @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+
+    // The preview cache keys on identity, so the render colours must be part of the key.
+    private fun colorRevision(): Int = ThemedGlyphColors.current(scheme).hashCode()
 
     private fun render(size: Int): Bitmap {
         val (foreground, background) = ThemedGlyphColors.current(scheme)
@@ -109,15 +119,25 @@ class ThemedGlyphDrawable(mask: Bitmap, val scheme: Int = SYSTEM_PALETTE) : Icon
  * the pack, resolved from the system the way the launcher resolves them.
  */
 internal object ThemedGlyphColors {
+    // Resources.getSystem() keeps the palette the process inherited from zygote, so after a
+    // wallpaper change it reads stale or default (blue) system colours (issue #33). The
+    // application's resources receive the wallpaper colour overlay like the launcher does.
+    @Volatile
+    private var appResources: Resources? = null
+
+    fun install(context: Context) {
+        appResources = context.applicationContext.resources
+    }
+
     fun current(scheme: Int = ThemedGlyphDrawable.SYSTEM_PALETTE): Pair<Int, Int> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return Color.WHITE to Color.BLACK
-        val system = Resources.getSystem()
+        val resources = appResources ?: Resources.getSystem()
         MATERIAL_YOU_SCHEME_COLOR_IDS.getOrNull(scheme)?.let { (foreground, background) ->
-            return system.getColor(foreground, null) to system.getColor(background, null)
+            return resources.getColor(foreground, null) to resources.getColor(background, null)
         }
-        val night = (system.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val night = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val foreground = if (night) android.R.color.system_accent1_200 else android.R.color.system_accent1_700
         val background = if (night) android.R.color.system_accent2_800 else android.R.color.system_accent1_100
-        return system.getColor(foreground, null) to system.getColor(background, null)
+        return resources.getColor(foreground, null) to resources.getColor(background, null)
     }
 }

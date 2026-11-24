@@ -99,9 +99,10 @@ private class EmptyIconPreviewPainter(override val intrinsicSize: Size) : Painte
 @Composable
 internal fun IconPackDrawable.rememberPreviewPainter(
     sizePx: Int,
-    intrinsicSize: Size = Size(sizePx.toFloat(), sizePx.toFloat())
+    intrinsicSize: Size = Size(sizePx.toFloat(), sizePx.toFloat()),
+    revision: Int = 0
 ): Painter {
-    val key = remember(this, sizePx) { IconPreviewCacheKey(this, sizePx) }
+    val key = remember(this, sizePx, revision) { IconPreviewCacheKey(this, sizePx, revision) }
     var bitmap by remember { mutableStateOf(IconPreviewCache.get(key)) }
     LaunchedEffect(key) {
         // Keep the previous frame while rendering; a failed request withdraws that stale image.

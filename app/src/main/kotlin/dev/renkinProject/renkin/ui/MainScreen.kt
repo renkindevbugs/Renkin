@@ -92,6 +92,8 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
+import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -115,6 +117,9 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
@@ -493,11 +498,22 @@ fun MainColumn(iconPacks: List<IconPack>) {
     )
 
     val introTargets = remember { IntroTargets() }
-    // No pull-to-refresh here on purpose: its nested-scroll handler interfered with the
-    // collapsing top bar (scroll glitches, freezes) — the app list reloads from Settings.
+    // The pull handler wraps the Scaffold, outside the top bar's nested-scroll connection: a
+    // downward overscroll re-expands the collapsed bar before it reaches the pull, and a
+    // reverse drag shrinks the pull before collapsing the bar. Inside the Scaffold it stole
+    // the bar's overscroll, and an enabled gate froze mid-gesture (July 2026 attempts).
+    // The refresh shows the profile skeleton with its own spinner, so the pull indicator
+    // retracts on release; a repeated pull meanwhile is ignored by the ViewModel.
+    val pullState = rememberPullToRefreshState()
     CompositionLocalProvider(LocalIntroTargets provides introTargets) {
         Scaffold(
-            modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+            modifier = Modifier
+                .pullToRefresh(
+                    isRefreshing = false,
+                    state = pullState,
+                    onRefresh = viewModel::refreshAppsAndPacks
+                )
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
             topBar = { TitleBar(scrollBehavior) },
             snackbarHost = { SnackbarHost(snackbarHostState) },
             floatingActionButton = {
@@ -536,12 +552,19 @@ fun MainColumn(iconPacks: List<IconPack>) {
                         }
                     }
                 }
-                ApplicationList(
-                    iconPacks, applicationState, packageFilter, sortOrder, filterNoIcon, filterFallback, filterLocked, listState,
-                    onShowAllApps = clearProblemFilters,
-                    activeProblemFilters = activeProblemFilters,
-                    onProblemFilterToggle = toggleProblemFilter
-                )
+                Box(Modifier.weight(1f)) {
+                    ApplicationList(
+                        iconPacks, applicationState, packageFilter, sortOrder, filterNoIcon, filterFallback, filterLocked, listState,
+                        onShowAllApps = clearProblemFilters,
+                        activeProblemFilters = activeProblemFilters,
+                        onProblemFilterToggle = toggleProblemFilter
+                    )
+                    PullToRefreshDefaults.Indicator(
+                        state = pullState,
+                        isRefreshing = false,
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    )
+                }
             }
         }
     }
@@ -610,10 +633,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
         profileActionProgress == null && !viewModel.showMissingPacksDialog && !viewModel.watchProfileMissing
     val lostUnsavedWork by viewModel.lostUnsavedWork.collectAsStateWithLifecycle()
     val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
-    lostUnsavedWork?.takeIf { startupPromptsAllowed && runtimeState.ready }?.let { lost ->
-        // Journaled icons restore only into their own profile, which is active after a restart
-        // unless the user switched first; otherwise the journal waits for a later start.
-        val offer = lost.offer?.takeIf { it.entries.isNotEmpty() && it.profileId == runtimeState.activeProfileId }
+    lostUnsavedWork?.takeIf { viewModel.lostWorkReviewOpen && runtimeState.ready }?.let { lost ->
+        val offer = lost.restorableOffer(runtimeState.activeProfileId)
         val marker = lost.marker
         when {
             offer != null -> RestoreLostIconsDialog(
@@ -621,7 +642,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 profileName = profiles.firstOrNull { it.id == offer.profileId }?.name.orEmpty(),
                 onRestore = { viewModel.restoreLostIcons(refreshAfter = false) },
                 onRefresh = { viewModel.restoreLostIcons(refreshAfter = true) },
-                onLater = viewModel::dismissLostUnsavedWork,
+                onLater = viewModel::closeLostWorkReview,
                 onDiscard = viewModel::discardLostIcons
             )
             marker != null -> LostUnsavedSessionDialog(
@@ -634,8 +655,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
             else -> LaunchedEffect(lost) { viewModel.dismissLostUnsavedWork() }
         }
     }
-    // Lost or restorable icons come first; the editor-draft offer is the more specific follow-up.
-    EditorDraftRecoveryHost(iconPacks, showPrompt = startupPromptsAllowed && lostUnsavedWork == null)
+    // Lost or restorable icons open from the title-bar icon first; the editor draft is the follow-up.
+    EditorDraftRecoveryHost(iconPacks, showPrompt = startupPromptsAllowed && !viewModel.lostWorkReviewOpen)
 }
 
 /**
@@ -1571,6 +1592,17 @@ fun OpenAppOptions(
         if (recoveredSessionId == null) draftOwner.closeLive(sessionId)
         onDismiss()
     }
+    // A filtered list (e.g. Missing) drops the row once its icon is applied, disposing this editor
+    // before its close animation reaches closeEditor; the stored icon must still end the draft.
+    var iconStored by remember(sessionId) { mutableStateOf(false) }
+    val hostActivity = LocalActivity.current
+    DisposableEffect(sessionId) {
+        onDispose {
+            if (iconStored && recoveredSessionId == null && hostActivity?.isChangingConfigurations != true) {
+                draftOwner.closeLive(sessionId)
+            }
+        }
+    }
     var pendingApplyId by rememberSaveable(sessionId) { mutableStateOf<Long?>(null) }
     val applyResults by viewModel.iconApplyResults.collectAsStateWithLifecycle()
     LaunchedEffect(pendingApplyId, applyResults) {
@@ -1605,6 +1637,7 @@ fun OpenAppOptions(
                 session.confirmedModifierUse, session.adjustments.loadedPresetId
             )
         )
+        if (!awaitApply) iconStored = true
     }, closeEditor, onIconClear = {
         closeEditor()
         viewModel.resetIcon(session.application, expected)
@@ -1683,6 +1716,9 @@ fun TitleBar(
     }
     val draftOwner: EditorDraftRecoveryViewModel = hiltViewModel()
     val hasSavedEdit by draftOwner.hasSavedEdit.collectAsStateWithLifecycle()
+    val lostUnsavedWork by mainViewModel.lostUnsavedWork.collectAsStateWithLifecycle()
+    val runtimeState by mainViewModel.runtimeState.collectAsStateWithLifecycle()
+    val hasLostWork = runtimeState.ready && lostUnsavedWork?.hasSomethingToShow(runtimeState.activeProfileId) == true
 
     TitleBarContent(
         scrollBehavior = scrollBehavior,
@@ -1697,10 +1733,10 @@ fun TitleBar(
         title = {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f).introTarget(IntroTarget.PROFILE)) { ProfileSwitcherTitle() }
-                if (hasSavedEdit) {
+                if (hasLostWork || hasSavedEdit) {
                     SavedEditorDraftButton(
                         reduceMotion = prefs.reducesMotion(MotionPart.ATTENTION),
-                        onClick = draftOwner::reviewSavedEdit
+                        onClick = if (hasLostWork) mainViewModel::openLostWorkReview else draftOwner::reviewSavedEdit
                     )
                 }
             }

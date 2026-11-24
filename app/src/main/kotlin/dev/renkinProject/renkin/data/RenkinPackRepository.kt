@@ -319,6 +319,28 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
     }
 
     /**
+     * Upserts [updates] merged onto the rows stored at write time, so a writer working from an
+     * older snapshot (e.g. across a store lookup) never loses a concurrent write: ownership
+     * (`seenInstalled`) and a decisive verdict are never downgraded, and a label never blanked.
+     */
+    suspend fun mergeVerdicts(updates: List<PackVerdict>) {
+        if (updates.isEmpty()) return
+        transaction {
+            val stored = verdictDao.get(updates.map { it.packageName }).associateBy { it.packageName }
+            verdictDao.upsert(updates.map { update ->
+                val current = stored[update.packageName] ?: return@map update
+                val keepStoredVerdict = update.verdict == VERDICT_UNKNOWN && current.verdict != VERDICT_UNKNOWN
+                update.copy(
+                    verdict = if (keepStoredVerdict) current.verdict else update.verdict,
+                    checkedAt = if (keepStoredVerdict) current.checkedAt else update.checkedAt,
+                    label = update.label.ifEmpty { current.label },
+                    seenInstalled = update.seenInstalled || current.seenInstalled
+                )
+            })
+        }
+    }
+
+    /**
      * Rebuilds the per-device verdict cache from scratch, keeping only what is actually
      * installed now (marked owned). Used after a full-backup restore: the cache is device-local
      * truth about which packs are owned/priced HERE and must not survive a restore that replaced

@@ -70,6 +70,7 @@ import dev.renkinProject.renkin.ui.ToastHost
 import dev.renkinProject.renkin.ui.Toaster
 import dev.renkinProject.renkin.ui.theme.RenkinTheme
 import dev.renkinProject.renkin.util.Log
+import dev.renkinProject.renkin.util.launchGuarded
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
@@ -436,7 +437,12 @@ class GlobalOptionsViewModel @Inject constructor(
     private var saveJob: Job? = null
 
     init {
-        viewModelScope.launch {
+        viewModelScope.launchGuarded(
+            onFailure = { error ->
+                Log.error("GlobalOptionsViewModel", "Global draft seed failed", error)
+                _toastEvents.trySend(R.string.globalOptionsLoadFailed)
+            }
+        ) {
             if (!draft.initialized) {
                 draft.seedFrom(getApplication<Application>().dataStore.getPreferencesAfterPendingWrites())
                 baseline = draft.snapshot()

@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.data
 
 import android.util.AtomicFile
+import java.io.File
 import java.io.IOException
 
 private const val VERIFY_BUFFER_BYTES = 64 * 1024
@@ -40,3 +41,10 @@ private fun AtomicFile.holdsExactly(expected: ByteArray): Boolean = openRead().u
     }
     input.read() == -1
 }
+
+/**
+ * True when a committed copy exists. On API 24–29 an interrupted write leaves only the `.bak`
+ * copy, which [AtomicFile.readFully] restores, so checking [AtomicFile.getBaseFile] alone loses it.
+ */
+internal fun AtomicFile.hasCommittedData(): Boolean =
+    baseFile.exists() || File(baseFile.path + ".bak").exists()

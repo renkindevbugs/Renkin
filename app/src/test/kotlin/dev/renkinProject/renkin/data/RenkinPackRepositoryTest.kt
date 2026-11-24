@@ -212,4 +212,25 @@ class RenkinPackRepositoryTest {
         assertTrue(runCatching { repo.createProfile(Profile(name = "Broken", packIcon = "not an icon document")) }.isFailure)
         assertTrue(repo.profiles().none { it.name == "Broken" })
     }
+
+    @Test
+    fun mergeVerdicts_neverDowngradesOwnershipVerdictOrLabel() = runBlocking {
+        repo.upsertVerdicts(listOf(PackVerdict("pack", VERDICT_PAID, "Pack", seenInstalled = true, checkedAt = 5)))
+
+        repo.mergeVerdicts(listOf(PackVerdict("pack", VERDICT_UNKNOWN, "", seenInstalled = false, checkedAt = 9)))
+
+        assertEquals(
+            PackVerdict("pack", VERDICT_PAID, "Pack", seenInstalled = true, checkedAt = 5),
+            repo.verdicts(listOf("pack"))["pack"]
+        )
+    }
+
+    @Test
+    fun mergeVerdicts_appliesADecisiveUpdate() = runBlocking {
+        repo.upsertVerdicts(listOf(PackVerdict("pack", VERDICT_UNKNOWN, "Pack")))
+
+        repo.mergeVerdicts(listOf(PackVerdict("pack", VERDICT_FREE, "Pack", checkedAt = 9)))
+
+        assertEquals(VERDICT_FREE, repo.verdicts(listOf("pack"))["pack"]?.verdict)
+    }
 }

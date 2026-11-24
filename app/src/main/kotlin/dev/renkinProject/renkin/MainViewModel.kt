@@ -555,9 +555,9 @@ class MainViewModel @Inject constructor(
         serialize: Boolean = true,
         profileTarget: ProfileSwitchTarget? = null,
         operation: suspend (ProfileSessionToken) -> Unit
-    ) {
+    ): Boolean {
         val progress = ProfileActionProgress(messageRes, applicationName, profileTarget)
-        foregroundProfileActions.launch(progress, serialize) {
+        return foregroundProfileActions.launch(progress, serialize) {
             launchProfileOperation(expected, serialize = false) { owner ->
                 try {
                     operation(owner)
@@ -781,16 +781,32 @@ class MainViewModel @Inject constructor(
     /** Unsaved work a previous process held when Android ended it; offered or explained after startup. */
     val lostUnsavedWork = unsavedSessionMonitor.lostWork
 
-    /** OK on the notice, or Not now on the restore offer: the journal stays for a later start. */
-    fun dismissLostUnsavedWork() = unsavedSessionMonitor.dismiss()
+    /**
+     * Lost or restorable work never opens by itself at startup; the title-bar restore icon opens
+     * this review, and Not now only closes it so the icon stays.
+     */
+    var lostWorkReviewOpen by mutableStateOf(false)
+        private set
+
+    fun openLostWorkReview() { lostWorkReviewOpen = true }
+
+    fun closeLostWorkReview() { lostWorkReviewOpen = false }
+
+    /** OK on the notice: the journal stays for a later start. */
+    fun dismissLostUnsavedWork() {
+        lostWorkReviewOpen = false
+        unsavedSessionMonitor.dismiss()
+    }
 
     fun discardLostIcons() {
+        lostWorkReviewOpen = false
         launchUserAction(R.string.profileOperationFailed) { unsavedSessionMonitor.closeOffer() }
     }
 
     /** Restores the offered hand-made icons; with [refreshAfter] also regenerates refresh output. */
     fun restoreLostIcons(refreshAfter: Boolean) {
         val offer = lostUnsavedWork.value?.offer ?: return
+        lostWorkReviewOpen = false
         unsavedSessionMonitor.dismiss()
         launchProfileOperation { expected ->
             val restored = appProvider.restoreUnsavedIcons(expected, offer)
@@ -803,6 +819,7 @@ class MainViewModel @Inject constructor(
 
     fun refreshAfterLostSession() {
         val lost = lostUnsavedWork.value?.marker
+        lostWorkReviewOpen = false
         unsavedSessionMonitor.dismiss()
         if (lost != null && lost.profileId == activeProfileId && startupComplete) refresh()
     }
@@ -1038,8 +1055,7 @@ class MainViewModel @Inject constructor(
             _toastEvents.trySend(refusal)
             return false
         }
-        buildSession.startBuild(expected)
-        return true
+        return buildSession.startBuild(expected)
     }
 
     // Records that [app] was hand-edited this session (so the build preview marks it "changed").
@@ -1345,41 +1361,57 @@ class MainViewModel @Inject constructor(
 
     fun closeAddedAppEditor() { addedAppEditorKey = null }
 
-    // True while the app list reload runs — drives the home list's pull-to-refresh spinner.
     var appsRefreshing by mutableStateOf(false)
         private set
 
     /** Reloads apps, icon packs and saved rows while preserving this session's unsaved keys. */
-    fun refreshApps() {
+    fun refreshAppsAndPacks() {
         if (appsRefreshing) return
         appsRefreshing = true
-        launchProfileOperation { expected ->
-            val previousEdits = updatedKeys
-            val previousBaselines = changeBaselinesSession
-            try {
-                val reloaded = appProvider.reloadPreservingSession(expected, unsavedKeys())
-                packBrowserPreviews.clear()
-                packBrowserPreviews.prewarm(iconPackState.value.packs)
-                // An uninstalled app no longer has a visible row to carry a session edit.
-                val liveKeys = appProvider.applicationList.mapTo(mutableSetOf()) { it.key }
-                appProvider.commitSessionState(reloaded) {
-                    updatedKeys = previousEdits.filterTo(mutableSetOf()) { it in liveKeys }
-                    changeBaselinesSession = reloaded.takeIf { previousBaselines == expected }
-                }
-                _toastEvents.trySend(R.string.appListRefreshed)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: ProfileSessionChangedException) {
-                throw error
-            } catch (error: ProfileReloadFailedException) {
-                appProvider.commitSessionState(error.restoredSession) {
-                    updatedKeys = previousEdits
-                    if (previousBaselines == expected) changeBaselinesSession = error.restoredSession
-                }
-                throw error
-            } finally {
-                appsRefreshing = false
+        viewModelScope.launch {
+            // The reload empties the list first; the profile-switch skeleton keeps the hero
+            // and tiles in place for the active profile instead of a blank screen.
+            val profile = appProvider.profilesFlow().first().firstOrNull { it.id == activeProfileId }
+            val target = ProfileSwitchTarget(
+                id = activeProfileId,
+                name = profile?.name.orEmpty(),
+                packLabel = profile?.packLabel.orEmpty(),
+                packIcon = profile?.packIcon.orEmpty()
+            )
+            val started = launchVisibleProfileOperation(R.string.refreshingAppsAndPacks, profileTarget = target) { expected ->
+                reloadAppsAndPacks(expected)
             }
+            if (!started) appsRefreshing = false
+        }
+    }
+
+    private suspend fun reloadAppsAndPacks(expected: ProfileSessionToken) {
+        val previousEdits = updatedKeys
+        val previousBaselines = changeBaselinesSession
+        try {
+            val reloaded = appProvider.reloadPreservingSession(expected, unsavedKeys())
+            packBrowserPreviews.clear()
+            packBrowserPreviews.prewarm(iconPackState.value.packs)
+            // An uninstalled app no longer has a visible row to carry a session edit.
+            val liveKeys = appProvider.applicationList.mapTo(mutableSetOf()) { it.key }
+            appProvider.commitSessionState(reloaded) {
+                updatedKeys = previousEdits.filterTo(mutableSetOf()) { it in liveKeys }
+                changeBaselinesSession = reloaded.takeIf { previousBaselines == expected }
+            }
+            refreshMissingPacks(prompt = false)
+            _toastEvents.trySend(R.string.appsAndPacksRefreshed)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: ProfileSessionChangedException) {
+            throw error
+        } catch (error: ProfileReloadFailedException) {
+            appProvider.commitSessionState(error.restoredSession) {
+                updatedKeys = previousEdits
+                if (previousBaselines == expected) changeBaselinesSession = error.restoredSession
+            }
+            throw error
+        } finally {
+            appsRefreshing = false
         }
     }
 
@@ -1718,24 +1750,35 @@ class MainViewModel @Inject constructor(
 
     /**
      * Uses the live list for the active profile so an unsaved IPS selection is not missed;
-     * inactive profiles can be read from their persisted rows.
+     * inactive profiles can be read from their persisted rows. Null when the read failed (the
+     * failure is already shown), so the share must not start.
      */
-    suspend fun profileUsesIconPackStudio(profileId: Long): Boolean =
-        if (profileId == activeProfileId && applicationsLoaded) {
-            applicationList.any { isIconPackStudioExport(it.sourcePackName.orEmpty()) }
-        } else {
-            backupManager.profileUsesIconPackStudio(profileId)
+    suspend fun profileUsesIconPackStudio(profileId: Long): Boolean? =
+        exportPreflight(R.string.profileExportFailed) {
+            if (profileId == activeProfileId && applicationsLoaded) {
+                applicationList.any { isIconPackStudioExport(it.sourcePackName.orEmpty()) }
+            } else {
+                backupManager.profileUsesIconPackStudio(profileId)
+            }
         }
 
     /** Full-backup counterpart: live active-profile rows plus every other saved profile. */
-    suspend fun backupUsesIconPackStudio(): Boolean {
+    suspend fun backupUsesIconPackStudio(): Boolean? = exportPreflight(R.string.backupExportFailed) {
         val activeProfileUsesIps = if (applicationsLoaded) {
             applicationList.any { isIconPackStudioExport(it.sourcePackName.orEmpty()) }
         } else {
             backupManager.profileUsesIconPackStudio(activeProfileId)
         }
-        return activeProfileUsesIps || backupManager.otherProfilesUseIconPackStudio(activeProfileId)
+        activeProfileUsesIps || backupManager.otherProfilesUseIconPackStudio(activeProfileId)
     }
+
+    private suspend fun exportPreflight(@StringRes failure: Int, check: suspend () -> Boolean): Boolean? =
+        runCatchingCancellable { check() }
+            .onFailure { error ->
+                Log.error("MainViewModel", "Export pre-check failed", error)
+                _toastEvents.trySend(failure)
+            }
+            .getOrNull()
 
     private val backupCoordinator = BackupUiCoordinator(
         provider = appProvider,

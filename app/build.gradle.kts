@@ -75,8 +75,8 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         // Renkin's own year.month.patch scheme, started for the first release under the new
         // app id (the 2025.02.00 / 44 values were inherited from the Alembicons fork).
-        versionCode = 57
-        versionName = "2026.11.02"
+        versionCode = 58
+        versionName = "2026.11.03"
         buildConfigField("String", "SOURCE_REVISION", "\"$buildRevision\"")
         buildConfigField("String", "TRANSLATION_COVERAGE", "\"$translationCoverage\"")
 

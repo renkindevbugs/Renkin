@@ -561,8 +561,9 @@ fun HexField(modifier: Modifier
         , onValueChange = {
             value = it.trim('#').left(8)
 
+            // RRGGBB (opaque) or AARRGGBB; shorter forms are still being typed.
             val color = ("#$value").toNullableColor()
-            if (color != null && value.length == 8) {
+            if (color != null && (value.length == 6 || value.length == 8)) {
                 controller.selectByColor(color, true)
             }
     })

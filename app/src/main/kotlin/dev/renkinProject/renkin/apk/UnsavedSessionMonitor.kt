@@ -40,6 +40,15 @@ data class LostUnsavedWork(val marker: UnsavedSessionMarker?, val offer: Unsaved
     val refreshedCount: Int
         get() = marker?.takeIf { offer == null || it.providerInstanceId == offer.providerInstanceId }
             ?.refreshedCount ?: 0
+
+    /**
+     * Journaled icons restore only into their own profile, which is active after a restart unless
+     * the user switched first; otherwise the journal waits for a later start.
+     */
+    fun restorableOffer(activeProfileId: Long): UnsavedIconJournal? =
+        offer?.takeIf { it.entries.isNotEmpty() && it.profileId == activeProfileId }
+
+    fun hasSomethingToShow(activeProfileId: Long): Boolean = restorableOffer(activeProfileId) != null || marker != null
 }
 
 /**
