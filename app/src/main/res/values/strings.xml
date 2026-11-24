@@ -1075,6 +1075,8 @@
     <string name="whatsNewMaterialYouThemed">**Material You icons:** They follow the current wallpaper colours again and keep their layers when the launcher themes icons.</string>
     <string name="whatsNewMotoClock">**Moto launcher:** Clock icons show again. Thanks to Mr-WHT!</string>
     <string name="whatsNewSmallFixes">**Smaller fixes:** Vector clip paths, six-digit hex colours, emoji app names and backup reliability.</string>
+    <string name="whatsNewCustomMaterialYouThemed">**Material You icons:** Icons in your own colours now show their glyph when the launcher themes icons, instead of a solid square.</string>
+    <string name="whatsNewReadableCrashLogs">**Crash logs:** Logs from release builds are readable without extra files, so reported crashes are easier to fix.</string>
     <string name="whatsNewProfilePackIcons">**Profiles:** One profile’s pack icon no longer shows up on your other profiles’ packs.</string>
     <string name="whatsNewBuildMemory">**Reliability:** Lower memory use while building, a warning when the latest automatic backup failed, and fewer crashes with pack icons.</string>
     <string name="whatsNewGlobalStyleTools">**Global Style:** Customize shadows in the panel while keeping icons visible, revisit Apply history, keep the style during individual edits, and bake or undo a look.</string>

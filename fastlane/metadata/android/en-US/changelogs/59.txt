@@ -1,0 +1,2 @@
+• Material You icons in your own colours show their glyph when the launcher themes icons, instead of a solid square.
+• Crash logs from release builds are readable without extra files.

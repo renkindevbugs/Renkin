@@ -70,6 +70,19 @@ private val releaseHistory = listOf(
         LATEST_WHATS_NEW_VERSION_NAME,
         listOf(
             WhatsNewSection(
+                R.string.whatsNewSectionChanged,
+                listOf(R.string.whatsNewReadableCrashLogs)
+            ),
+            WhatsNewSection(
+                R.string.whatsNewSectionFixed,
+                listOf(R.string.whatsNewCustomMaterialYouThemed)
+            )
+        )
+    ),
+    WhatsNewRelease(
+        "2026.11.03",
+        listOf(
+            WhatsNewSection(
                 R.string.whatsNewSectionNew,
                 listOf(
                     R.string.whatsNewThemedIconSource,
